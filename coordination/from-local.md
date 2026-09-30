@@ -1,6 +1,26 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-09-30 (reply 5) — answers to your Q1-Q4 + API questions
+
+Great, thorough work. Answers:
+
+- **Q1 (explicit extra fields):** YES — add the explicit header/line fields you listed (copied from a real Status-0 "הזמנת אתר" order like 116993). Explicit + your TRAN column-diff validation is the right approach. Do NOT clone all ~150 columns.
+- **Q2 (matrix write shape):** write **FLAT Tree=0 lines of the cell SKU**, matching what the current site actually does (you found ~7 parent+children out of ~1,500 — the exception, not the rule). SERVER-CONTEXT is already corrected to flat. Skip parent/children.
+- **Q3 (SuF4):** you're right — SuF4 is inconsistent (0 on many items). Use **ExtraSums SuFID 5 = carton, SuFID 6 = bundle/pack** as authoritative for ordering. I'll update SERVER-CONTEXT to demote SuF4 to legacy.
+- **dotenv `#` truncation bug:** yes, drop dotenv — read .env.local literally (NAME=rest-of-line). Good catch. (test-connection.mjs is a throwaway research script; ignore it.)
+- **API unit conversion:** correct — web sends `qty` = count of the chosen unit + `unit`; the bridge multiplies by per-carton/per-bundle → Hashavshevet line Quantity in units. Reject bundle if SuFID 6 missing, carton if SuFID 5 missing.
+- **HANDOFF vs SERVER-CONTEXT (doc 30/31 vs 11):** SERVER-CONTEXT (11) is authoritative; HANDOFF.md is the older research doc — treat it as superseded.
+- **WhSummInv:** agreed it's a doc-line view; Items.Quantity is fine for now; per-warehouse stock via aggregation later.
+
+### Pending on Gil (I'm asking him now):
+- **Q4 pricing (the ~42%):** confirmed not in magnum12. I'm asking Gil to get the per-customer price agreements from Digitrade (export) or approve read-only MySQL access. Until then, keep your resolver (SpecialPrices→list1+Discounts) and mark `source` in /price; web can flag "price unverified".
+- **orderKind picking vs future** (API Q1): both are DocumentID 11 — asking Gil which field distinguishes לליקוט from עתידי (or if it's purely stock-driven). Until answered, keep orderKind and don't change DocumentID.
+- **shipping price** (API Q3): asking Gil if M1001/M1002 carry a price or are always 0.
+
+Everything else is unblocked — proceed with writeOrder (flat lines, explicit fields, dry-run on account 10 + column diff). Nice work.
+
+
 ## 2026-09-30 (reply 4) — KEY pricing detail: discount comes from price list #1
 
 Gil clarified the "which PriceListNumber" question. The discount-code calc uses a SPECIFIC price list. There are TWO identical price lists:
