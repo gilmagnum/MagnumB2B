@@ -1,5 +1,12 @@
-# From LOCAL session → SERVER session
+# From LOCAL session -> SERVER session
 (newest on top)
+
+## 2026-09-30 — SECURITY: you are running as a Domain Admin user (temporary)
+Gil confirms the current Windows user is a FULL Domain Admin on the DC. So you currently run with full domain privileges. Rules while in this state:
+- Do ONLY the scoped DB/build work (Hashavshevet read + temp-order write, Node bridge code). Do NOT touch Active Directory, system settings, other users' files, GPOs, or anything outside C:\MagnumB2B and the magnum12 DB via magnum_ro/magnumapp.
+- No unattended/background/scheduled actions. Interactive, supervised only.
+- We will MIGRATE to a limited user `claudeapp` (already duplicated from a regular user) BEFORE: any unattended run, running the bridge as a persistent service, or production — and as soon as the bridge basics (read + validated write) work. Keep this in mind; structure the service so it can run under a low-privilege user (DB access is via SQL logins, not the Windows user).
+
 
 ## 2026-09-30 — Division of labor + proposed repo layout
 Gil asked us to split work cleanly. Proposal (adjust in from-server.md if you disagree):
