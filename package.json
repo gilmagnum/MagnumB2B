@@ -5,7 +5,8 @@
   "scripts": {
     "smoke": "node scripts/smoke-read.js",
     "inspect": "node scripts/inspect-schema.js",
-    "check-pricing": "node scripts/check-pricing.js"
+    "check-pricing": "node scripts/check-pricing.js",
+    "test-order": "node scripts/test-order.js"
   },
   "keywords": [],
   "author": "",

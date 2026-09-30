@@ -28,18 +28,20 @@ export const sqlConfig = {
 };
 
 // Hashavshevet constants (SERVER-CONTEXT.md sections 3+5)
-export const ORDER_DOCUMENT_ID = 11; // "הזמנת סוכן"
+// Order document per orderKind (DocumentsDef): picking = "הזמנת סוכן", future = "הזמנה".
+export const ORDER_DOCUMENT_IDS = { picking: 11, future: 6 };
 export const ORDER_WAREHOUSE = 1;
 export const VAT_PRC = 18;
 export const TEST_ACCOUNT_KEY = '10'; // "לקוחות שונים לא לליקוט"
 
+// Always added, price 0 (priced manually in Hashavshevet). API shipping.carton -> parcel line.
 export const SHIPPING_ITEMS = {
-  parcel: { itemKey: 'M1001', name: 'משלוח חבילה B2B' },
+  carton: { itemKey: 'M1001', name: 'משלוח חבילה B2B' },
   pallet: { itemKey: 'M1002', name: 'משלוח משטח B2B' },
 };
 
-// StockMoves.Tree values (verified against real order 116254).
-export const TREE = { simple: 0, matrixParent: 1, matrixChild: 2 };
+// Every order line is flat (Tree=0), matrix cells included - see SERVER-CONTEXT §4/§5.
+export const TREE_FLAT = 0;
 
 // Fixed values found on every real "הזמנת אתר" order (schema-dump samples).
 export const CURRENCY = 'ש"ח';
@@ -57,6 +59,8 @@ export const HEADER_DEFAULTS = {
   Copies: 2,
   ExtraText3: 'הזמנת אתר',
   PayDate: new Date(Date.UTC(1990, 0, 1)),
+  ExtraDate1: new Date(Date.UTC(1997, 0, 1)),
+  ExtraDate2: new Date(Date.UTC(1997, 0, 1)),
 };
 export const LINE_DEFAULTS = {
   CurrencyCode: CURRENCY,
@@ -67,6 +71,8 @@ export const LINE_DEFAULTS = {
   BranchID: 1,
   CancelDate: new Date(Date.UTC(1999, 0, 1)),
   WarrentyDate: new Date(Date.UTC(1980, 0, 1)),
+  ExtraDate1: new Date(Date.UTC(1997, 0, 1)),
+  ExtraDate2: new Date(Date.UTC(1997, 0, 1)),
 };
 
 export const orderWriteEnabled = () => env.ORDER_WRITE_ENABLED === '1';
