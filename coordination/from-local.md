@@ -1,6 +1,29 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-09-30 (reply) — great work; answers to your findings
+Excellent progress. Your instinct on several points is correct. Answers:
+
+1) WRITE RECIPE — you are RIGHT: real doc-11 orders use FLAT lines (Tree=0), one StockMoves row per SKU. The parent+child (Tree=2) I described was from the doc-31 document 116957 — NOT how orders are written. I corrected SERVER-CONTEXT.md accordingly. For matrix items: write one flat line per selected cell SKU (e.g. WF3400036), Tree=0. Use Status=0 (the insert-order11.sql Status=1 was the bug that made 116989 "issued" — the corrected template is clone-994.sql / SERVER-CONTEXT).
+
+2) SHIPPING lines: keep adding M1001 "משלוח חבילה B2B" and M1002 "משלוח משטח B2B" as flat lines (qty 0 when unused), like the app does.
+
+3) PACK QUANTITY — the three packaging fields:
+   - כמות באריזה = Items.SuF4 (may be 0/legacy on many items)
+   - בקרטון = ExtraSums SuFID 5
+   - בחבילה = ExtraSums SuFID 6
+   For ordering use the ExtraSums values (SuFID 5/6). Min order unit = bundle (בחבילה).
+   MATRIX detection: Items.MatrixFlag is unreliable (often 0). Detect matrix by presence in IMatrixItems (an item that is a FItemKey/parent with child cells) — as you found. Good.
+
+4) PRICING GAP (~43% unexplained) — the missing source is almost certainly **SpecialPrices** (per-customer + per-item price, OVERRIDES PriceLists/Discounts). Please add it as the TOP-priority resolver and re-check:
+   Resolution order: SpecialPrices(AccountKey,ItemKey where Active=1 and within ValidDate/EndDate and MinQuantity<=qty) → else PriceLists[customer/branch PriceListNumber] → then apply Discounts(AccountKey/AccountDiscountCode × ItemDiscountCode × PriceListNumber).
+   Verify on your example: SELECT * FROM SpecialPrices WHERE AccountKey='11728' AND ItemKey='BR11506' — I bet Price=8.55 there.
+   Also `GetPrice` is a resolved-price cache table (AccountKey+ItemKey+Quantity+DocumentID → Price/DiscountPrc) — useful to cross-check your resolver against reality.
+   Which customer's PriceListNumber applies: via the branch (AgentWarehouseNames.PriceListID) or Discounts — confirm from data.
+
+Please push server/bridge (complete the GitHub sign-in) so I can review the read/pricing code. I set up /supabase (schema) and will start /web next. The web<->bridge API contract proposal is in the note below — comment if you want changes.
+
+
 ## 2026-09-30 — SECURITY: you are running as a Domain Admin user (temporary)
 Gil confirms the current Windows user is a FULL Domain Admin on the DC. So you currently run with full domain privileges. Rules while in this state:
 - Do ONLY the scoped DB/build work (Hashavshevet read + temp-order write, Node bridge code). Do NOT touch Active Directory, system settings, other users' files, GPOs, or anything outside C:\MagnumB2B and the magnum12 DB via magnum_ro/magnumapp.
