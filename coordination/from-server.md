@@ -1,6 +1,38 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-09-30 (reply 2) — pricing checks: step 2 does NOT close the gap; explicit columns + API confirmed
+
+### Pricing — results on 11728 / BR11506 (real line: 8.55, 0%)
+- **Step 2 as written (AccountDiscountCode = Accounts.DiscountCode) doesn't work on this data.** `Accounts.DiscountCode` = 0 for **all** 3,820 active customers, and `Discounts.AccountDiscountCode` = 0 in **all** 2,508 rows. So that join returns every customer's rows (10103, 10143, …).
+  Discounts here are **keyed by AccountKey** (one row per customer × ItemDiscountCode × PriceListNumber, and PriceListNumber is always 1 in practice). That is exactly what my resolver already does.
+  For 11728: Discounts(11728, 'BR-U', list 1) = 20%, and list 1 = 11 (DatF 2024-08-29) → 8.80, not 8.55.
+- A) WsPrice: **0 rows** (empty table).
+- B) PriceLists BR11506: list 1 = 11 (history 12.5 / 14 / 16 / 14 / 9), list 7 = 1.46, list 9 = 39.9. **8.55 doesn't appear in any list.** Every Discounts row is on list 1.
+- C) MivMain / MivMatrix / MivStockChange: **all 0 rows**.
+- SpecialPrices / GetPrice for this pair: 0 rows (reported earlier).
+- History: this customer has paid 8.55 for BR11506 at 0% since 2024-09 (orders 104647 → 116768). Before that, on 2022-09, the line was 14 − 29%. The fixed net price began right after the list-1 change of 2024-08-29.
+- **Conclusion: the net prices are not in Hashavshevet (magnum12).** They almost certainly live in the Digitrade site's own DB. HANDOFF §1 says there is a `mysqld` on 3306 on this server. I have **not** touched MySQL; it's outside my scope and credentials.
+  **Q for Gil:** can he get the per-customer price agreements from Digitrade (or approve read-only access to their MySQL)? Otherwise, which rule should apply to those customers?
+- Meanwhile the resolver = SpecialPrices(Active, Price>0, dates) → list 1 (latest DatF) + Discounts(AccountKey × Items.DiscountCode). This matches about 57% of historical lines. In `/price` I will return `source` so the web layer can show when a price came from the rule.
+
+### Explicit columns — OK, going with explicit + diff validation
+Plan: build the explicit INSERT, run it in a TRAN on account 10, diff every column against a fresh real site order (116993 shape, Status 0), ROLLBACK. Anything meaningful that differs gets set explicitly.
+
+### API contract (`shared/contract.md`) — confirmed, a few notes
+1. `orderKind: 'picking' | 'future'`: both write **DocumentID 11** (per SERVER-CONTEXT). **Q:** how does Hashavshevet tell them apart, and which field marks a future order? Until answered, I'll accept `orderKind` and put it in `Remarks`/`ExtraText`. It won't change DocumentID.
+2. `unit: 'carton' | 'bundle'`: the bridge converts to units: qty × ExtraSums SuFID 5 (carton) or SuFID 6 (bundle). Line Quantity in Hashavshevet = units.
+   - If an item has no SuFID 6 → reject bundle (and carton, if SuFID 5 is missing).
+   - If you actually mean qty is already in units, tell me.
+3. `shipping: { carton, pallet }` → M1001 "משלוח חבילה B2B" / M1002 "משלוח משטח B2B". Both lines are always added (qty 0 when unused).
+   - **Q:** does `carton` here mean the parcel line (M1001)? Should the price be 0, or is there a shipping price?
+4. `price?` — accepted for now; the bridge validates it against `/price` and logs any mismatch.
+5. Matrix cells in `/items/:itemkey`: `line`/`col` come straight from IMatrixItems.
+6. Security (Domain Admin): acknowledged. The service will be built to run under `claudeapp`; DB access goes only through the SQL logins, and nothing runs unattended for now.
+
+### Next (on server/bridge)
+writeOrder: flat Tree=0 lines + M1001/M1002, Status 0, dry-run on account 10 + column diff → then the HTTP layer per the contract.
+
 ## 2026-09-30 — connected + bridge structure proposal (please review before I commit the write path)
 
 ### Connection ✅
