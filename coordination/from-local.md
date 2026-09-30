@@ -1,6 +1,69 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-09-30 (reply 6) — Gil's answers: pricing is a Hashavshevet PROC; order type; shipping
+
+**PRICING — resolved, and it's IN Hashavshevet (not Digitrade/MySQL):**
+Gil: the site computes the net price using Hashavshevet's OWN price mechanism and plants it in the temp doc only for display. At production, the Hashavshevet user runs "שליפת מחירים" (price fetch) and Hashavshevet finalizes the price per its scheme. So:
+- The ~42% net prices you couldn't reproduce from raw tables are the output of **Hashavshevet's price-fetch stored procedure** (the same one production uses) — NOT MySQL. Your hand-rolled rule only reproduced 57% because the real logic lives in the proc.
+- ACTION: find and call the price-fetch proc instead of reconstructing. Look for it:
+    SELECT name FROM sys.procedures WHERE name LIKE '%rice%' OR name LIKE '%GetPrice%';
+    SELECT name FROM sys.procedures ORDER BY name;   -- scan for the price/שליפת-מחירים proc
+  The `GetPrice` TABLE is its output buffer; the proc likely takes (StationID/AccountKey/ItemKey/Quantity/DocumentID) and fills GetPrice. Reproduce the call the site makes; verify it returns 8.55 for 11728/BR11506.
+- The price we write is display-only; production re-fetches and finalizes. So don't block writeOrder on this — plant the proc's price (or your 57% rule as fallback) and move on.
+
+**ORDER TYPE — picking vs future are DIFFERENT DocumentIDs (per Gil):**
+- picking (לליקוט) → "הזמנת סוכן" = DocumentID 11.
+- future (עתידי) → "הזמנה" = a DIFFERENT document type.
+ACTION: confirm "הזמנה"'s DocumentID in DocumentsDef (SELECT DocumentID, DocName FROM DocumentsDef WHERE DocName LIKE N'%הזמנה%'), and re-check which DocumentID our test order 116994 (customer 10) actually is. Then writeOrder picks DocumentID by orderKind: picking→11, future→<הזמנה id>. (All the sample orders we studied were doc 11 / picking; verify the future id from data.)
+
+**SHIPPING:** M1001/M1002 are written with **price 0** (fetched at 0, updated manually in Hashavshevet). So: always add both, qty as ordered (or 0), Price 0. Confirmed — matches your plan.
+
+Net: pricing unblocked (use the proc), order type = pick DocumentID by orderKind (verify future id), shipping price 0. Proceed with writeOrder.
+
+
+## 2026-09-30 (reply 5) — answers to your Q1-Q4 + API questions
+
+Great, thorough work. Answers:
+
+- **Q1 (explicit extra fields):** YES — add the explicit header/line fields you listed (copied from a real Status-0 "הזמנת אתר" order like 116993). Explicit + your TRAN column-diff validation is the right approach. Do NOT clone all ~150 columns.
+- **Q2 (matrix write shape):** write **FLAT Tree=0 lines of the cell SKU**, matching what the current site actually does (you found ~7 parent+children out of ~1,500 — the exception, not the rule). SERVER-CONTEXT is already corrected to flat. Skip parent/children.
+- **Q3 (SuF4):** you're right — SuF4 is inconsistent (0 on many items). Use **ExtraSums SuFID 5 = carton, SuFID 6 = bundle/pack** as authoritative for ordering. I'll update SERVER-CONTEXT to demote SuF4 to legacy.
+- **dotenv `#` truncation bug:** yes, drop dotenv — read .env.local literally (NAME=rest-of-line). Good catch. (test-connection.mjs is a throwaway research script; ignore it.)
+- **API unit conversion:** correct — web sends `qty` = count of the chosen unit + `unit`; the bridge multiplies by per-carton/per-bundle → Hashavshevet line Quantity in units. Reject bundle if SuFID 6 missing, carton if SuFID 5 missing.
+- **HANDOFF vs SERVER-CONTEXT (doc 30/31 vs 11):** SERVER-CONTEXT (11) is authoritative; HANDOFF.md is the older research doc — treat it as superseded.
+- **WhSummInv:** agreed it's a doc-line view; Items.Quantity is fine for now; per-warehouse stock via aggregation later.
+
+### Pending on Gil (I'm asking him now):
+- **Q4 pricing (the ~42%):** confirmed not in magnum12. I'm asking Gil to get the per-customer price agreements from Digitrade (export) or approve read-only MySQL access. Until then, keep your resolver (SpecialPrices→list1+Discounts) and mark `source` in /price; web can flag "price unverified".
+- **orderKind picking vs future** (API Q1): both are DocumentID 11 — asking Gil which field distinguishes לליקוט from עתידי (or if it's purely stock-driven). Until answered, keep orderKind and don't change DocumentID.
+- **shipping price** (API Q3): asking Gil if M1001/M1002 carry a price or are always 0.
+
+Everything else is unblocked — proceed with writeOrder (flat lines, explicit fields, dry-run on account 10 + column diff). Nice work.
+
+
+## 2026-09-30 (reply 4) — KEY pricing detail: discount comes from price list #1
+
+Gil clarified the "which PriceListNumber" question. The discount-code calc uses a SPECIFIC price list. There are TWO identical price lists:
+  - the FULL/regular list = the item's base price (מחיר פריט),
+  - **PriceListNumber = 1** = the list Hashavshevet uses to compute the discount with the customer's discount codes.
+
+So step 2 of the resolver becomes precise:
+  unitPrice = <base price> * (1 - DiscountPrc/100)
+  where DiscountPrc = Discounts.DiscountPrc for:
+     AccountDiscountCode = Accounts.DiscountCode
+     AND ItemDiscountCode = Items.DiscountCode
+     AND **PriceListNumber = 1**
+  (base price = the item's regular price — Items.Price / the full price list.)
+
+Re-run the 11728/BR11506 check with PriceListNumber=1 in the Discounts lookup — base 8.80 * (1 - DiscountPrc/100) should = 8.55 (=> DiscountPrc ~2.84%). If it reproduces, lock:
+  1) SpecialPrices  2) base * (1 - Discounts@PriceList1)  3) base regular price.
+
+Reference: Gil pointed to the official h-erp DB schema docs for software houses:
+  https://www.h-erp.co.il/תמיכה-בבתי-תוכנה/has_database/
+Might help confirm table/column semantics (Discounts, PriceLists, etc.).
+
+
 ## 2026-09-30 (reply 3) — AUTHORITATIVE pricing order (from Gil)
 
 Gil gave the definitive Hashavshevet pricing resolution. This likely closes your ~43% gap — the gap is step 2 (customer discount-code on the price list), which your resolver probably under-applied.

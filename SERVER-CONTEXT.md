@@ -22,7 +22,7 @@
 - **שדות אפליקציה = "שדות נוספים" של חשבשבת** (לא ב-Items!):
   - `ExtraNotes` (טקסט, WHERE KeF=ItemKey, לפי NoteID): 7=מותג, 8=בעלות מותג, 16=קבוצת מותג, 22=קטגוריה ראשית, 23=קטגוריה משנית, 24=קבוצה, 25=קוד סרגל מידות, 26=פריט קרטון מידה, 27=פריט צבע, **28=מוצג באתר**, 29=צבע, **31=התעלם ממלאי**, 33=מידה למטריצה, 34=עונה, 36=מק"ט ראשי (אב), 44=CATEGORY KEDS. ערכי דגל = "1"/"0" כטקסט. תוויות ב-`ExtraNoteNames`.
   - `ExtraSums` (מספרי, WHERE KeF=ItemKey, לפי SuFID): 5=בקרטון, 6=בחבילה, 7=נפח קרטון, 8=% תמלוגים. תוויות ב-`ExtraSumNames`.
-- **מחירים (סדר רשמי מגיל):** 1) `SpecialPrices` (פר לקוח+פריט — גובר); 2) מחירון + קוד הנחת לקוח: `PriceLists[PriceListNumber].Price × (1 - Discounts.DiscountPrc/100)` כאשר `Discounts.AccountDiscountCode=Accounts.DiscountCode AND Discounts.ItemDiscountCode=Items.DiscountCode AND PriceListNumber=<מחירון הלקוח>`; 3) מחירון רגיל (בסיס). לכתיבה ישירה מחשבים לפי הסדר הזה (מנוע חשבשבת לא רץ ב-INSERT).
+- **מחירים (סדר רשמי מגיל):** 1) `SpecialPrices` (פר לקוח+פריט — גובר); 2) מחירון + קוד הנחת לקוח: `PriceLists[PriceListNumber].Price × (1 - Discounts.DiscountPrc/100)` כאשר `Discounts.AccountDiscountCode=Accounts.DiscountCode AND Discounts.ItemDiscountCode=Items.DiscountCode AND PriceListNumber=1` (ההנחה מחושבת ממחירון 1 ספציפית; יש שני מחירונים זהים — מלא/רגיל = מחיר הפריט, ומחירון 1 = בסיס חישוב ההנחה); 3) מחירון רגיל (בסיס). לכתיבה ישירה מחשבים לפי הסדר הזה (מנוע חשבשבת לא רץ ב-INSERT).
 - **מלאי:** `Items.Quantity` (כללי); View `WhSummInv` (לפי מחסן). מחסנים/סניפים: `AgentWarehouseNames` (PriceListID לכל סניף).
 - **סוגי מסמכים (מותאמים אצל מגנום — לא לפי רשימת H-Connect!):** ההזמנות של האפליקציה = **DocumentID 11 ("הזמנת סוכן")**.
 
