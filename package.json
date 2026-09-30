@@ -1,17 +1,17 @@
 {
   "name": "magnumb2b",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "MagnumB2B - Hashavshevet bridge",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "smoke": "node scripts/smoke-read.js",
+    "inspect": "node scripts/inspect-schema.js",
+    "check-pricing": "node scripts/check-pricing.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
-    "dotenv": "^18.0.3",
     "mssql": "^12.7.2"
   }
 }

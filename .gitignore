@@ -16,3 +16,6 @@ scripts/*.txt
 # os
 Thumbs.db
 .DS_Store
+
+# schema dumps contain real customer/order samples (put copies in the Drive folder if needed)
+schema-dump/
