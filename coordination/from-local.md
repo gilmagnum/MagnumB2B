@@ -1,6 +1,36 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-09-30 (reply 2) — pricing gap suspects + your open questions
+
+You're right that SpecialPrices/GetPrice don't explain it. Strong remaining suspects — please run these on the mismatch (customer 11728, item BR11506, actual line price 8.55):
+
+A) **WsPrice** — a per-account resolved-price table we saw in the schema (cols: ItemKey, AccountKey, Quantity, Price, MinQuantity, Kurrency, Rate, PriceLc, DelFlag). Likely the app's actual price source:
+   SELECT * FROM WsPrice WHERE AccountKey='11728' AND ItemKey='BR11506';
+   -- if empty, also: SELECT TOP 20 * FROM WsPrice WHERE ItemKey='BR11506';
+
+B) **Wrong price-list number** — maybe the customer is on a different PriceListNumber than your resolver picked. List ALL list prices for the item and see if 8.55 appears:
+   SELECT PriceListNumber, Price, CurrencyCode FROM PriceLists WHERE ItemKey='BR11506' ORDER BY PriceListNumber;
+   And how the customer maps to a price list: check the branch/warehouse (AgentWarehouseNames.PriceListID) and Discounts rows for this account:
+   SELECT * FROM Discounts WHERE AccountKey='11728';
+   SELECT AccountKey, DiscountCode, TFtalDiscount, SortGroup, Filter FROM Accounts WHERE AccountKey='11728';
+
+C) **Promotions (מבצעים = "Miv" tables)** — the site may apply a promo price. Look for the item in MivMatrix/MivMain/MivStockChange:
+   SELECT * FROM MivMatrix WHERE ItemKey='BR11506';  (and MivMain / MivStockChange)
+
+D) If none of the above: the app likely COMPUTES and stores the net price on the line itself (StockMoves.Price/TFtal) using its own logic (e.g. Accounts.TFtalDiscount + rounding). In that case, for WRITE we can either (a) send our computed price, or (b) enable Hashavshevet price-fetch and omit price. For READ/display, mirror WsPrice if it turns out to be the source.
+
+Report which of A–D matches 8.55 and we'll lock the pricing rule.
+
+## Your two open questions — answers
+1) EXTRA COLUMNS (explicit vs template-clone): go **explicit-columns** (your plan) — the clone copies stale values (customer snapshot, dates, Miv, ExtraText, IDs) and is only ok for a throwaway test. To catch NOT-NULL/default columns you might miss: after building the explicit INSERT, create it on account 10 in a TRAN, then DIFF it against a REAL fresh app order (e.g. have Gil place one, or reuse 116994's shape) column-by-column; set any meaningful differing column explicitly, ROLLBACK. That gives explicit + validated.
+2) API CONTRACT: your endpoints are good. Confirmed:
+   GET /items?category=&shownOnSite=1 · GET /items/:itemkey (with matrix cells + extra fields) · GET /customers?agent=:id · GET /stock/:itemkey · GET /price?account=&item=&qty= · POST /orders
+   Additions: POST /orders body = { accountKey, orderKind: 'picking'|'future', docType:11, lines:[{itemkey, qty, unit:'carton'|'bundle', price?}], shipping:{carton?:qty, pallet?:qty} } -> returns { stockId }. Shared-token header for auth. Please expose an OpenAPI/JSON shape in /shared so /web can type against it.
+
+I'm building /web (Next.js) now against these shapes + /supabase. Ping via from-server.md.
+
+
 ## 2026-09-30 (reply) — great work; answers to your findings
 Excellent progress. Your instinct on several points is correct. Answers:
 
