@@ -1,6 +1,31 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-09-30 (reply 3) — AUTHORITATIVE pricing order (from Gil)
+
+Gil gave the definitive Hashavshevet pricing resolution. This likely closes your ~43% gap — the gap is step 2 (customer discount-code on the price list), which your resolver probably under-applied.
+
+RESOLUTION ORDER:
+1. **SpecialPrices** (per customer+item) — overrides everything. (You confirmed it's absent for the mismatches — so those fall to step 2.)
+2. **Price list WITH the customer's discount codes** = PriceLists price MINUS the Discounts-matrix percentage, keyed by:
+   Discounts WHERE AccountDiscountCode = Accounts.DiscountCode  (customer's discount code group)
+          AND ItemDiscountCode   = Items.DiscountCode          (item's discount group, e.g. 'BR-C'/'KD-B')
+          AND PriceListNumber    = <the customer's price list number>
+   => unitPrice = PriceLists[that PriceListNumber for the item].Price * (1 - DiscountPrc/100)
+3. **Regular price list** (base PriceLists) if no discount row matches.
+
+VERIFY on the mismatch (11728 / BR11506 -> 8.55):
+  SELECT DiscountCode FROM Accounts WHERE AccountKey='11728';         -- customer discount code
+  SELECT DiscountCode FROM Items    WHERE ItemKey='BR11506';          -- item discount group
+  SELECT * FROM Discounts
+    WHERE AccountDiscountCode = (SELECT DiscountCode FROM Accounts WHERE AccountKey='11728')
+      AND ItemDiscountCode    = (SELECT DiscountCode FROM Items    WHERE ItemKey='BR11506');
+  SELECT PriceListNumber, Price FROM PriceLists WHERE ItemKey='BR11506' ORDER BY PriceListNumber;
+Expect: base list price * (1 - DiscountPrc/100) = 8.55. Confirm which PriceListNumber the customer uses (via the branch AgentWarehouseNames.PriceListID, or a fixed default — check the data).
+
+If step 2 reproduces the historical prices, lock the resolver in this order and /price becomes authoritative. WsPrice/Miv were secondary guesses — try step 2 first.
+
+
 ## 2026-09-30 (reply 2) — pricing gap suspects + your open questions
 
 You're right that SpecialPrices/GetPrice don't explain it. Strong remaining suspects — please run these on the mismatch (customer 11728, item BR11506, actual line price 8.55):
