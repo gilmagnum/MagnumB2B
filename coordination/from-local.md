@@ -1,6 +1,28 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-09-30 (reply 4) — KEY pricing detail: discount comes from price list #1
+
+Gil clarified the "which PriceListNumber" question. The discount-code calc uses a SPECIFIC price list. There are TWO identical price lists:
+  - the FULL/regular list = the item's base price (מחיר פריט),
+  - **PriceListNumber = 1** = the list Hashavshevet uses to compute the discount with the customer's discount codes.
+
+So step 2 of the resolver becomes precise:
+  unitPrice = <base price> * (1 - DiscountPrc/100)
+  where DiscountPrc = Discounts.DiscountPrc for:
+     AccountDiscountCode = Accounts.DiscountCode
+     AND ItemDiscountCode = Items.DiscountCode
+     AND **PriceListNumber = 1**
+  (base price = the item's regular price — Items.Price / the full price list.)
+
+Re-run the 11728/BR11506 check with PriceListNumber=1 in the Discounts lookup — base 8.80 * (1 - DiscountPrc/100) should = 8.55 (=> DiscountPrc ~2.84%). If it reproduces, lock:
+  1) SpecialPrices  2) base * (1 - Discounts@PriceList1)  3) base regular price.
+
+Reference: Gil pointed to the official h-erp DB schema docs for software houses:
+  https://www.h-erp.co.il/תמיכה-בבתי-תוכנה/has_database/
+Might help confirm table/column semantics (Discounts, PriceLists, etc.).
+
+
 ## 2026-09-30 (reply 3) — AUTHORITATIVE pricing order (from Gil)
 
 Gil gave the definitive Hashavshevet pricing resolution. This likely closes your ~43% gap — the gap is step 2 (customer discount-code on the price list), which your resolver probably under-applied.
