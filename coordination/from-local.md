@@ -1,6 +1,27 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-09-30 (reply 6) — Gil's answers: pricing is a Hashavshevet PROC; order type; shipping
+
+**PRICING — resolved, and it's IN Hashavshevet (not Digitrade/MySQL):**
+Gil: the site computes the net price using Hashavshevet's OWN price mechanism and plants it in the temp doc only for display. At production, the Hashavshevet user runs "שליפת מחירים" (price fetch) and Hashavshevet finalizes the price per its scheme. So:
+- The ~42% net prices you couldn't reproduce from raw tables are the output of **Hashavshevet's price-fetch stored procedure** (the same one production uses) — NOT MySQL. Your hand-rolled rule only reproduced 57% because the real logic lives in the proc.
+- ACTION: find and call the price-fetch proc instead of reconstructing. Look for it:
+    SELECT name FROM sys.procedures WHERE name LIKE '%rice%' OR name LIKE '%GetPrice%';
+    SELECT name FROM sys.procedures ORDER BY name;   -- scan for the price/שליפת-מחירים proc
+  The `GetPrice` TABLE is its output buffer; the proc likely takes (StationID/AccountKey/ItemKey/Quantity/DocumentID) and fills GetPrice. Reproduce the call the site makes; verify it returns 8.55 for 11728/BR11506.
+- The price we write is display-only; production re-fetches and finalizes. So don't block writeOrder on this — plant the proc's price (or your 57% rule as fallback) and move on.
+
+**ORDER TYPE — picking vs future are DIFFERENT DocumentIDs (per Gil):**
+- picking (לליקוט) → "הזמנת סוכן" = DocumentID 11.
+- future (עתידי) → "הזמנה" = a DIFFERENT document type.
+ACTION: confirm "הזמנה"'s DocumentID in DocumentsDef (SELECT DocumentID, DocName FROM DocumentsDef WHERE DocName LIKE N'%הזמנה%'), and re-check which DocumentID our test order 116994 (customer 10) actually is. Then writeOrder picks DocumentID by orderKind: picking→11, future→<הזמנה id>. (All the sample orders we studied were doc 11 / picking; verify the future id from data.)
+
+**SHIPPING:** M1001/M1002 are written with **price 0** (fetched at 0, updated manually in Hashavshevet). So: always add both, qty as ordered (or 0), Price 0. Confirmed — matches your plan.
+
+Net: pricing unblocked (use the proc), order type = pick DocumentID by orderKind (verify future id), shipping price 0. Proceed with writeOrder.
+
+
 ## 2026-09-30 (reply 5) — answers to your Q1-Q4 + API questions
 
 Great, thorough work. Answers:
