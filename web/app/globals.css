@@ -1,0 +1,39 @@
+* { box-sizing: border-box; }
+html, body { max-width: 100%; overflow-x: hidden; }
+
+/* Square product/category image, fit WITHOUT cropping */
+.img-square {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  background: #faf9f7;
+  border-radius: 6px;
+  display: block;
+}
+
+/* Product / category card grids */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.cat-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+
+/* Category page: sidebar + products */
+.cat-layout { display: grid; grid-template-columns: 220px 1fr; gap: 20px; }
+
+/* Header */
+.app-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.header-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-weight: 400; font-size: 14px; }
+.header-nav a { color: #fff; }
+
+/* Tables that can get wide (cart, documents, admin) — scroll on small screens */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Tablet / mobile (pickers use tablets) */
+@media (max-width: 820px) {
+  .cat-layout { grid-template-columns: 1fr; }
+  .card-grid  { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .cat-grid   { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  main { padding: 12px !important; }
+  h1 { font-size: 22px; }
+}
+@media (max-width: 480px) {
+  .card-grid, .cat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+}

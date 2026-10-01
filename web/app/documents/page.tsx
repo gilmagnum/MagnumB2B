@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { bridge, type Document } from "../../lib/bridge";
 import { supabaseBrowser } from "../../lib/supabase/browser";
+import { exportExcel, exportPdf } from "../../lib/docExport";
 
 // Documents screen. Admin sees ALL documents; an agent sees only their customers'.
 // A row = the order (הזמנה/הזמנת סוכן) + the document(s) produced from it.
@@ -13,6 +14,19 @@ export default function DocumentsPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [busyExport, setBusyExport] = useState<number | null>(null);
+
+  const doExport = async (stockId: number, kind: "pdf" | "excel") => {
+    setBusyExport(stockId);
+    try {
+      const detail = await bridge.document(stockId);
+      if (kind === "pdf") exportPdf(detail); else exportExcel(detail);
+    } catch {
+      alert("לא ניתן לטעון את פרטי המסמך (ייתכן שהגשר עדיין לא מחובר).");
+    } finally {
+      setBusyExport(null);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -60,14 +74,15 @@ export default function DocumentsPage() {
 
       {err && <p style={{ color: "#a60", fontSize: 13 }}>{err}</p>}
       {loading ? <p>טוען…</p> : (
-        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <div className="table-wrap">
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720 }}>
           <thead>
             <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
-              <th style={{ padding: 8 }}>מסמך</th><th>לקוח</th><th>תאריך</th><th>סכום</th><th>סטטוס</th><th>הופק</th>
+              <th style={{ padding: 8 }}>מסמך</th><th>לקוח</th><th>תאריך</th><th>סכום</th><th>סטטוס</th><th>הופק</th><th>הורדה</th>
             </tr>
           </thead>
           <tbody>
-            {docs.length === 0 && !err && <tr><td colSpan={6} style={{ padding: 16, color: "#888" }}>אין מסמכים להצגה.</td></tr>}
+            {docs.length === 0 && !err && <tr><td colSpan={7} style={{ padding: 16, color: "#888" }}>אין מסמכים להצגה.</td></tr>}
             {docs.map((d) => (
               <tr key={d.stockId} style={{ borderBottom: "1px solid #eee", verticalAlign: "top" }}>
                 <td style={{ padding: 8 }}>
@@ -90,11 +105,23 @@ export default function DocumentsPage() {
                     </ul>
                   )}
                 </td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  <button title="הורדת PDF" onClick={() => doExport(d.stockId, "pdf")} disabled={busyExport === d.stockId}
+                    style={iconBtn}>📄 PDF</button>
+                  <button title="הורדת Excel" onClick={() => doExport(d.stockId, "excel")} disabled={busyExport === d.stockId}
+                    style={{ ...iconBtn, marginInlineStart: 6 }}>📊 Excel</button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </>
   );
 }
+
+const iconBtn = {
+  background: "#fff", border: "1px solid #ccc", borderRadius: 6,
+  padding: "4px 8px", cursor: "pointer", fontSize: 12,
+} as const;

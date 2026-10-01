@@ -28,15 +28,19 @@ export default async function CatalogHome() {
 
   return (
     <>
-      <h1 style={{ textAlign: "left" }}>קטלוג מוצרים</h1>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 20, marginTop: 16 }}>
+      <h1>קטלוג מוצרים</h1>
+      <form action="/search" style={{ margin: "8px 0 20px" }}>
+        <input name="q" placeholder="חיפוש מוצר בכל הקטלוג…" aria-label="חיפוש מוצר"
+          style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #ccc", width: "100%", maxWidth: 420, fontSize: 15 }} />
+      </form>
+      <div className="cat-grid">
         {cats.map(([name, info]) => (
           <a key={name} href={`/catalog/${encodeURIComponent(name)}`} style={{ textDecoration: "none", color: "inherit" }}>
             <div style={{ border: "1px solid #eee", borderRadius: 10, overflow: "hidden" }}>
               {info.image
                 ? // eslint-disable-next-line @next/next/no-img-element
-                  <img src={info.image} alt={name} style={{ width: "100%", height: 200, objectFit: "cover" }} />
-                : <div style={{ height: 200, background: "#f3f3f3" }} />}
+                  <img src={info.image} alt={name} className="img-square" style={{ borderRadius: 0 }} />
+                : <div style={{ aspectRatio: "1 / 1", background: "#f3f3f3" }} />}
               <div style={{ textAlign: "center", padding: 12, color: "#1e2a78", fontWeight: 700 }}>
                 {name} <span style={{ color: "#999", fontWeight: 400, fontSize: 13 }}>({info.count})</span>
               </div>

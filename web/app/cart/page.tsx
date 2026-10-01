@@ -76,7 +76,8 @@ export default function CartPage() {
       <h1>סל הזמנה</h1>
       <p style={{ color: "#555" }}>ללקוח: <b>{ctx.customerName}</b> ({ctx.accountKey}) · {ctx.orderKind === "picking" ? "לליקוט" : "עתידי"}</p>
       {priceErr && <p style={{ fontSize: 13, color: "#a60" }}>חלק מהמחירים לא נטענו מהגשר — מוצג מחיר מחירון כללי.</p>}
-      <table style={{ borderCollapse: "collapse", width: "100%", maxWidth: 760 }}>
+      <div className="table-wrap">
+      <table style={{ borderCollapse: "collapse", width: "100%", maxWidth: 760, minWidth: 560 }}>
         <thead>
           <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
             <th style={{ padding: 8 }}>פריט</th><th>יחידה</th><th>כמות</th><th>מחיר יח׳</th><th>סה״כ שורה</th><th></th>
@@ -108,6 +109,7 @@ export default function CartPage() {
           </tr>
         </tfoot>
       </table>
+      </div>
       <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
         <button onClick={submit} disabled={busy} style={{ background: "#1e2a78", color: "#fff", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "שולח…" : "שלח הזמנה"}</button>
         <button onClick={clear} style={{ border: "1px solid #ccc", borderRadius: 8, padding: "10px 18px", cursor: "pointer", background: "#fff" }}>רוקן סל</button>

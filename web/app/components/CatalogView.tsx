@@ -28,7 +28,7 @@ export default function CatalogView({ categoryMain, items }: { categoryMain: str
   ), [items, sub, brand, season, group, q]);
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 20 }}>
+    <div className="cat-layout">
       {/* sidebar: sub-categories */}
       <aside>
         <h2 style={{ color: "#1e2a78", borderBottom: "3px solid #f1c40f", paddingBottom: 4 }}>{categoryMain}</h2>
@@ -55,13 +55,13 @@ export default function CatalogView({ categoryMain, items }: { categoryMain: str
         </div>
 
         <div style={{ color: "#888", fontSize: 13, marginBottom: 8 }}>{shown.length} מוצרים</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 16 }}>
+        <div className="card-grid">
           {shown.map((it) => (
             <article key={it.itemkey} style={{ border: "1px solid #e2e2e2", borderRadius: 8, padding: 12 }}>
               {it.image_url
                 ? // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.image_url} alt={it.item_name} loading="lazy" style={{ width: "100%", height: 140, objectFit: "contain" }} />
-                : <div style={{ height: 140, background: "#f5f5f5", borderRadius: 4 }} />}
+                  <img src={it.image_url} alt={it.item_name} loading="lazy" className="img-square" />
+                : <div style={{ aspectRatio: "1 / 1", background: "#f5f5f5", borderRadius: 6 }} />}
               <h3 style={{ fontSize: 15, margin: "8px 0 4px" }}>
                 <a href={`/product/${encodeURIComponent(it.itemkey)}`} style={{ color: "#1e2a78", textDecoration: "none" }}>{it.item_name}</a>
               </h3>
