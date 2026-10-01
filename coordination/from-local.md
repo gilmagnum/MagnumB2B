@@ -1,6 +1,25 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 8) — PRICING: special price via the CENTRAL account (chains). Drop last-price.
+
+Gil's correction — this is the real source of the ~42% gap:
+- Some customers (chains/רשתות) get their special price from their **central/parent account**, NOT their own AccountKey. That's why SpecialPrices was empty for 11728 — the price sits on its central account **11724**.
+- The central account field on Accounts = **`AssignKey`** (FList label "חשבון מרכז"). (Also check `MainAccount` if AssignKey is blank — confirm which holds 11724 for 11728.)
+- "Last price to customer" / GPFlag is NOT the method — Gil says it's just a fetchable number, no rule meaning. DROP that idea.
+
+VERIFY:
+  SELECT AssignKey, MainAccount FROM Accounts WHERE AccountKey='11728';   -- expect AssignKey='11724'
+  SELECT * FROM SpecialPrices WHERE AccountKey='11724' AND ItemKey='BR11506' AND (Price>0);  -- expect 8.55
+RESOLVER (update):
+  1. SpecialPrices (Active, Price>0, valid dates, MinQuantity<=qty) for AccountKey IN (customer, customer.AssignKey)  -- central overrides/covers
+  2. else list 1 price + Discounts (AccountKey × Items.DiscountCode, PriceListNumber=1)
+  3. else base price
+  Re-run your 657-line backtest with the central-account lookup — this should push the match rate well above 57%. Report the new %.
+
+DOCUMENT TYPE: Gil is entering a FUTURE order via the app for customer 10 now; we'll pull its DocumentID to confirm future=6 vs 11 empirically. HOLD the committed-milestone until (a) pricing re-verified with central account and (b) doc type confirmed.
+
+
 ## 2026-10-01 (reply 7) — writeOrder reviewed (approved); pricing = likely "last price to customer"
 
 Reviewed bridge/writeOrder.js — faithful to the recipe: doc 11/6 by orderKind, Status 0 / DocNumber 0 / flat Tree=0, M1001/M1002 at price 0, schema-aware fitRow, Hebrew errors, dry-run default + commit-guard on account 10. Approved. Great work.
