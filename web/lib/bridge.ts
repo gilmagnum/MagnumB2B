@@ -1,8 +1,8 @@
 // Typed client for the bridge HTTP API (see /shared/contract.md).
-// The bridge runs on the Hashavshevet server; base URL + token come from env.
+// Calls go through our same-origin server proxy (/api/bridge/*), which injects
+// the secret BRIDGE_TOKEN server-side. The token is NEVER in client code.
 
-const BASE = process.env.NEXT_PUBLIC_BRIDGE_URL ?? "";
-const TOKEN = process.env.BRIDGE_TOKEN ?? "";
+const BASE = "/api/bridge";
 
 export type Item = {
   itemkey: string; itemName: string; foreignName?: string;
@@ -36,7 +36,7 @@ export type NewOrder = {
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN}`, ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`bridge ${path} -> ${res.status} ${await res.text()}`);

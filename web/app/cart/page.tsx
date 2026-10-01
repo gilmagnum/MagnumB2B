@@ -2,24 +2,32 @@
 import { useState } from "react";
 import { useCart } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
+import { bridge } from "../../lib/bridge";
 
 export default function CartPage() {
   const { lines, setQty, remove, clear } = useCart();
   const { ctx } = useOrderContext();
-  const [sent, setSent] = useState<string>("");
+  const [msg, setMsg] = useState<string>("");
+  const [busy, setBusy] = useState(false);
 
   if (!ctx) return <p>יש לבחור לקוח לפני הזמנה. <a href="/customer">← בחירת לקוח</a></p>;
   if (!lines.length) return <p>הסל ריק. <a href="/catalog">← לקטלוג</a></p>;
 
-  // Builds the POST /orders payload (bridge). Wired to the live bridge once NEXT_PUBLIC_BRIDGE_URL is set.
-  const submit = () => {
-    const payload = {
-      accountKey: ctx.accountKey,
-      orderKind: ctx.orderKind,
-      lines: lines.map((l) => ({ itemkey: l.itemkey, qty: l.qty, unit: l.unit, price: l.unitPrice })),
-    };
-    setSent(JSON.stringify(payload, null, 2));
-    // TODO: await bridge.createOrder(payload); then clear() and show the order number (Stock.ID).
+  const submit = async () => {
+    setBusy(true); setMsg("");
+    try {
+      const res = await bridge.createOrder({
+        accountKey: ctx.accountKey,
+        orderKind: ctx.orderKind,
+        lines: lines.map((l) => ({ itemkey: l.itemkey, qty: l.qty, unit: l.unit, price: l.unitPrice })),
+      });
+      setMsg(`ההזמנה נשלחה ✓ מספר הזמנה: ${res.stockId}`);
+      clear();
+    } catch (e) {
+      setMsg("שגיאה בשליחה (ייתכן שהגשר עדיין לא מחובר): " + (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -48,14 +56,10 @@ export default function CartPage() {
         </tbody>
       </table>
       <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
-        <button onClick={submit} style={{ background: "#1e2a78", color: "#fff", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer" }}>שלח הזמנה</button>
+        <button onClick={submit} disabled={busy} style={{ background: "#1e2a78", color: "#fff", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "שולח…" : "שלח הזמנה"}</button>
         <button onClick={clear} style={{ border: "1px solid #ccc", borderRadius: 8, padding: "10px 18px", cursor: "pointer", background: "#fff" }}>רוקן סל</button>
       </div>
-      {sent && (
-        <pre style={{ marginTop: 16, background: "#f5f5f5", padding: 12, borderRadius: 8, direction: "ltr", fontSize: 12 }}>
-          {"// payload ל-POST /orders (יישלח לגשר כשה-URL מוגדר):\n" + sent}
-        </pre>
-      )}
+      {msg && <p style={{ marginTop: 16, padding: 12, borderRadius: 8, background: msg.includes("✓") ? "#e8f7ee" : "#fdecea" }}>{msg}</p>}
     </>
   );
 }

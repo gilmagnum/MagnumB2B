@@ -15,8 +15,8 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const [cellQty, setCellQty] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_BRIDGE_URL) { setErr("הגשר עדיין לא מחובר — פרטי הפריט (וגריד המטריצה) ייטענו כשהגשר יעלה."); return; }
-    bridge.item(key).then(setItem).catch(() => setErr("לא ניתן לטעון את הפריט מהגשר"));
+    // Calls the server proxy; returns 503 until the bridge URL is configured.
+    bridge.item(key).then(setItem).catch(() => setErr("הגשר עדיין לא מחובר — פרטי הפריט וגריד המטריצה ייטענו כשהגשר יעלה."));
   }, [key]);
 
   // 2D: group cells by col (color axis); 1D: one group (col 0).

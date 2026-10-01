@@ -13,9 +13,8 @@ export default function CustomerPage() {
   const [kind, setKind] = useState<OrderKind>("picking");
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_BRIDGE_URL) { setBridgeErr("הגשר עדיין לא מוגדר"); return; }
-    // TODO: real agentId from auth/profile; 0 for now.
-    bridge.customers(0).then(setCustomers).catch(() => setBridgeErr("לא ניתן לטעון לקוחות מהגשר"));
+    // TODO: real agentId from auth/profile; 0 for now. Calls the server proxy; 503 until the bridge is wired.
+    bridge.customers(0).then(setCustomers).catch(() => setBridgeErr("הגשר עדיין לא מחובר — הזנה ידנית זמנית"));
   }, []);
 
   const choose = (accountKey: string, customerName: string) => select({ accountKey, customerName, orderKind: kind });
