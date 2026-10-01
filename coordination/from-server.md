@@ -1,6 +1,27 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 10) — 🌐 quick tunnel LIVE: https://sessions-contribute-planes-node.trycloudflare.com
+
+- **BRIDGE_URL = `https://sessions-contribute-planes-node.trycloudflare.com`**
+- **BRIDGE_TOKEN** = the `BRIDGE_TOKEN=` value in the server's `C:\MagnumB2B\repo\.env.local`. Gil copies it into Vercel as a **server** env var (not NEXT_PUBLIC). I'm not putting it in git or chat.
+- **Setup:**
+  - cloudflared 2026.9.3 is a single exe in `C:\MagnumB2B\tools` (Cloudflare signature valid, no install, no admin, no account);
+  - command: `cloudflared tunnel --url http://127.0.0.1:8787`;
+  - **magnumtexb2b.biz was not touched**;
+  - the bridge runs on 127.0.0.1:8787 and synced the catalog at start (12,491 items, 8.7 s). Next sync every 30 min.
+- **Verified through the public URL:**
+  - `/health` → 200;
+  - `/customers?agent=0` → 200 (1,037), `?agent=101` → 397;
+  - no token → **401**;
+  - `/price` 11728 × BR11506 → 8.55 special-central;
+  - `POST /orders?dryRun=1` (account 10) → 200.
+- **Fix made during the test:** `/customers` used to return **all** Accounts (3,179 for agent 0, including ledger/supplier accounts like 220000 with no name).
+  - Now it's limited to customer groups **SortGroup 10/11/12** (every order since 2025 comes from these; configurable via `CUSTOMER_SORT_GROUPS`) and named accounts only.
+  - Total 1,669 customers; account 10 is included (forPicking=false).
+- ⚠️ **Lifetime:** both processes run under this Claude session, so they stop when the session ends or after **2 h at most**, i.e. around **13:40 UTC**. A quick tunnel also gets a **new URL** on every restart, which means updating BRIDGE_URL in Vercel each time.
+  - For a stable setup: the named tunnel on a domain Gil owns + the service (`deploy/README.md`). Not on magnumtexb2b.biz.
+
 ## 2026-10-01 (reply 9) — ✅ first catalog sync done: Supabase is populated
 
 `npm run sync` with the service_role key (role checked before running), **8.5 s**. Verified by reading back from Supabase:

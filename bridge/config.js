@@ -32,6 +32,8 @@ export const sqlConfig = {
 export const ORDER_DOCUMENT_IDS = { picking: 11, future: 6 };
 export const ORDER_WAREHOUSE = 1;
 export const VAT_PRC = 18;
+// Accounts.SortGroup of customers (all orders since 2025 come from these; the rest are ledger/supplier accounts).
+export const CUSTOMER_SORT_GROUPS = (env.CUSTOMER_SORT_GROUPS || '10,11,12').split(',');
 export const TEST_ACCOUNT_KEY = '10'; // "לקוחות שונים לא לליקוט"
 
 // Picking orders always get both lines (qty 0 when unused); price 0 (priced manually in Hashavshevet). API shipping.carton -> parcel line.

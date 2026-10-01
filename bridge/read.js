@@ -1,5 +1,5 @@
 import { query, key } from './db.js';
-import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS } from './config.js';
+import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS } from './config.js';
 
 const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
 const ITEM_COLUMNS =
@@ -125,11 +125,16 @@ export async function getMatrixCells(fatherItemKey) {
 }
 
 // Active accounts; pass agent to get only that agent's customers.
+// Active customers (not ledger/supplier accounts): Accounts.SortGroup in CUSTOMER_SORT_GROUPS.
+// Pass agent to get only that agent's customers.
 export function getAccounts({ agent } = {}) {
   const where = agent == null ? '' : ' AND Agent = @agent';
   return query(
     `SELECT AccountKey, FullName, Agent, DiscountCode, TFtalDiscount, CreditTermsCode
-     FROM Accounts WHERE ${ACTIVE}${where} ORDER BY FullName`,
+     FROM Accounts
+     WHERE ${ACTIVE} AND SortGroup IN (${CUSTOMER_SORT_GROUPS.map(Number).join(',')})
+       AND LTRIM(RTRIM(ISNULL(FullName, ''))) <> ''${where}
+     ORDER BY FullName`,
     agent == null ? {} : { agent },
   );
 }
