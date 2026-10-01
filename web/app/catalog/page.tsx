@@ -1,5 +1,8 @@
 import { supabase } from "../../lib/supabase";
 
+// Read fresh from Supabase each request (catalog is synced from Hashavshevet, not build-time).
+export const dynamic = "force-dynamic";
+
 // Catalog landing = grid of MAIN categories (like the current site's home).
 export default async function CatalogHome() {
   const { data, error } = await supabase

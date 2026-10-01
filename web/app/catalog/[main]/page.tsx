@@ -1,6 +1,8 @@
 import { supabase, type CatalogItem } from "../../../lib/supabase";
 import CatalogView from "../../components/CatalogView";
 
+export const dynamic = "force-dynamic";
+
 // Category page: sub-category sidebar + filters (brand/group/season/search) + product grid.
 export default async function CategoryPage({ params }: { params: Promise<{ main: string }> }) {
   const { main } = await params;
