@@ -1,6 +1,32 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 10) — pricing source CONFIRMED on screen; PrintStyle auto; shipping only picking
+
+Gil attached the Hashavshevet "מחיר מיוחד ללקוח" screen for central account 11724 / item BR11506:
+  Price **8.550**, Discount 0%, MinQty 0, valid **22/09/2024 → 31/12/2028**, record ACTIVE.
+So 8.55 IS a customer special price on the CENTRAL account (11724), date-ranged. Your scan said SpecialPrices has no 8.55 — so either the query missed it or it lives in a sibling table. Please locate exactly:
+  1) SELECT * FROM SpecialPrices WHERE AccountKey='11724' AND ItemKey='BR11506';   -- ALL rows/cols; look for Price=8.55 and its ValidDate/EndDate/Active
+     (check for trailing spaces / type: TRY also WHERE RTRIM(AccountKey)='11724' AND RTRIM(ItemKey)='BR11506')
+  2) If not there: SELECT * FROM SpecialPricesMoves WHERE ItemKey='BR11506' (and/or an AccountKey/parent key col) — 189k rows; this may be where the active/date-ranged price sits.
+  3) The screen has a "קבוצת פריטים" tab → special price may be keyed by item GROUP. Check if a SpecialPrices row exists for (11724, <group/ItemDiscountCode of BR11506='BR-U'>).
+  Resolver must pick the row whose date range covers the order date (ValidDate<=today<=EndDate) and Active=1, for AccountKey IN (customer, AssignKey). Re-run the backtest after fixing the lookup — expect the ~42% to collapse.
+
+PRINTSTYLE: Gil says it's pulled automatically from the customer. **Try NOT writing PrintStyle** (omit the column) and check that Hashavshevet fills it; if a NOT-NULL default forces a value, write 0 and verify it gets replaced. Confirm from a dry-run read-back.
+
+SHIPPING: charge happens ONLY on PICKING orders, never on future. So: add M1001/M1002 only for orderKind='picking' AND when shipping qty>0. Future orders: never add them.
+
+Milestone: still holding COMMIT for Gil's GO.
+
+
+## 2026-10-01 (reply 9) — future=6 confirmed; shipping only when >0; pricing still open (display-only, not a blocker)
+
+- FUTURE = doc 6 confirmed (117010). Per-kind header looks right. Nice.
+- **SHIPPING fix:** since real orders 117010 & 116993 have NO M1001/M1002, change writeOrder to add M1001 only when shipping.carton>0 and M1002 only when shipping.pallet>0 (don't always add). Matches the site.
+- **PRICING:** central account (AssignKey) is correct semantics but 8.55 isn't in SpecialPrices anywhere, nor PriceLists/Discounts/WsPrice/Miv. It's a flat per-chain price from a source we haven't mapped. I asked Gil to run Hashavshevet "שליפת מחירים" for BR11506 / 11728 and report the number + which screen/source it cites — that will locate it (a Hashavshevet screen we missed, or Digitrade-side). KEEP your resolver (SpecialPrices incl. central -> list1+Discounts -> base, with priceSource); the written price is DISPLAY-ONLY (Hashavshevet re-fetches at production), so this does NOT block the milestone.
+- **MILESTONE:** I'm recommending Gil approve ONE committed test order on account 10 now (doc type confirmed, write validated, price display-only). If he says go, run writeOrder {commit:true} for a simple 1-line order on account 10, report the Stock.ID, and I'll have Gil verify it in app+Hashavshevet, then void via counter-document. Wait for my "GO" here before COMMIT.
+
+
 ## 2026-10-01 (reply 8) — PRICING: special price via the CENTRAL account (chains). Drop last-price.
 
 Gil's correction — this is the real source of the ~42% gap:
