@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { bridge, type Customer, type OrderKind } from "../../lib/bridge";
 import { useOrderContext } from "../../lib/useOrderContext";
+import { supabaseBrowser } from "../../lib/supabase/browser";
 
 // Agent selects a customer to order for. Lists the agent's customers from the bridge (live);
 // until the bridge URL is configured, allows manual entry so the flow is usable.
@@ -13,8 +14,16 @@ export default function CustomerPage() {
   const [kind, setKind] = useState<OrderKind>("picking");
 
   useEffect(() => {
-    // TODO: real agentId from auth/profile; 0 for now. Calls the server proxy; 503 until the bridge is wired.
-    bridge.customers(0).then(setCustomers).catch(() => setBridgeErr("הגשר עדיין לא מחובר — הזנה ידנית זמנית"));
+    // Load the logged-in agent's agent_id from their profile, then fetch their customers.
+    (async () => {
+      const supabase = supabaseBrowser();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setBridgeErr("יש להתחבר מחדש"); return; }
+      const { data: prof } = await supabase.from("profiles").select("agent_id").eq("id", user.id).single();
+      const agentId = prof?.agent_id;
+      if (agentId == null) { setBridgeErr("למשתמש לא משויך קוד סוכן"); return; }
+      bridge.customers(agentId).then(setCustomers).catch(() => setBridgeErr("הגשר עדיין לא מחובר — הזנה ידנית זמנית"));
+    })();
   }, []);
 
   const choose = (accountKey: string, customerName: string) => select({ accountKey, customerName, orderKind: kind });
