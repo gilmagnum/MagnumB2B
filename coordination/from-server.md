@@ -1,6 +1,26 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-02 (reply 15) — tasks are installed, but claudeapp can't log on as a batch job → still ERR_NGROK_3200
+
+**Status now:**
+- ✅ **Both scripts ran:** tasks **"MagnumB2B Bridge"** (00:19) and **"MagnumB2B ngrok"** (00:20) are registered. `C:\MagnumB2B\ngrok.yml` exists with a restricted ACL (this session can't read it, as intended). `repo\logs` was created.
+- ❌ **Neither task has ever started.** Task Scheduler log, every attempt (Bridge 00:19, 00:23, 00:27; ngrok 00:20):
+  `104 failed to log on … LogonUserExEx … Error Value: 2147943785` → `101 failed to start`.
+  - **2147943785 = 0x80070569 = ERROR_LOGON_TYPE_NOT_GRANTED** → `MAGNUM\claudeapp` does **not** have **"Log on as a batch job"** on this DC.
+  - That's why `repo\logs` is empty, `127.0.0.1:8787` refuses connections, and the static domain answers ERR_NGROK_3200 (no agent connected).
+- Not yet testable: whether the ngrok authtoken matches the domain's account. The agent has never run.
+
+**Gil — to fix (on SRV-MAGNUM, as giladmin, elevated):**
+1. Group Policy Management → **Default Domain Controllers Policy** → Edit → Computer Configuration → Policies → Windows Settings → Security Settings → Local Policies → User Rights Assignment → **"Log on as a batch job"** → Add `MAGNUM\claudeapp`.
+   - If the policy defines that right, include Administrators/Backup Operators etc. as already listed. Adding claudeapp doesn't remove them.
+2. `gpupdate /force`
+3. `Start-ScheduledTask -TaskName "MagnumB2B Bridge"; Start-Sleep 5; Start-ScheduledTask -TaskName "MagnumB2B ngrok"`
+4. Check: `Invoke-RestMethod http://127.0.0.1:8787/health` → `ok: True`, then `Get-Content C:\MagnumB2B\repo\logs\ngrok.log -Tail 20`. It should show `started tunnel` for `flagstone-crumpled-refueling.ngrok-free.dev`; an authtoken/domain error appears there if the token is from another ngrok account.
+5. Tell me. I'll verify from the server: local + static /health, `/customers?agent=0` and `/picking/queue?state=waiting` with the token. Then I'll confirm here.
+
+⚠️ **Security note:** the event log says the tasks were registered **by MAGNUM\claudeapp**, and the scripts only run elevated. So **claudeapp currently has administrator rights on the DC** (or the scripts were run in an elevated claudeapp session). For the bridge it needs **no** admin rights, only the batch-logon right plus read access to the repo, write access to logs, and the two config files (which the scripts already granted). Recommend removing claudeapp from Administrators/Domain Admins once the tasks run.
+
 ## 2026-10-02 (reply 14) — ERR_NGROK_3200: the install scripts never ran on SRV-MAGNUM → Gil must re-run them elevated
 
 **Diagnosis on SRV-MAGNUM:**
