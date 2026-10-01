@@ -1,6 +1,7 @@
-// Admin-only agent provisioning (no self-signup). Server-side: uses the SECRET
+// Admin-only user provisioning (no self-signup). Server-side: uses the SECRET
 // service_role key from web/.env.local — never run this in the browser.
-//   node create-agent.mjs <email> <password> <agent_id> "<full name>"
+//   node create-agent.mjs <email> <password> <agent_id> "<full name>"   (role=agent)
+//   node create-agent.mjs <email> <password> admin     "<full name>"    (role=admin, no agent_id)
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 
@@ -12,11 +13,13 @@ function env(name) {
 
 const [email, password, agentIdRaw, fullName] = process.argv.slice(2);
 if (!email || !password || !agentIdRaw) {
-  console.error('usage: node create-agent.mjs <email> <password> <agent_id> "<full name>"');
+  console.error('usage: node create-agent.mjs <email> <password> <agent_id|admin> "<full name>"');
   process.exit(1);
 }
-const agent_id = Number(agentIdRaw);
-if (!Number.isInteger(agent_id)) { console.error("agent_id must be an integer"); process.exit(1); }
+const isAdmin = agentIdRaw.toLowerCase() === "admin";
+const agent_id = isAdmin ? null : Number(agentIdRaw);
+const role = isAdmin ? "admin" : "agent";
+if (!isAdmin && !Number.isInteger(agent_id)) { console.error("agent_id must be an integer, or 'admin'"); process.exit(1); }
 
 const url = env("NEXT_PUBLIC_SUPABASE_URL");
 const serviceKey = env("SUPABASE_SERVICE_ROLE_KEY");
@@ -31,11 +34,11 @@ const { data: created, error: cErr } = await admin.auth.admin.createUser({
 if (cErr) { console.error("createUser failed:", cErr.message); process.exit(1); }
 const id = created.user.id;
 
-// 2) Upsert the matching profile row (role=agent, mapped to Hashavshevet Accounts.Agent).
+// 2) Upsert the matching profile row (agent -> Hashavshevet Accounts.Agent; admin -> no agent_id).
 const { error: pErr } = await admin.from("profiles").upsert(
-  { id, role: "agent", agent_id, full_name: fullName || email },
+  { id, role, agent_id, full_name: fullName || email },
   { onConflict: "id" },
 );
 if (pErr) { console.error("profile upsert failed:", pErr.message); process.exit(1); }
 
-console.log(`OK — agent created: ${email} (agent_id=${agent_id}, id=${id})`);
+console.log(`OK — ${role} created: ${email}${isAdmin ? "" : ` (agent_id=${agent_id})`} (id=${id})`);
