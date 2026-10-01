@@ -1,6 +1,33 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 4) — future = DocumentID 6 confirmed; central-account pricing does NOT close the gap
+
+### 1. Future order 117010 → **DocumentID 6 ("הזמנה")** ✅
+- `Stock 117010`: DocumentID **6**, DocNumber 0, Status 0, AccountKey '10', Remarks 'בדיקה - לא לליקוט'.
+- `StockMoves`: 1 line, KD62220_MIX × 16 @ 11, **Tree 0**, LineNum 0.
+- writeOrder future → 6 is already in place. The header now matches the site per kind (`HEADER_BY_KIND`):
+  - future: PrintStyle 13, no ExtraText3;
+  - picking: PrintStyle 1, ExtraText3 'הזמנת אתר'.
+- **Dry run (future) vs 117010: no unexpected differences** in header or line.
+  - Picking was diffed yesterday against 116993 (then un-issued): clean. 116993 has been picked/issued since, so it now only differs in issue-time fields.
+- ⚠️ **Shipping lines:** neither 117010 (future) nor 116993 (picking) contains M1001/M1002. So the site does **not** always add them. **Q:** add them only when `shipping.carton`/`shipping.pallet` > 0? For now writeOrder still always adds both, price 0, per your reply 6.
+
+### 2. Pricing — central account (AssignKey) checked: it's NOT the source of 8.55
+- `Accounts 11728`: AssignKey = **'11724'** ✅ (MainAccount = 1).
+- `SpecialPrices 11724 × BR11506`: 3 rows, **all Price 0** (two Active "חיוב מינימום" + one inactive). No row with Price > 0.
+- 11724 has 9,611 SpecialPrices rows, only 92 with Price > 0, **none at 8.55**. **8.55 does not appear anywhere in SpecialPrices** (whole table, any account).
+- 11724's Discounts = 20% on all groups (same as 11728) → 11 × 0.8 = 8.80, not 8.55.
+- Resolver updated anyway (correct semantics): SpecialPrices for AccountKey IN (customer, AssignKey), own row first. Last-price/GPFlag idea dropped.
+- **Backtest (last 60 site orders): 373 / 656 = 56.9%** — **unchanged** (was 57%).
+- **Unexplained net lines:** 113 from 7 customers that have a central account, **158 from 11 customers with no central account at all.** So chains alone can't explain the gap.
+- Pattern: chain 11724/11728/11729 pays a flat **8.55** on many BR items (BR11506/11508/11509/11605/11630/11631) whose list price is 11. That is a flat per-chain/per-category price, not list × discount.
+  **Q for Gil:** where is that 8.55 kept? An Excel/agreement typed in by hand, the Digitrade admin, or a Hashavshevet screen we haven't mapped? If he can open BR11506 for 11728 in Hashavshevet and run "שליפת מחירים", which number comes out, and which screen does it say it came from?
+
+### Status
+- Committed-order milestone: **on hold** (waiting for your confirmation).
+- Dry runs consumed Stock.ID 117011–117013 (identity gaps, nothing saved).
+
 ## 2026-09-30 (reply 3) — writeOrder done (dry-run verified); price proc not reachable; future = DocumentID 6
 
 ### 1. Price-fetch "proc" — not reachable, and probably not a SQL proc at all

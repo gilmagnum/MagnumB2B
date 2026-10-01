@@ -8,8 +8,9 @@ const trim = (v) => (typeof v === 'string' ? v.trim() : v);
  *   base price  = current price (latest DatF <= today) in the price list named
  *                 by the customer's Discounts row, default list 1 (= Items.Price)
  *   discount %  = Discounts row for (AccountKey, Items.DiscountCode), else 0
- *   special     = SpecialPrices row, Active=1, Price>0, today in ValidDate..EndDate
- *                 -> replaces base price, no discount
+ *   special     = SpecialPrices row, Active=1, Price>0, today in ValidDate..EndDate,
+ *                 on the customer itself, else on its central account (Accounts.AssignKey,
+ *                 "חשבון מרכז" - chains) -> replaces base price, no discount
  * SpecialPrices rows with Price=0 are "חיוב מינימום" markers, not prices.
  *
  * Returns Map<itemKey, { price, discountPrc, source, priceListNumber }>
@@ -27,10 +28,11 @@ export async function resolvePrices(accountKey, itemKeys) {
            AND p.DatF <= GETDATE()
          ORDER BY p.DatF DESC, p.ID DESC) AS listPrice,
        (SELECT TOP 1 sp.Price FROM SpecialPrices sp
-         WHERE sp.AccountKey = @acc AND sp.ItemKey = i.ItemKey AND sp.Active = 1 AND sp.Price > 0
+         WHERE sp.AccountKey IN (@acc, a.central) AND sp.ItemKey = i.ItemKey AND sp.Active = 1 AND sp.Price > 0
            AND GETDATE() BETWEEN sp.ValidDate AND sp.EndDate + 1
-         ORDER BY sp.ValidDate DESC, sp.ID DESC) AS specialPrice
+         ORDER BY CASE WHEN sp.AccountKey = @acc THEN 0 ELSE 1 END, sp.ValidDate DESC, sp.ID DESC) AS specialPrice
      FROM Items i
+     OUTER APPLY (SELECT NULLIF(LTRIM(RTRIM(AssignKey)), '') AS central FROM Accounts WHERE AccountKey = @acc) a
      OUTER APPLY (SELECT TOP 1 PriceListNumber, DiscountPrc FROM Discounts
                   WHERE AccountKey = @acc AND ItemDiscountCode = i.DiscountCode ORDER BY ID DESC) d
      WHERE i.ItemKey IN (${inList})`,

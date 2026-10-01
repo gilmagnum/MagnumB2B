@@ -3,7 +3,7 @@
 // Read-only (magnum_ro). Use it to verify the write recipe against real documents.
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, ORDER_DOCUMENT_ID, TREE } from '../bridge/config.js';
+import { ROOT, ORDER_DOCUMENT_IDS } from '../bridge/config.js';
 import { query, closeAll } from '../bridge/db.js';
 import { getTableColumns, getOrder } from '../bridge/read.js';
 
@@ -30,7 +30,7 @@ try {
        WHERE s.DocumentID = @doc
          AND ${matrix ? '' : 'NOT '}EXISTS (SELECT 1 FROM StockMoves m WHERE m.StockID = s.ID AND m.Tree = @child)
        ORDER BY s.ID DESC`,
-      { doc: ORDER_DOCUMENT_ID, child: TREE.matrixChild },
+      { doc: ORDER_DOCUMENT_IDS.picking, child: 2 },
     );
   for (const [name, matrix] of [['sample-order-simple.json', false], ['sample-order-matrix.json', true]]) {
     const [row] = await latest(matrix);

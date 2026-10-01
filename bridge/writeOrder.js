@@ -10,6 +10,7 @@ import {
   TREE_FLAT,
   DEFAULT_UNIT,
   HEADER_DEFAULTS,
+  HEADER_BY_KIND,
   LINE_DEFAULTS,
   orderWriteEnabled,
 } from './config.js';
@@ -251,6 +252,7 @@ export async function writeOrder(order, { commit = false } = {}) {
     },
     optional: {
       ...HEADER_DEFAULTS,
+      ...HEADER_BY_KIND[orderKind],
       Remarks: order.remarks?.trim() || null,
       AccountName: trim(account.FullName),
       Address: trim(account.Address),

@@ -55,12 +55,15 @@ export const HEADER_DEFAULTS = {
   VatFactor: 1,
   BranchID: 1,
   UseFID: 2,
-  PrintStyle: 1,
   Copies: 2,
-  ExtraText3: 'הזמנת אתר',
   PayDate: new Date(Date.UTC(1990, 0, 1)),
   ExtraDate1: new Date(Date.UTC(1997, 0, 1)),
   ExtraDate2: new Date(Date.UTC(1997, 0, 1)),
+};
+// Per order kind, as the current site writes them (picking: order 116993, future: order 117010).
+export const HEADER_BY_KIND = {
+  picking: { PrintStyle: 1, ExtraText3: 'הזמנת אתר' },
+  future: { PrintStyle: 13, ExtraText3: null },
 };
 export const LINE_DEFAULTS = {
   CurrencyCode: CURRENCY,

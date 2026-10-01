@@ -2,7 +2,7 @@
 //   node scripts/check-pricing.js [orderCount=40]
 import { query, closeAll } from '../bridge/db.js';
 import { resolvePrices } from '../bridge/pricing.js';
-import { ORDER_DOCUMENT_ID } from '../bridge/config.js';
+import { ORDER_DOCUMENT_IDS } from '../bridge/config.js';
 
 const count = Number(process.argv[2]) || 40;
 const close = (a, b) => Math.abs(a - b) < 0.005;
@@ -14,7 +14,7 @@ try {
            WHERE DocumentID = @doc AND ExtraText3 = N'הזמנת אתר' ORDER BY ID DESC) s
      JOIN StockMoves m ON m.StockID = s.ID AND m.Tree IN (0, 1)
      WHERE m.ItemKey NOT IN ('M1001', 'M1002')`,
-    { n: count, doc: ORDER_DOCUMENT_ID },
+    { n: count, doc: ORDER_DOCUMENT_IDS.picking },
   );
   const byAccount = Map.groupBy(lines, (l) => l.AccountKey.trim());
   const stats = { match: 0, priceDiff: 0, discountDiff: 0 };
