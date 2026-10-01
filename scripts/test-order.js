@@ -1,6 +1,8 @@
 // Test order on the test account (10). Dry run (write, read back, ROLLBACK) unless --commit.
 // In a dry run the written rows are diffed column-by-column against a real site order.
-//   node scripts/test-order.js [--future] [--item=KEY] [--ref=116993] [--commit]
+//   node scripts/test-order.js [--future] [--item=KEY] [--qty=2] [--unit=bundle|carton]
+//                              [--ship=carton:1,pallet:0] [--ref=116993] [--commit]
+// After a commit the saved order is read back (magnum_ro) and diffed the same way.
 import { read, writeOrder, closeAll } from '../bridge/index.js';
 import { TEST_ACCOUNT_KEY } from '../bridge/config.js';
 
@@ -46,14 +48,17 @@ try {
   if (!item) throw new Error('No suitable item - pass --item=KEY');
   console.log(`Item ${item.itemKey} (${item.name}), bundle=${item.perPack}, carton=${item.perCarton}, stock=${item.stock}`);
 
+  const shipping = Object.fromEntries(
+    (flag('ship') ?? 'carton:1,pallet:0').split(',').map((p) => p.split(':')).map(([k, v]) => [k, Number(v)]),
+  );
   log('writeOrder start');
   const result = await writeOrder(
     {
       accountKey: TEST_ACCOUNT_KEY,
       orderKind,
       remarks: 'הזמנת בדיקה MagnumB2B - לא לליקוט',
-      lines: [{ itemkey: item.itemKey, qty: 2, unit: 'bundle' }],
-      shipping: { carton: 1, pallet: 0 },
+      lines: [{ itemkey: item.itemKey, qty: Number(flag('qty') ?? 2), unit: flag('unit') ?? 'bundle' }],
+      shipping,
     },
     { commit },
   );
@@ -62,12 +67,19 @@ try {
   console.log(summary);
 
   if (written?.error) console.log(`Read-back inside the transaction not available: ${written.error}`);
-  if (written?.header) {
+  const saved = commit ? await read.getOrder(result.orderId) : written;
+  if (saved?.header) {
     const ref = await read.getOrder(refId);
-    diff(`Header vs Stock ${refId}`, written.header, ref.header);
-    diff(`Item line vs ${ref.lines[0].ItemKey}`, written.lines[0], ref.lines[0]);
-    const refShip = ref.lines.find((l) => l.ItemKey.trim() === 'M1001');
-    if (refShip) diff('M1001 line vs reference M1001', written.lines.find((l) => l.ItemKey.trim() === 'M1001'), refShip);
+    const label = commit ? `Saved ${result.orderId}` : 'Dry run';
+    diff(`${label} header vs Stock ${refId}`, saved.header, ref.header);
+    diff(`${label} item line vs ${ref.lines[0].ItemKey.trim()}`, saved.lines[0], ref.lines[0]);
+    for (const ship of ['M1001', 'M1002']) {
+      const ours = saved.lines.find((l) => l.ItemKey.trim() === ship);
+      const theirs = ref.lines.find((l) => l.ItemKey.trim() === ship);
+      if (ours && theirs) diff(`${label} ${ship} line vs reference ${ship}`, ours, theirs);
+      else if (ours || theirs) console.log(`${label}: ${ship} line ${ours ? 'only in ours' : 'only in reference'}`);
+    }
+    console.log(`${label}: PrintStyle=${saved.header.PrintStyle}, lines=${saved.lines.map((l) => `${l.ItemKey.trim()}x${l.Quantity}@${l.Price}-${l.DiscountPrc}%`).join(', ')}`);
   }
   console.log(commit ? `COMMITTED - Stock.ID ${result.orderId}` : 'DRY RUN - rolled back, nothing was saved.');
 } catch (err) {

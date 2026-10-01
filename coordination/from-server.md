@@ -1,6 +1,40 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 6) — MILESTONE: two orders COMMITTED on account 10 → **117021** (picking) / **117022** (future)
+
+Procedure: each order was first run with ROLLBACK, then committed (`scripts/test-order.js … --commit`). The saved rows were read back via magnum_ro and diffed column-by-column against Gil's app orders. Columns that differ per order by nature (IDs, dates, remarks, customer snapshot) are excluded.
+
+### 1. PICKING — Stock.ID **117021**, DocumentID 11, DocNumber 0, Status 0
+- Lines: **KD62219_MIX × 32** (1 carton = SuFID 5) @ **11**, 0%, source **base** (customer 10 has no special price or discount) → TFtal 352. **M1001 × 1** @ 0 (shipping).
+- Header: TFtalVat **352**, TFtal **415.36** — identical to 117018.
+- **Diff vs 117018:**
+  - item line: **no unexpected differences** ✅
+  - header: `PrintStyle` ours **0** vs **1**; `ExtraText3` ours **'הזמנת אתר'** vs **null**.
+  - M1001 line: `Unit` ours **'0'** (Items.SalesUnit of M1001) vs **"יח'"**; `ExtraDate1/2` ours 1997-01-01 vs null.
+  - **M1002:** the app writes it with **qty 0** (117018 has both M1001 and M1002 at qty 0); ours omits it, per reply 10.
+  - Also: the app writes `LineNum` = 0 on all lines; ours writes 1..n. Not caught by the diff, because LineNum is in my per-order exclusion list.
+
+### 2. FUTURE — Stock.ID **117022**, DocumentID 6, DocNumber 0, Status 0
+- Line: **KD62220_MIX × 16** (1 carton) @ **11**, 0%, source **base** → TFtal 176. No shipping lines.
+- Header: TFtalVat **176**, TFtal **207.68** — identical to 117010.
+- **Diff vs 117010:** item line: **no unexpected differences** ✅. Header: only `PrintStyle` ours **0** vs **13**.
+
+### 3. PrintStyle after commit = **0** (both orders)
+Nothing in SQL filled it at insert (no trigger; read back right after commit). If Hashavshevet fills it, it will be when a user opens or saves the document in the client. **Gil: when you open 117021/117022, does the print form look right?** I'll re-read PrintStyle after you've opened them.
+My recommendation: write it explicitly per kind, exactly as the app does (picking **1**, future **13**). It's one line in `HEADER_BY_KIND`.
+
+### 4. Fixes I'd make next to match the app 1:1 (say GO or adjust)
+- `PrintStyle`: picking 1 / future 13 (unless Gil sees it fixed automatically).
+- `ExtraText3`: the app's 117018 has **null** (the older site orders had 'הזמנת אתר'). **Q:** keep the marker so staff can tell app orders apart, or drop it to match 117018?
+- **Shipping:** the app writes **both M1001 and M1002 on picking orders, qty 0 when unused**. Reply 10 said "only when qty > 0". **Q:** which one do we follow?
+- M1001/M1002 `Unit`: write "יח'" like the app (not Items.SalesUnit '0'); shipping `ExtraDate1/2` null.
+- `LineNum`: 0 like the app, or keep 1..n?
+
+### 5. Cleanup
+- **117021 and 117022 are real committed temp orders on account 10. I will NOT delete them via SQL.** Gil voids them with counter-documents in Hashavshevet, as agreed.
+- Rollback runs before the commits consumed Stock.ID 117019/117020 (identity gaps, nothing saved).
+
 ## 2026-10-01 (reply 5) — 8.55 found (SpecialPricesMoves); backtest 56.9% → **91.5%**; shipping/PrintStyle done
 
 ### Pricing: the price lives in `SpecialPricesMoves`, not `SpecialPrices`
