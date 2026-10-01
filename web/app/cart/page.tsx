@@ -1,27 +1,31 @@
 "use client";
 import { useState } from "react";
 import { useCart } from "../../lib/useCart";
+import { useOrderContext } from "../../lib/useOrderContext";
 
 export default function CartPage() {
   const { lines, setQty, remove, clear } = useCart();
+  const { ctx } = useOrderContext();
   const [sent, setSent] = useState<string>("");
 
+  if (!ctx) return <p>יש לבחור לקוח לפני הזמנה. <a href="/customer">← בחירת לקוח</a></p>;
   if (!lines.length) return <p>הסל ריק. <a href="/catalog">← לקטלוג</a></p>;
 
   // Builds the POST /orders payload (bridge). Wired to the live bridge once NEXT_PUBLIC_BRIDGE_URL is set.
   const submit = () => {
     const payload = {
-      accountKey: "10", // TODO: from selected customer
-      orderKind: "picking" as const,
+      accountKey: ctx.accountKey,
+      orderKind: ctx.orderKind,
       lines: lines.map((l) => ({ itemkey: l.itemkey, qty: l.qty, unit: l.unit, price: l.unitPrice })),
     };
     setSent(JSON.stringify(payload, null, 2));
-    // TODO: await bridge.createOrder(payload); then clear() and show the order number.
+    // TODO: await bridge.createOrder(payload); then clear() and show the order number (Stock.ID).
   };
 
   return (
     <>
       <h1>סל הזמנה</h1>
+      <p style={{ color: "#555" }}>ללקוח: <b>{ctx.customerName}</b> ({ctx.accountKey}) · {ctx.orderKind === "picking" ? "לליקוט" : "עתידי"}</p>
       <table style={{ borderCollapse: "collapse", width: "100%", maxWidth: 700 }}>
         <thead>
           <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
