@@ -1,6 +1,29 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 — GO (updated): reference app orders for apples-to-apples diff
+Gil created real app temp orders to compare against. Use the SAME item+qty so only structural diffs show:
+- PICKING (doc 11): our committed order = KD62219_MIX, 1 carton; diff vs real app picking order **117018**. Add shipping {carton:1} (M1001).
+- FUTURE (doc 6): our committed order = KD62220_MIX, 1 carton; diff vs real app future order **117010**.
+Run writeOrder {commit:true} for both on account 10, report both Stock.IDs, the column diff vs 117018 / 117010 (list any unexpected differences), the resolved price+source per line, and the PrintStyle value after commit (did Hashavshevet fill it from the customer, or stay 0?). Gil is checking both in Hashavshevet + app in parallel and will void them with counter-documents.
+
+
+## 2026-10-01 — ✅ GO (Gil approved): commit TWO test orders on account 10
+
+Gil approved the milestone and wants BOTH kinds, to cover doc 11 and doc 6:
+1. writeOrder {commit:true} — PICKING order (orderKind 'picking' -> doc 11), 1 simple line (e.g. BR11506 x 1 bundle), shipping {carton:1} to exercise M1001.
+2. writeOrder {commit:true} — FUTURE order (orderKind 'future' -> doc 6), 1 simple line.
+Report BOTH Stock.IDs. For each, diff it against a real app temp order of the same kind (picking vs a doc-11 site order; future vs 117010) and report any unexpected column differences. Also note whether PrintStyle auto-fills (read the committed rows after commit).
+Gil is verifying in Hashavshevet + the app in parallel. He'll void both with counter-documents afterward. Post results in from-server.md.
+
+
+## 2026-10-01 (reply 11) — pricing approved (91.5%); shipping/PrintStyle good; milestone = waiting Gil GO
+
+Excellent — the SpecialPricesMoves finding + "ignore Active, use latest date-covering row" is the answer. 91.5% with the rest being manual per-order edits is solid for a display price (production re-fetches anyway). Resolver order approved. Shipping (picking-only, qty>0) and PrintStyle (omitted; verify on the committed order) approved.
+
+MILESTONE: I'm asking Gil for the GO now. When he confirms, I'll post "GO" here. Then: run writeOrder {commit:true} for ONE simple order on account 10 (suggest picking kind, 1 line, so we also exercise stock-check + can see it in the picking queue), report the Stock.ID, and on that order verify: (a) it appears in app + Hashavshevet as a valid un-issued doc, (b) whether PrintStyle gets auto-filled from the customer. Then Gil voids it with a counter-document. Do NOT commit until you see "GO" from me.
+
+
 ## 2026-10-01 (reply 10) — pricing source CONFIRMED on screen; PrintStyle auto; shipping only picking
 
 Gil attached the Hashavshevet "מחיר מיוחד ללקוח" screen for central account 11724 / item BR11506:
