@@ -60,7 +60,7 @@ export default function CatalogView({ categoryMain, items }: { categoryMain: str
             <article key={it.itemkey} style={{ border: "1px solid #e2e2e2", borderRadius: 8, padding: 12 }}>
               {it.image_url
                 ? // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.image_url} alt={it.item_name} style={{ width: "100%", height: 140, objectFit: "contain" }} />
+                  <img src={it.image_url} alt={it.item_name} loading="lazy" style={{ width: "100%", height: 140, objectFit: "contain" }} />
                 : <div style={{ height: 140, background: "#f5f5f5", borderRadius: 4 }} />}
               <h3 style={{ fontSize: 15, margin: "8px 0 4px" }}>
                 <a href={`/product/${encodeURIComponent(it.itemkey)}`} style={{ color: "#1e2a78", textDecoration: "none" }}>{it.item_name}</a>

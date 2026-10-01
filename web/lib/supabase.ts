@@ -6,6 +6,14 @@ export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
 );
 
+// Serve a resized/compressed thumbnail via Supabase image transforms instead of the
+// full-res original (grid images are ~3000px). Falls back to the original if null.
+export function thumb(url: string | null | undefined, width = 400): string | undefined {
+  if (!url) return undefined;
+  if (!url.includes("/object/public/")) return url;
+  return url.replace("/object/public/", "/render/image/public/") + `?width=${width}&resize=contain&quality=75`;
+}
+
 export type CatalogItem = {
   itemkey: string;
   item_name: string;

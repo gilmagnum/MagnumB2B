@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { getProfile } from "../lib/auth";
 import { logout } from "./login/actions";
+import HeaderSearch from "./components/HeaderSearch";
 
 export const metadata = { title: "מגנום B2B", description: "הזמנות סיטונאות" };
 
@@ -16,6 +17,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <span>מגנום — הזמנות סיטונאות</span>
           {me && (
             <span style={{ fontSize: 14, fontWeight: 400, display: "flex", alignItems: "center" }}>
+              <HeaderSearch />
               <a href="/customer" style={{ color: "#fff", marginInlineStart: 16 }}>לקוח</a>
               <a href="/catalog" style={{ color: "#fff", marginInlineStart: 16 }}>קטלוג</a>
               <a href="/cart" style={{ color: "#fff", marginInlineStart: 16 }}>🛒 סל</a>
