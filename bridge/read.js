@@ -165,3 +165,16 @@ export function getTableColumns(table) {
     { t: table },
   );
 }
+
+// Print format for a new document: the customer card's format for this document type
+// (AccDocRpt, "פורמט הדפסה" per customer per document), else the document default
+// (DocumentsDef.RptFormat).
+export async function getPrintStyle(accountKey, documentId) {
+  const rows = await query(
+    `SELECT COALESCE(
+       (SELECT TOP 1 RptID FROM AccDocRpt WHERE AccountKey = @acc AND DocumentID = @doc AND RptID > 0 ORDER BY ID DESC),
+       (SELECT RptFormat FROM DocumentsDef WHERE DocumentID = @doc)) AS printStyle`,
+    { acc: key(accountKey), doc: documentId },
+  );
+  return rows[0]?.printStyle ?? null;
+}

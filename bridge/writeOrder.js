@@ -1,5 +1,5 @@
 import { sql, getPool, bind, key } from './db.js';
-import { getAccount, getItem, getItemRows, getTableColumns } from './read.js';
+import { getAccount, getItem, getItemRows, getTableColumns, getPrintStyle } from './read.js';
 import { resolvePrices } from './pricing.js';
 import {
   ORDER_DOCUMENT_IDS,
@@ -10,7 +10,6 @@ import {
   TREE_FLAT,
   DEFAULT_UNIT,
   HEADER_DEFAULTS,
-  HEADER_BY_KIND,
   LINE_DEFAULTS,
   orderWriteEnabled,
 } from './config.js';
@@ -140,11 +139,12 @@ export async function writeOrder(order, { commit = false } = {}) {
 
   const itemKeys = [...new Set(order.lines.map((l) => String(l.itemkey).trim()))];
   const shippingKeys = Object.values(SHIPPING_ITEMS).map((s) => s.itemKey);
-  const [account, items, rows, columns] = await Promise.all([
+  const [account, items, rows, columns, printStyle] = await Promise.all([
     getAccount(accountKey),
     Promise.all(itemKeys.map((k) => getItem(k))),
     getItemRows([...itemKeys, ...shippingKeys]),
     tableColumns(),
+    getPrintStyle(accountKey, documentId),
   ]);
   if (!account) throw new OrderError('ACCOUNT_NOT_FOUND', `הלקוח ${accountKey} לא נמצא`);
   if (Number(account.Dumi) === 1) throw new OrderError('ACCOUNT_INACTIVE', `הלקוח ${accountKey} אינו פעיל`);
@@ -186,18 +186,17 @@ export async function writeOrder(order, { commit = false } = {}) {
     }
   }
 
-  // Shipping is charged on picking orders only, and only the lines actually used (price 0,
-  // priced manually in Hashavshevet). Future orders never get shipping lines.
-  const shippingLines = orderKind !== 'picking' ? [] : Object.entries(SHIPPING_ITEMS)
-    .filter(([kind]) => (order.shipping?.[kind] ?? 0) > 0)
-    .map(([kind, s]) => ({
-      itemKey: s.itemKey,
-      quantity: order.shipping[kind],
-      price: 0,
-      discountPrc: 0,
-      fallbackName: s.name,
-      priceSource: 'shipping',
-    }));
+  // Like the app: picking orders always carry both shipping lines (qty 0 when unused,
+  // price 0 - priced manually in Hashavshevet). Future orders never get shipping lines.
+  const shippingLines = orderKind !== 'picking' ? [] : Object.entries(SHIPPING_ITEMS).map(([kind, s]) => ({
+    itemKey: s.itemKey,
+    quantity: order.shipping?.[kind] ?? 0,
+    price: 0,
+    discountPrc: 0,
+    fallbackName: s.name,
+    priceSource: 'shipping',
+    shipping: true,
+  }));
   const allLines = [...orderLines, ...shippingLines];
 
   // Hashavshevet stores dates as midnight; the driver sends Date objects as UTC.
@@ -205,7 +204,7 @@ export async function writeOrder(order, { commit = false } = {}) {
   const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
   const vat = 1 + VAT_PRC / 100;
 
-  // Top-level flat lines: running LineNum, LineNoForSorting 100, 200, ...
+  // Flat lines like the app: LineNum 0, LineNoForSorting 100, 200, ...
   let net = 0;
   const moves = allLines.map((line, i) => {
     const row = rows.get(line.itemKey);
@@ -213,6 +212,25 @@ export async function writeOrder(order, { commit = false } = {}) {
     const exact = line.quantity * line.price * (1 - line.discountPrc / 100);
     net += exact;
     const total = round2(exact);
+    const optional = {
+      ...LINE_DEFAULTS,
+      ItemName: trim(row.ItemName) || line.fallbackName,
+      Unit: line.shipping ? DEFAULT_UNIT : trim(row.SalesUnit) || DEFAULT_UNIT,
+      Agent: account.Agent,
+      LineNum: 0,
+      DueDate: today,
+      ExpireDate: today,
+      OPrice: line.price,
+      TftalVat: round2(total * vat),
+      SupplyQuantity: line.quantity,
+      BaseQuantity: line.quantity,
+      PurchQuantity: line.quantity,
+    };
+    // The app leaves the extra dates empty on shipping lines.
+    if (line.shipping) {
+      delete optional.ExtraDate1;
+      delete optional.ExtraDate2;
+    }
     return {
       required: {
         StockID: null, // set once the header exists
@@ -227,20 +245,7 @@ export async function writeOrder(order, { commit = false } = {}) {
         LineNoForSorting: (i + 1) * 100,
         Warehouse: ORDER_WAREHOUSE,
       },
-      optional: {
-        ...LINE_DEFAULTS,
-        ItemName: trim(row.ItemName) || line.fallbackName,
-        Unit: trim(row.SalesUnit) || DEFAULT_UNIT,
-        Agent: account.Agent,
-        LineNum: i + 1,
-        DueDate: today,
-        ExpireDate: today,
-        OPrice: line.price,
-        TftalVat: round2(total * vat),
-        SupplyQuantity: line.quantity,
-        BaseQuantity: line.quantity,
-        PurchQuantity: line.quantity,
-      },
+      optional,
     };
   });
 
@@ -261,7 +266,7 @@ export async function writeOrder(order, { commit = false } = {}) {
     },
     optional: {
       ...HEADER_DEFAULTS,
-      ...HEADER_BY_KIND[orderKind],
+      PrintStyle: printStyle,
       Remarks: order.remarks?.trim() || null,
       AccountName: trim(account.FullName),
       Address: trim(account.Address),
