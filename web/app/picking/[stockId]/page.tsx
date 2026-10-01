@@ -1,6 +1,7 @@
 "use client";
 import { use, useEffect, useMemo, useState } from "react";
 import { bridge, type DocumentDetail, type DocLine } from "../../../lib/bridge";
+import { fetchImages } from "../../../lib/images";
 
 // Per-order picking screen. The picker enters the picked quantity per line;
 // the screen flags shortages (whole item missing vs partial). Writing back to
@@ -11,6 +12,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [err, setErr] = useState("");
   const [picked, setPicked] = useState<Record<string, number>>({});
+  const [images, setImages] = useState<Record<string, string>>({});
 
   useEffect(() => {
     bridge.document(id)
@@ -20,6 +22,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         const init: Record<string, number> = {};
         for (const l of d.lines ?? []) if (!l.isShipping) init[l.itemkey] = l.qty;
         setPicked(init);
+        fetchImages((d.lines ?? []).map((l) => l.itemkey)).then(setImages).catch(() => {});
       })
       .catch(() => setErr("הגשר עדיין לא מחובר — פרטי ההזמנה ייטענו כשהגשר יעלה."));
   }, [id]);
@@ -50,7 +53,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620 }}>
           <thead>
             <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
-              <th style={{ padding: 8 }}>מק״ט</th><th>תיאור</th><th>מלאי</th><th>הוזמן</th><th>לוקט</th><th>סטטוס</th>
+              <th style={{ padding: 8, width: 54 }}>תמונה</th><th>מק״ט</th><th>תיאור</th><th>מלאי</th><th>הוזמן</th><th>לוקט</th><th>סטטוס</th>
             </tr>
           </thead>
           <tbody>
@@ -58,6 +61,12 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
               const sh = shortageOf(l);
               return (
                 <tr key={l.itemkey} style={{ borderBottom: "1px solid #eee", background: sh === "full" ? "#fdecea" : sh === "partial" ? "#fff6e5" : undefined }}>
+                  <td style={{ padding: 6 }}>{images[l.itemkey] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={images[l.itemkey]} alt="" style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 6, background: "var(--surface-muted)" }} />
+                  ) : (
+                    <div style={{ width: 44, height: 44, borderRadius: 6, background: "var(--surface-muted)" }} />
+                  )}</td>
                   <td style={{ padding: 8, fontWeight: 700 }}>{l.itemkey}</td>
                   <td>{l.name}</td>
                   <td style={{ color: (l.onHand ?? 0) < l.qty ? "#b00" : "#0a7" }}>{l.onHand ?? "—"}</td>
