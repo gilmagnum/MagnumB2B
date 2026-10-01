@@ -19,6 +19,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <a href="/customer" style={{ color: "#fff", marginInlineStart: 16 }}>לקוח</a>
               <a href="/catalog" style={{ color: "#fff", marginInlineStart: 16 }}>קטלוג</a>
               <a href="/cart" style={{ color: "#fff", marginInlineStart: 16 }}>🛒 סל</a>
+              <a href="/documents" style={{ color: "#fff", marginInlineStart: 16 }}>מסמכים</a>
               {isAdmin && <a href="/admin" style={{ color: "#fff", marginInlineStart: 16 }}>ניהול</a>}
               {agentName && <span style={{ marginInlineStart: 16, opacity: 0.85 }}>{agentName}</span>}
               <form action={logout} style={{ display: "inline", marginInlineStart: 12 }}>
