@@ -60,6 +60,20 @@ type PriceResult = {
   // pricelist = price list (+ customer discount from Discounts, if any)
 };
 
+type ProducedDoc = { stockId: number; documentId: number; docTypeName: string; docNumber: number; date: string; total?: number };
+type Document = {
+  stockId: number;            // Stock.ID of the order (app order number)
+  docNumber: number;          // Hashavshevet DocNumber (0 while it is a temp order)
+  documentId: number;         // 11 הזמנת סוכן | 6 הזמנה
+  docTypeName: string;        // DocumentsDef.DocName
+  accountKey: string; customerName: string; agent?: number;
+  date: string;               // Stock.IssueDate, YYYY-MM-DD
+  total?: number;             // Stock.TFtal (incl. VAT)
+  status: 'open' | 'produced';
+  producedDocs: ProducedDoc[];  // via StockMoves.BaseMoveID, 2 levels (order -> ת.משלוח -> חשבונית)
+};
+// DocumentID names: 1 חשבונית מס, 2 חשבונית מס/קבלה, 4 תעודת משלוח, 6 הזמנה, 11 הזמנת סוכן, 31 קבלה (not linked to orders)
+
 type ApiError = { error: { code: string; message: string } };  // message in Hebrew, show as-is
 ```
 
@@ -68,9 +82,15 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /health` → `{ ok: true }` (no auth)
 - `GET /items?shownOnSite=1[&category=<main or sub>][&search=<key/name/barcode>]` → `Item[]` (cached 60s)
 - `GET /items/:itemkey` → `Item` (with `cells` + stock per cell if matrix) · 404 if unknown
-- `GET /customers[?agent=:agentId]` → `Customer[]` (the web must pass the logged-in agent's id; no agent = all)
+- `GET /customers[?agent=:agentId][&q=]` → `Customer[]`. `agent=0` or missing = **all** customers (admin); `agent=:id` = that agent's
+  customers. `q` = name or accountKey contains (works with both). Customers = Accounts.SortGroup 10/11/12, Dumi≠1, named,
+  and not marked "לא פעיל" in the name.
 - `GET /stock/:itemkey` → `{ itemkey, qty }` · matrix: `{ itemkey, qty: <sum>, cells: [{ itemkey, qty }] }`
 - `GET /price?account=&item=&qty=` → `PriceResult`
+- `POST /prices` `{ account, items: [{ itemkey, qty? }] }` (max 500) → `PriceResult[]` (bulk, for the catalog grid)
+- `GET /documents?agent=&status=all|open|produced&q=&limit=50&offset=0` → `Document[]`, newest first (limit max 200).
+  `agent=0`/missing = all (admin). `q` = customer name/accountKey, or a number = order Stock.ID / its DocNumber /
+  the DocNumber of a document produced from it. `status`: open = Stock.Status 0, produced = anything else.
 - `POST /sync` → full catalog refresh Hashavshevet → Supabase (`items`, `item_variants`, ruler codes); returns
   `{ items, shown, variants, rulers, deactivated, ms }` (also runs at start + every `SYNC_INTERVAL_MIN`).
   `GET /sync` → `{ running, last }`. Images/colors/categories are app-layer and never touched.

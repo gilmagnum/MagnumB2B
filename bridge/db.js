@@ -23,7 +23,14 @@ export function getPool(role = 'ro') {
       password: creds.password,
       pool: { max: role === 'rw' ? 2 : 5, min: 0, idleTimeoutMillis: 30000 },
       requestTimeout: 30000,
-      options: { encrypt: false, trustServerCertificate: true, appName: `MagnumB2B-bridge-${role}` },
+      options: {
+        encrypt: false,
+        trustServerCertificate: true,
+        appName: `MagnumB2B-bridge-${role}`,
+        // Reads never take or wait for locks (= WITH (NOLOCK) on every query), so the bridge
+        // can never block Hashavshevet users. Display data only; the write pool keeps the default.
+        ...(role === 'ro' && { connectionIsolationLevel: sql.ISOLATION_LEVEL.READ_UNCOMMITTED }),
+      },
     });
     pools[role] = pool.connect().catch((err) => {
       delete pools[role];

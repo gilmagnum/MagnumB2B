@@ -22,6 +22,7 @@ function supabase() {
     return res.status === 204 || method !== 'GET' ? null : res.json();
   };
   return {
+    get: (path) => call('GET', path),
     async upsert(table, rows, onConflict) {
       for (let i = 0; i < rows.length; i += BATCH) {
         await call('POST', `${table}?on_conflict=${onConflict}`, rows.slice(i, i + BATCH), {
@@ -45,6 +46,12 @@ function supabase() {
       }
     },
   };
+}
+
+// Time of the last successful sync (newest items.synced_at), or null.
+export async function lastSyncedAt() {
+  const [row] = await supabase().get('items?select=synced_at&order=synced_at.desc&limit=1');
+  return row?.synced_at ? new Date(row.synced_at) : null;
 }
 
 const num = (v) => (v == null || Number.isNaN(Number(v)) ? null : Number(v));

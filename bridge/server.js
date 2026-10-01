@@ -6,14 +6,16 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
 import { ORDER_DOCUMENT_IDS } from './config.js';
-import { syncCatalog } from './sync.js';
+import { syncCatalog, lastSyncedAt } from './sync.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
 const PORT = Number(process.env.BRIDGE_PORT || 8787);
 const ITEMS_TTL_MS = 60_000;
 const MAX_BODY = 1_000_000;
-const SYNC_INTERVAL_MIN = Number(process.env.SYNC_INTERVAL_MIN ?? 30); // 0 = no scheduled sync
+const SYNC_INTERVAL_MIN = Number(process.env.SYNC_INTERVAL_MIN ?? 120); // 0 = no scheduled sync
+// Scheduled syncs are skipped during working hours (server local time, "from-to"); POST /sync always works.
+const SYNC_QUIET_HOURS = (process.env.SYNC_QUIET_HOURS ?? '7-19').split('-').map(Number);
 
 if (!TOKEN || TOKEN.length < 24) {
   console.error('BRIDGE_TOKEN missing or shorter than 24 chars - set it in .env.local');
@@ -73,6 +75,16 @@ function runSync(trigger) {
   return syncRun;
 }
 
+const toPriceResult = (itemkey, accountKey, qty, p) => ({
+  itemkey,
+  accountKey,
+  qty,
+  unitPrice: p.price,
+  discountPct: p.discountPrc,
+  netUnitPrice: Math.round(p.price * (1 - p.discountPrc / 100) * 100) / 100,
+  source: p.source === 'discount' || p.source === 'base' ? 'pricelist' : p.source,
+});
+
 // --- routes ------------------------------------------------------------------------
 const routes = [
   ['GET', /^\/health$/, async () => ({ ok: true }), { public: true }],
@@ -100,8 +112,9 @@ const routes = [
   }],
 
   ['GET', /^\/customers$/, async ({ query }) => {
-    const agent = query.get('agent');
-    const rows = await read.getAccounts(agent ? { agent: Number(agent) } : {});
+    // agent=0 or missing = all customers (admin); q = name/account key contains
+    const agent = Number(query.get('agent') || 0);
+    const rows = await read.getAccounts({ agent, q: query.get('q')?.trim() || undefined });
     return rows.map((a) => ({
       accountKey: a.AccountKey.trim(),
       fullName: a.FullName?.trim(),
@@ -131,15 +144,31 @@ const routes = [
     if (!accountKey || !itemKey) throw new HttpError(400, 'BAD_REQUEST', 'חסרים לקוח או פריט');
     const p = (await resolvePrices(accountKey, [itemKey], { quantities: { [itemKey]: qty } })).get(itemKey);
     if (!p) throw new HttpError(404, 'ITEM_NOT_FOUND', `הפריט ${itemKey} לא נמצא`);
-    return {
-      itemkey: itemKey,
-      accountKey,
-      qty,
-      unitPrice: p.price,
-      discountPct: p.discountPrc,
-      netUnitPrice: Math.round(p.price * (1 - p.discountPrc / 100) * 100) / 100,
-      source: p.source === 'discount' || p.source === 'base' ? 'pricelist' : p.source,
-    };
+    return toPriceResult(itemKey, accountKey, qty, p);
+  }],
+
+  // Orders (doc 6/11) + documents produced from them. agent=0/missing = all (admin).
+  ['GET', /^\/documents$/, async ({ query }) => {
+    const status = query.get('status') ?? 'all';
+    if (!['all', 'open', 'produced'].includes(status)) throw new HttpError(400, 'BAD_REQUEST', 'סטטוס לא תקין');
+    return read.getDocuments({
+      agent: Number(query.get('agent') || 0),
+      status,
+      q: query.get('q')?.trim() || undefined,
+      limit: query.get('limit') ?? 50,
+      offset: query.get('offset') ?? 0,
+    });
+  }],
+
+  // Bulk customer prices for the catalog grid: { account, items: [{ itemkey, qty? }] } -> PriceResult[]
+  ['POST', /^\/prices$/, async ({ body }) => {
+    const accountKey = body?.account?.trim?.();
+    const items = Array.isArray(body?.items) ? body.items.filter((i) => i?.itemkey) : [];
+    if (!accountKey || !items.length) throw new HttpError(400, 'BAD_REQUEST', 'חסרים לקוח או פריטים');
+    if (items.length > 500) throw new HttpError(400, 'BAD_REQUEST', 'עד 500 פריטים בבקשה');
+    const quantities = Object.fromEntries(items.map((i) => [String(i.itemkey).trim(), Number(i.qty ?? 0)]));
+    const prices = await resolvePrices(accountKey, Object.keys(quantities), { quantities });
+    return [...prices].map(([itemkey, p]) => toPriceResult(itemkey, accountKey, quantities[itemkey], p));
   }],
 
   // Full catalog refresh Hashavshevet -> Supabase. Waits for the result (a few seconds).
@@ -235,13 +264,24 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   if (SYNC_INTERVAL_MIN > 0 && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const tick = () => runSync('schedule').then(
-      (r) => console.log(`sync ok: ${r.items} items, ${r.variants} cells, ${r.deactivated} deactivated, ${r.ms}ms`),
-      (err) => console.error(`sync failed: ${err.message}`),
-    );
+    // Checked every 15 min: sync only off-peak, and only when the last sync (any trigger,
+    // read from Supabase) is older than the interval - so restarts don't re-sync.
+    const [quietFrom, quietTo] = SYNC_QUIET_HOURS;
+    const tick = async () => {
+      const hour = new Date().getHours();
+      if (hour >= quietFrom && hour < quietTo) return;
+      try {
+        const last = await lastSyncedAt();
+        if (last && Date.now() - last.getTime() < SYNC_INTERVAL_MIN * 60_000) return;
+        const r = await runSync('schedule');
+        console.log(`sync ok: ${r.items} items, ${r.variants} cells, ${r.deactivated} deactivated, ${r.ms}ms`);
+      } catch (err) {
+        console.error(`sync failed: ${err.message}`);
+      }
+    };
     tick();
-    setInterval(tick, SYNC_INTERVAL_MIN * 60_000).unref();
-    console.log(`catalog sync every ${SYNC_INTERVAL_MIN} min`);
+    setInterval(tick, 15 * 60_000).unref();
+    console.log(`catalog sync every ${SYNC_INTERVAL_MIN} min, not between ${quietFrom}:00-${quietTo}:00`);
   } else {
     console.log('catalog sync schedule off (SYNC_INTERVAL_MIN=0 or Supabase env missing)');
   }

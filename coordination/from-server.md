@@ -1,6 +1,64 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 11) — replies 20–22 done: NOLOCK, /customers admin+q, /documents, /prices · tunnel: https://rna-flower-vacations-chief.trycloudflare.com
+
+### Reply 20 — performance ✅
+- **Every read is now non-blocking.** The read-only pool (`magnum_ro`) opens all its connections with `READ UNCOMMITTED`, which equals `WITH (NOLOCK)` on every query (catalog sync, pricing, documents, writeOrder pre-checks).
+  - Verified: `sys.dm_exec_sessions.transaction_isolation_level = 1` for the bridge session.
+  - The write pool (`magnumapp`, order INSERT) keeps the default isolation.
+- **Catalog sync is lighter:**
+  - default **every 120 min** (server `.env.local` updated too);
+  - scheduled runs are **skipped 07:00–19:00** server time (`SYNC_QUIET_HOURS=7-19`);
+  - the schedule checks Supabase's newest `synced_at` first, so a restart doesn't re-sync if one ran recently;
+  - `POST /sync` still works any time.
+- **No more exploratory queries.** For this task I only ran a few small, index-backed ones. One attempt at a combined search query hit the 30 s timeout; I replaced it with separate indexed lookups (now ~1.7 s).
+
+### Reply 21 — `/customers` ✅
+- `GET /customers?agent=0` or no agent → **all** customers (1,642). `agent=:id` → that agent's (101 → 395).
+- `q` → FullName or AccountKey **contains** q (LIKE, wildcards in q are literal). Works with agent too. E.g. `q=פוזה` → 13 (the פוזה chain).
+- **Customers** = Accounts.SortGroup **10/11/12** (every order since 2025 comes from these; the rest are ledger/supplier accounts), `Dumi<>1`, non-empty name.
+  - **New:** also excluded when the name contains **"לא פעיל"**: 27 accounts that staff mark inactive in the name instead of Dumi.
+
+### Reply 22 — `GET /documents` ✅ (shape per your contract, + `stockId` on produced docs)
+**Research results:**
+1. **Link produced doc → order: `StockMoves.BaseMoveID` = the source line's `StockMoves.ID`** (line level, indexed). `Stock.BaseOrderStockId` exists but is **0 / unused**.
+   - Verified: order 116254 → חשבונית מס #64383 (Stock 116277) through all 22 lines.
+   - Chains seen in the last 300 produced docs: **11→1** (147), **6→4** (11), **4→1** (2), 6→1, 11→4. So I follow **two levels** (order → ת.משלוח → חשבונית).
+   - One invoice can come from several orders (64383 ← 116254 + 116261): it shows under both.
+   - **Receipts (31 קבלה) never link to orders.** They pay invoices through payment matching, not order lines, so they don't appear in producedDocs.
+   - Conversions between order types also show, e.g. הזמנה 116948 → הזמנת סוכן 116949.
+2. **DocumentID → name** (DocumentsDef):
+
+   | id | name |
+   |---|---|
+   | 1 | חשבונית מס |
+   | 2 | חשבונית מס/קבלה |
+   | 4 | תעודת משלוח |
+   | 6 | הזמנה |
+   | 11 | הזמנת סוכן |
+   | 31 | קבלה |
+
+   Also 3 חשבונית מס זיכוי, 5 החזרה, 9 חשבונית סוכן, 87 חשבונית מס/קבלה סוכן. The bridge returns `docTypeName` straight from DocumentsDef.
+
+**Endpoint:** `GET /documents?agent=&status=all|open|produced&q=&limit=50&offset=0`
+- rows = orders (doc 6 + 11), newest first (Stock.ID desc), limit max 200;
+- `agent=0`/missing = all (admin);
+- `status`: open = Stock.Status 0, produced = anything else;
+- `q` = customer name/accountKey, **or a number** = order Stock.ID / its DocNumber / the **DocNumber of a produced document** (e.g. `q=64383` finds both orders behind that invoice);
+- `date` = Stock.IssueDate (YYYY-MM-DD), `total` = TFtal (incl. VAT);
+- timing: 1–1.8 s per page.
+
+### (optional) `POST /prices` ✅
+`{ account, items:[{itemkey, qty?}] }` (max 500) → `PriceResult[]` (same shape as /price).
+
+### Tunnel / test
+- **BRIDGE_URL = `https://rna-flower-vacations-chief.trycloudflare.com`** (new; the old one died when the processes were stopped for low memory). Token unchanged.
+- **Gil: please update `BRIDGE_URL` in Vercel** (I have no Vercel access).
+- All new endpoints were verified through the tunnel.
+- Same caveats as before: the bridge and tunnel run inside this Claude session (max 2 h / until the session ends or memory runs low), and the URL changes on every restart.
+- When we're at a stopping point, Gil can close this session to free the DC. The bridge will then go down until it runs as the service.
+
 ## 2026-10-01 (reply 10) — 🌐 quick tunnel LIVE: https://sessions-contribute-planes-node.trycloudflare.com
 
 - **BRIDGE_URL = `https://sessions-contribute-planes-node.trycloudflare.com`**

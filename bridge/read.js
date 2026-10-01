@@ -1,4 +1,4 @@
-import { query, key } from './db.js';
+import { query, key, sql } from './db.js';
 import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS } from './config.js';
 
 const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
@@ -125,19 +125,35 @@ export async function getMatrixCells(fatherItemKey) {
 }
 
 // Active accounts; pass agent to get only that agent's customers.
-// Active customers (not ledger/supplier accounts): Accounts.SortGroup in CUSTOMER_SORT_GROUPS.
-// Pass agent to get only that agent's customers.
-export function getAccounts({ agent } = {}) {
-  const where = agent == null ? '' : ' AND Agent = @agent';
+// Active customers (not ledger/supplier accounts): Accounts.SortGroup in CUSTOMER_SORT_GROUPS,
+// Dumi<>1, named, and not marked "לא פעיל" in the name (staff do that instead of Dumi).
+// agent: only that agent's customers (0 / missing = all, for admin).
+// q: name or account key contains q.
+export function getAccounts({ agent, q } = {}) {
+  const params = {};
+  let where = '';
+  if (agent) {
+    where += ' AND Agent = @agent';
+    params.agent = agent;
+  }
+  if (q) {
+    where += " AND (FullName LIKE @q ESCAPE '!' OR AccountKey LIKE @q ESCAPE '!')";
+    params.q = { type: sql.NVarChar(100), value: `%${likeEscape(q)}%` };
+  }
   return query(
     `SELECT AccountKey, FullName, Agent, DiscountCode, TFtalDiscount, CreditTermsCode
      FROM Accounts
      WHERE ${ACTIVE} AND SortGroup IN (${CUSTOMER_SORT_GROUPS.map(Number).join(',')})
-       AND LTRIM(RTRIM(ISNULL(FullName, ''))) <> ''${where}
+       AND LTRIM(RTRIM(ISNULL(FullName, ''))) <> ''
+       AND FullName NOT LIKE N'%לא פעיל%'${where}
      ORDER BY FullName`,
-    agent == null ? {} : { agent },
+    params,
   );
 }
+
+// LIKE pattern for a user search term (wildcards in the term are literal).
+// Use with ESCAPE '!'.
+export const likeEscape = (term) => String(term).trim().replace(/[!%_[]/g, (c) => `!${c}`);
 
 export async function getAccount(accountKey) {
   const rows = await query('SELECT * FROM Accounts WHERE AccountKey = @k', { k: key(accountKey) });
@@ -232,5 +248,111 @@ export async function getAllMatrixCells() {
     col: r.Col,
     sizeLabel: trim(r.sizeLabel) || null,
     colorLabel: trim(r.colorLabel) || null,
+  }));
+}
+
+// Orders a produced document (by its DocNumber) came from, walking BaseMoveID back up to two
+// levels (invoice -> delivery note -> order). Small indexed lookups only.
+async function ordersProducing(docNumber, orderDocIds) {
+  const docs = await query(
+    `SELECT ID FROM Stock WHERE DocNumber = @n AND DocumentID NOT IN (${orderDocIds.map(Number).join(',')})`,
+    { n: docNumber },
+  );
+  let frontier = docs.map((d) => d.ID);
+  const found = new Set();
+  for (let level = 0; level < 2 && frontier.length; level++) {
+    const ids = Object.fromEntries(frontier.slice(0, 50).map((id, i) => [`d${i}`, id]));
+    const bases = await query(
+      `SELECT DISTINCT b.StockID, b.DocumentID FROM StockMoves m JOIN StockMoves b ON b.ID = m.BaseMoveID
+       WHERE m.StockID IN (${Object.keys(ids).map((k) => '@' + k).join(',')}) AND m.BaseMoveID > 0`,
+      ids,
+    );
+    bases.filter((b) => orderDocIds.includes(b.DocumentID)).forEach((b) => found.add(b.StockID));
+    frontier = bases.filter((b) => !orderDocIds.includes(b.DocumentID)).map((b) => b.StockID);
+  }
+  return [...found];
+}
+
+// --- documents screen: orders (doc 6/11) + the documents produced from them -----------
+// Link (verified): a produced document's StockMoves.BaseMoveID = the source line's StockMoves.ID
+// (Stock.BaseOrderStockId is unused, 0). Chains seen: 11->1, 6->4, 4->1, 6->1, 11->4, so two
+// levels are followed (order -> delivery note -> invoice). Receipts (31) pay invoices through
+// payment matching, not order lines, so they never appear here.
+export async function getDocuments({ agent, status = 'all', q, limit = 50, offset = 0, orderDocIds = [6, 11] } = {}) {
+  const params = {
+    limit: Math.min(Math.max(Number(limit) || 50, 1), 200),
+    offset: Math.max(Number(offset) || 0, 0),
+  };
+  let where = `s.DocumentID IN (${orderDocIds.map(Number).join(',')})`;
+  if (agent) {
+    where += ' AND a.Agent = @agent';
+    params.agent = Number(agent);
+  }
+  if (status === 'open') where += ' AND s.Status = 0';
+  else if (status === 'produced') where += ' AND s.Status <> 0';
+  if (q) {
+    params.q = { type: sql.NVarChar(100), value: `%${likeEscape(q)}%` };
+    where += " AND (s.AccountName LIKE @q ESCAPE '!' OR a.FullName LIKE @q ESCAPE '!' OR s.AccountKey LIKE @q ESCAPE '!'";
+    if (/^\d{1,9}$/.test(String(q).trim())) {
+      params.qn = Number(q);
+      // order number, its Hashavshevet number, or the number of a document produced from it
+      where += ' OR s.ID = @qn OR s.DocNumber = @qn';
+      const sources = await ordersProducing(Number(q), orderDocIds);
+      if (sources.length) where += ` OR s.ID IN (${sources.map(Number).join(',')})`;
+    }
+    where += ')';
+  }
+  const orders = await query(
+    `SELECT s.ID, s.DocNumber, s.DocumentID, d.DocName, s.AccountKey, s.AccountName, a.FullName, a.Agent,
+            s.IssueDate, s.TFtal, s.Status
+     FROM Stock s
+     LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
+     LEFT JOIN DocumentsDef d ON d.DocumentID = s.DocumentID
+     WHERE ${where}
+     ORDER BY s.ID DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
+    params,
+  );
+  if (!orders.length) return [];
+
+  const ids = Object.fromEntries(orders.map((o, i) => [`o${i}`, o.ID]));
+  const idList = Object.keys(ids).map((k) => `@${k}`).join(',');
+  // Level 1: documents produced from the orders; level 2: documents produced from those.
+  const produced = await query(
+    `WITH lvl1 AS (
+       SELECT DISTINCT o.StockID AS orderId, m.StockID AS docId
+       FROM StockMoves o JOIN StockMoves m ON m.BaseMoveID = o.ID
+       WHERE o.StockID IN (${idList}) AND m.StockID <> o.StockID),
+     lvl2 AS (
+       SELECT DISTINCT l.orderId, m.StockID AS docId
+       FROM lvl1 l JOIN StockMoves b ON b.StockID = l.docId JOIN StockMoves m ON m.BaseMoveID = b.ID
+       WHERE m.StockID <> l.docId)
+     SELECT x.orderId, p.ID, p.DocumentID, d.DocName, p.DocNumber, p.IssueDate, p.TFtal
+     FROM (SELECT orderId, docId FROM lvl1 UNION SELECT orderId, docId FROM lvl2) x
+     JOIN Stock p ON p.ID = x.docId
+     LEFT JOIN DocumentsDef d ON d.DocumentID = p.DocumentID
+     ORDER BY p.ID`,
+    ids,
+  );
+  const byOrder = Map.groupBy(produced, (p) => p.orderId);
+  const iso = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : null);
+  return orders.map((o) => ({
+    stockId: o.ID,
+    docNumber: o.DocNumber ?? 0,
+    documentId: o.DocumentID,
+    docTypeName: trim(o.DocName) ?? '',
+    accountKey: trim(o.AccountKey),
+    customerName: trim(o.AccountName) || trim(o.FullName) || '',
+    agent: o.Agent || undefined,
+    date: iso(o.IssueDate),
+    total: o.TFtal ?? undefined,
+    status: o.Status === 0 ? 'open' : 'produced',
+    producedDocs: (byOrder.get(o.ID) ?? []).map((p) => ({
+      stockId: p.ID,
+      documentId: p.DocumentID,
+      docTypeName: trim(p.DocName) ?? '',
+      docNumber: p.DocNumber,
+      date: iso(p.IssueDate),
+      total: p.TFtal ?? undefined,
+    })),
   }));
 }
