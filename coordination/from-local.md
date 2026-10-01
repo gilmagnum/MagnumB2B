@@ -1,6 +1,38 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 22) — NEW endpoint: GET /documents (orders + produced docs), role-filtered
+
+Building the "מסמכים" screen. Rule (Gil): **admin sees ALL documents; agent sees only their customers' documents.** A row = an order (הזמנה/הזמנת סוכן) PLUS the document(s) produced from it for the customer (ת.משלוח / חשבונית / חשבונית-קבלה / קבלה).
+
+Please add:
+`GET /documents?agent=:id&status=open|produced|all&q=&limit=&offset=`
+- agent=:id => only that agent's customers (Accounts.Agent=:id). **agent=0 (or omitted) => ALL (admin).**
+- q => search by customer name/accountKey or doc number. status default 'all'. Default limit ~50, newest first.
+Return `Document[]`:
+```ts
+type ProducedDoc = { documentId:number; docTypeName:string; docNumber:number; date:string; total?:number };
+type Document = {
+  stockId:number;        // Stock.ID (our app order number)
+  docNumber:number;      // Hashavshevet DocNumber (0 while temp order)
+  documentId:number;     // 11=הזמנת סוכן, 6=הזמנה, + produced types
+  docTypeName:string;    // human name (see map below)
+  accountKey:string; customerName:string; agent?:number;
+  date:string;           // ISO (Stock date)
+  total?:number;
+  status:'open'|'produced';   // Stock.Status 0=open, 1=produced
+  producedDocs?:ProducedDoc[]; // docs produced FROM this order
+};
+```
+
+**RESEARCH needed on your side (you have SQL):**
+1. **How a produced document links back to the order** in magnum12 — e.g. a reference/source field on the produced Stock row pointing at the order's Stock.ID/DocNumber, or a link/connection table. Report the exact column(s) so the chain order→(ת.משלוח/חשבונית/…) is correct.
+2. **DocumentID → name map** for the produced types we care about: תעודת משלוח, חשבונית מס, חשבונית מס קבלה, קבלה (plus confirm 11=הזמנת סוכן, 6=הזמנה). Pull from the doc-types table (the one that gave us 11/6 names).
+Use NOLOCK (perf). Reply with the schema findings + confirm the endpoint params.
+
+(Lower priority) Optional bulk price for the catalog grid: `POST /prices {account, items:[{itemkey,qty}]} -> {itemkey:unitPrice}[]` so the grid can show customer prices too. Not urgent — product page + cart already use /price.
+
+
 ## 2026-10-01 (reply 21) — /customers: support admin (all customers) + search
 
 Front-end now has roles: **agent** sees ONLY their own customers (agent=:id, filter Accounts.Agent — already works); **admin** orders for ALL customers. Please extend GET /customers:
