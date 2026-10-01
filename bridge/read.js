@@ -1,5 +1,5 @@
 import { query, key, sql } from './db.js';
-import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS } from './config.js';
+import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS, SHIPPING_ITEMS } from './config.js';
 
 const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
 const ITEM_COLUMNS =
@@ -314,9 +314,18 @@ export async function getDocuments({ agent, status = 'all', q, limit = 50, offse
   );
   if (!orders.length) return [];
 
-  const ids = Object.fromEntries(orders.map((o, i) => [`o${i}`, o.ID]));
+  const produced = await producedDocsFor(orders.map((o) => o.ID));
+  return orders.map((o) => toDocumentRow(o, produced.get(o.ID)));
+}
+
+const isoDate = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : null);
+
+// Documents produced from the given orders: level 1 (lines whose BaseMoveID points at an order
+// line) and level 2 (documents produced from those). Map<orderId, rows>.
+async function producedDocsFor(orderIds) {
+  if (!orderIds.length) return new Map();
+  const ids = Object.fromEntries(orderIds.map((id, i) => [`o${i}`, id]));
   const idList = Object.keys(ids).map((k) => `@${k}`).join(',');
-  // Level 1: documents produced from the orders; level 2: documents produced from those.
   const produced = await query(
     `WITH lvl1 AS (
        SELECT DISTINCT o.StockID AS orderId, m.StockID AS docId
@@ -333,9 +342,11 @@ export async function getDocuments({ agent, status = 'all', q, limit = 50, offse
      ORDER BY p.ID`,
     ids,
   );
-  const byOrder = Map.groupBy(produced, (p) => p.orderId);
-  const iso = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : null);
-  return orders.map((o) => ({
+  return Map.groupBy(produced, (p) => p.orderId);
+}
+
+function toDocumentRow(o, produced = []) {
+  return {
     stockId: o.ID,
     docNumber: o.DocNumber ?? 0,
     documentId: o.DocumentID,
@@ -343,16 +354,68 @@ export async function getDocuments({ agent, status = 'all', q, limit = 50, offse
     accountKey: trim(o.AccountKey),
     customerName: trim(o.AccountName) || trim(o.FullName) || '',
     agent: o.Agent || undefined,
-    date: iso(o.IssueDate),
+    date: isoDate(o.IssueDate),
     total: o.TFtal ?? undefined,
     status: o.Status === 0 ? 'open' : 'produced',
-    producedDocs: (byOrder.get(o.ID) ?? []).map((p) => ({
+    producedDocs: produced.map((p) => ({
       stockId: p.ID,
       documentId: p.DocumentID,
       docTypeName: trim(p.DocName) ?? '',
       docNumber: p.DocNumber,
-      date: iso(p.IssueDate),
+      date: isoDate(p.IssueDate),
       total: p.TFtal ?? undefined,
     })),
-  }));
+  };
+}
+
+// One customer document with its lines, for the export sheet (orders and the documents produced
+// from them; supplier/purchase documents are not returned).
+export async function getDocument(stockId) {
+  const [o] = await query(
+    `SELECT s.ID, s.DocNumber, s.DocumentID, d.DocName, s.AccountKey, s.AccountName, a.FullName, a.Agent,
+            s.IssueDate, s.TFtal, s.TFtalVat, s.VatPrc, s.DiscountPrc, s.Status, s.Remarks,
+            s.Address, s.City, s.Phone, a.Address AS accAddress, a.City AS accCity, a.Phone AS accPhone,
+            a.EMail, a.TaxFileNum
+     FROM Stock s
+     LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
+     LEFT JOIN DocumentsDef d ON d.DocumentID = s.DocumentID
+     WHERE s.ID = @id AND a.SortGroup IN (${CUSTOMER_SORT_GROUPS.map(Number).join(',')})`,
+    { id: Number(stockId) },
+  );
+  if (!o) return null;
+  const [lines, produced] = await Promise.all([
+    query(
+      `SELECT ItemKey, ItemName, Quantity, Unit, Price, DiscountPrc, TFtal, Tree
+       FROM StockMoves WHERE StockID = @id ORDER BY LineNoForSorting, ID`,
+      { id: o.ID },
+    ),
+    producedDocsFor([o.ID]),
+  ]);
+  const shipping = new Set(Object.values(SHIPPING_ITEMS).map((s) => s.itemKey));
+  return {
+    ...toDocumentRow(o, produced.get(o.ID)),
+    totalBeforeVat: o.TFtalVat ?? undefined,
+    vatPct: o.VatPrc ?? undefined,
+    orderDiscountPct: o.DiscountPrc || 0,
+    remarks: trim(o.Remarks) || undefined,
+    customer: {
+      address: trim(o.Address) || trim(o.accAddress) || undefined,
+      city: trim(o.City) || trim(o.accCity) || undefined,
+      phone: trim(o.Phone) || trim(o.accPhone) || undefined,
+      email: trim(o.EMail) || undefined,
+      taxId: trim(o.TaxFileNum) || undefined,
+    },
+    lines: lines
+      .filter((l) => l.Tree !== 2) // matrix cells under a tree parent would double-count
+      .map((l) => ({
+        itemkey: trim(l.ItemKey),
+        name: trim(l.ItemName) ?? '',
+        qty: l.Quantity,
+        unit: trim(l.Unit) || undefined,
+        unitPrice: l.Price,
+        discountPct: l.DiscountPrc || 0,
+        lineTotal: l.TFtal,
+        ...(shipping.has(trim(l.ItemKey)) && { isShipping: true }),
+      })),
+  };
 }

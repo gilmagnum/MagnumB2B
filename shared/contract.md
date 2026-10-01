@@ -74,6 +74,13 @@ type Document = {
 };
 // DocumentID names: 1 חשבונית מס, 2 חשבונית מס/קבלה, 4 תעודת משלוח, 6 הזמנה, 11 הזמנת סוכן, 31 קבלה (not linked to orders)
 
+type DocumentDetail = Document & {
+  totalBeforeVat?: number; vatPct?: number; orderDiscountPct: number; remarks?: string;
+  customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
+  lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
+           discountPct: number; lineTotal: number; isShipping?: true }[];  // M1001/M1002 flagged, not removed
+};
+
 type ApiError = { error: { code: string; message: string } };  // message in Hebrew, show as-is
 ```
 
@@ -88,6 +95,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /stock/:itemkey` → `{ itemkey, qty }` · matrix: `{ itemkey, qty: <sum>, cells: [{ itemkey, qty }] }`
 - `GET /price?account=&item=&qty=` → `PriceResult`
 - `POST /prices` `{ account, items: [{ itemkey, qty? }] }` (max 500) → `PriceResult[]` (bulk, for the catalog grid)
+- `GET /documents/:stockId[?agent=:id]` → `DocumentDetail` (404 if not a customer document, or not that agent's customer)
 - `GET /documents?agent=&status=all|open|produced&q=&limit=50&offset=0` → `Document[]`, newest first (limit max 200).
   `agent=0`/missing = all (admin). `q` = customer name/accountKey, or a number = order Stock.ID / its DocNumber /
   the DocNumber of a document produced from it. `status`: open = Stock.Status 0, produced = anything else.

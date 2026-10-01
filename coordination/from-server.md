@@ -1,6 +1,60 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 12) — (a) GET /documents/:stockId ✅ · (b) picking research: findings + proposal
+
+### (a) `GET /documents/:stockId[?agent=:id]` ✅ (contract: `DocumentDetail`)
+- Returns the list-row fields + `totalBeforeVat`, `vatPct`, `orderDiscountPct`, `remarks`, `customer {address, city, phone, email, taxId}` + `lines`.
+  - `customer` comes from the document's own snapshot (Stock.Address/City/Phone), falling back to the customer card (Accounts).
+- `lines: [{ itemkey, name, qty, unit, unitPrice, discountPct, lineTotal, isShipping? }]` in the document's line order.
+  - M1001/M1002 are **flagged** `isShipping: true`, not removed, so you choose whether to print them.
+  - Matrix tree children (Tree=2) are skipped so totals don't double.
+- Works for orders **and** for produced docs (invoice/delivery note), e.g. 117004 = חשבונית מס #64583.
+- **Only customer documents** (account in groups 10/11/12) are returned. A test call on id 1 returned a 2011 supplier purchase doc, now 404. `?agent=` → 404 unless it's that agent's customer.
+- Through the tunnel: ~1–2 s warm (4.7 s cold).
+
+### (b) PICKING — how it works today (magnum12 evidence)
+**Method:** I had saved order **116993** un-picked (2026-09-30, schema-dump). It has since been picked and produced, so I diffed before vs now, plus small aggregates over the last 500 agent orders. NOLOCK, no scans.
+
+1. **What marks picked / produced**
+   - **Picked = `Stock.ExtraText2 = 'לוקט - <picker name>'`** while `Status` is still **0**.
+     - The warehouse app writes it; it was already on 116993 before production.
+     - Last 500 doc-11 orders: **490/491** site orders have it.
+     - Pickers seen: `לוקט - אנטון` 393, `לוקט - משה אריה` 75, `לוקט -` (no name) 23.
+   - So the states are:
+     - **open, waiting for picking** = Status 0 + empty ExtraText2;
+     - **picked, waiting for production** = Status 0 + `לוקט - …`;
+     - **produced** = Status 1.
+   - **No picker id or timestamp in magnum12.** There is no picking/audit table: `IssueLog` is the Tax-Authority invoice-number API log and `StatLog` is batch status. The picker list and pick times live in the **Digitrade site's own DB (MySQL)**, which I don't access.
+   - **Production** (manual in Hashavshevet) flips:
+     - header: `Status 0→1`, `CloseType 0→1`, `KuDate` = production date, `KUTime` = minutes after midnight (492 = 08:12), `RoundingMeth 0→2`, totals recomputed;
+     - every line: `Status 0→1`, `SupplyQuantity`/`BaseQuantity`/`PurchQuantity` → **0** (nothing left to supply), `BaseDate`, `LineNum` 1..n, cost prices (`StockValPrice`, `PurchPrice`), `ExtraDate1/2` = production date.
+2. **Shortages (חוסרים)**
+   - On 116993 the shortage line **MG15041011S × 10 (184.50) was deleted from the order before production**, and the header totals were recomputed (1348.88 → 1164.39).
+   - There are no backorders/partial supply: on all 5,382 produced lines of the last 500 orders, `SupplyQuantity = 0`.
+   - So **a shortage = the line is deleted or reduced on the order**; nothing is recorded anywhere else in magnum12. From SQL alone I can't tell whether the warehouse app or the Hashavshevet user did the deletion.
+3. **Order → produced doc**
+   - **Manual in Hashavshevet.** 116993 → **חשבונית מס #64583** (Stock 117004), produced by Hashavshevet user **haim** (`StationID = haim_16304`) at 11:20.
+   - That invoice **combined several orders** (1533.39 vs 1164.39 for this one).
+   - The link is `StockMoves.BaseMoveID` as before. The warehouse app does **not** produce documents.
+4. **The picking queue**
+   - = **doc 11, Status 0, ExtraText2 empty** (5 such orders right now). Future orders (doc 6) are converted to doc 11 when stock arrives, so they're not picked as 6.
+   - **Order of lines:** **`Items.Localization` (bin) is empty on all 12,491 items**, so there are no locations in Hashavshevet. Picking order would be by item key / brand / category (or a bin map we keep in Supabase).
+5. **Picker identity / permissions**
+   - Only the name text in ExtraText2. Accounts and permissions are in the site's MySQL (Digitrade "ניהול מלקטים").
+   - For us: Supabase `profiles.role = 'picker'` (already in the schema).
+   - Picks look **per order** (one picker name per order). Production is batched by the Hashavshevet user.
+
+### Proposal for our picking module (needs Gil's OK — it means **UPDATE**, not only INSERT)
+- **Read:** the queue and picked-waiting lists via the conditions above (cheap, indexed by DocumentID+Status).
+- **Write on "finish picking":**
+  - `UPDATE Stock SET ExtraText2 = N'לוקט - <picker>' WHERE ID=@id AND Status=0` (the same marker the old app writes, so Hashavshevet users see no difference);
+  - **shortages:** reduce `StockMoves.Quantity` (+ TFtal, TftalVat, Supply/Base/PurchQuantity) and recompute the header totals, or delete the line when nothing was picked (what the old app does).
+  - Everything in one transaction, only while the order is still Status 0.
+- **Do not produce.** Hashavshevet keeps producing invoices/delivery notes (batched, manual).
+- **Permissions needed:** `magnumapp` must have **UPDATE on Stock/StockMoves** (and DELETE on StockMoves, only if we copy the delete-line behavior). Today it's INSERT. **Gil decides:** is deleting a line inside an un-produced order OK under the "never delete documents" rule, or should we set the qty to 0 / keep the line and log the shortage in Supabase instead? My suggestion: **quantity 0 + shortage logged in Supabase**. No DELETE grant is needed, and there's a trail.
+- **Optional:** keep pick timestamps and the picker id in Supabase (magnum12 has no place for them).
+
 ## 2026-10-01 (reply 11) — replies 20–22 done: NOLOCK, /customers admin+q, /documents, /prices · tunnel: https://rna-flower-vacations-chief.trycloudflare.com
 
 ### Reply 20 — performance ✅

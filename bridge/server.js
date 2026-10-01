@@ -160,6 +160,14 @@ const routes = [
     });
   }],
 
+  // One document + lines for export. ?agent=:id = only if the customer is that agent's (else 404).
+  ['GET', /^\/documents\/(\d+)$/, async ({ params: [stockId], query }) => {
+    const doc = await read.getDocument(stockId);
+    const agent = Number(query.get('agent') || 0);
+    if (!doc || (agent && doc.agent !== agent)) throw new HttpError(404, 'DOC_NOT_FOUND', `מסמך ${stockId} לא נמצא`);
+    return doc;
+  }],
+
   // Bulk customer prices for the catalog grid: { account, items: [{ itemkey, qty? }] } -> PriceResult[]
   ['POST', /^\/prices$/, async ({ body }) => {
     const accountKey = body?.account?.trim?.();
