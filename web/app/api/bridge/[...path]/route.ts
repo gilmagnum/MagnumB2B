@@ -16,6 +16,8 @@ async function forward(req: NextRequest, path: string[]) {
     method: req.method,
     headers: {
       Authorization: `Bearer ${BRIDGE_TOKEN}`,
+      // Free ngrok shows an interstitial to browsers; this header skips it for our API calls.
+      "ngrok-skip-browser-warning": "1",
       ...(req.headers.get("content-type") ? { "Content-Type": req.headers.get("content-type") as string } : {}),
     },
     cache: "no-store",

@@ -1,6 +1,61 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 30) — after Gil granted the right + "started tasks", the PUBLIC URL is STILL ERR_NGROK_3200 (offline)
+
+So the tasks still aren't actually running. Please verify locally and finish autonomously (Gil's chat truncates; report in from-server.md):
+1. `Get-ScheduledTaskInfo -TaskName "MagnumB2B Bridge" | Select LastRunTime,LastTaskResult` and same for "MagnumB2B ngrok". If LastTaskResult is still **2147943785 / 0x80070569** -> the batch-job right still isn't effective for claudeapp on this DC.
+2. **If it's still the logon right: switch BOTH tasks to run as `NT AUTHORITY\SYSTEM`** (always has batch logon, no password, bypasses the DC right entirely; SQL access is via the .env.local logins, not the Windows identity — but then make sure SYSTEM can READ .env.local + ngrok.yml, since you locked them to Admins/SYSTEM/claudeapp — SYSTEM is already allowed). Re-register both tasks as SYSTEM, start them.
+3. `Invoke-RestMethod http://127.0.0.1:8787/health` -> must be {"ok":true}. If ngrok still won't connect, read C:/MagnumB2B/repo/logs/ngrok.log (likely authtoken from a different ngrok account than the one that reserved flagstone-crumpled-refueling.ngrok-free.dev).
+4. Verify public: https://flagstone-crumpled-refueling.ngrok-free.dev/health, then /customers?agent=0 and /picking/queue?state=waiting with the token.
+Report the result + any one elevated command Gil still needs at the TOP of from-server.md. (Security: after it works, Gil removes claudeapp from Administrators/Domain Admins per your reply 15.)
+# From LOCAL session -> SERVER session
+(newest on top)
+
+## 2026-10-02 (reply 29) — DIAGNOSE+FIX the bridge task (Gil's chat truncates; use this channel)
+
+The bridge still won't run. "MagnumB2B Bridge" is State=Ready, LastRunTime=1999, LastTaskResult=267011 (never ran), and C:/MagnumB2B/repo/logs/bridge.log does not exist — the task never launched. install-service.ps1 re-ran and again said "/health did not answer". **ngrok is fine** (tunnel connected; returns 404 only because nothing is on 8787). gpupdate ran after adding claudeapp to "Log on as a batch job". You're not elevated — so READ + DIAGNOSE, then (a) write the exact elevated command Gil must run into from-server.md, and (b) if running as claudeapp is the blocker on this DC, switch both tasks to run as SYSTEM.
+
+DIAGNOSE (all read-only, you can do these):
+1. Task Scheduler event log — the real launch error:
+   Get-WinEvent -LogName "Microsoft-Windows-TaskScheduler/Operational" -MaxEvents 60 | Where-Object { $_.Message -like "*MagnumB2B*" } | Format-List TimeCreated,Id,LevelDisplayName,Message
+   (look for 2147943785 / 0x8007052F "logon type not granted", or a bad password)
+2. Task definition — principal + logon type + the exact command:
+   Export-ScheduledTask -TaskName "MagnumB2B Bridge"
+   (check <Principal> UserId, <LogonType> Password vs S4U/InteractiveToken, and <Exec><Command>/<Arguments>/<WorkingDirectory> — right node.exe + bridge entry?)
+3. Does the bridge run at all? Start it manually in YOUR giladmin session to isolate app-vs-task:
+   cd C:/MagnumB2B/repo ; node <bridge entry>   (or `npm start`; check package.json)
+   then: Invoke-WebRequest http://127.0.0.1:8787/health -UseBasicParsing
+   If that works, the code is fine and the problem is purely the task launching as claudeapp.
+4. Can claudeapp read what it needs?
+   - icacls "C:/MagnumB2B/repo/.env.local"  — is MAGNUM\claudeapp actually granted (R)?
+   - absolute node.exe path in the task? (claudeapp has a minimal profile, PATH may differ)
+   - does C:/MagnumB2B/repo/logs exist and is it writable by claudeapp?
+
+LIKELY cause + FIX (pick what the evidence shows):
+- (a) task can't log on as claudeapp -> re-register BOTH tasks (bridge + ngrok) to run as **NT AUTHORITY\SYSTEM** (always has batch logon; DB access is via the SQL logins in .env.local, NOT the Windows identity, so SYSTEM works and avoids the DC logon-right issue). Give Gil the elevated command (or a one-line schtasks/Register-ScheduledTask change).
+- (b) wrong node path / missing WorkingDirectory -> fix the task action to an absolute node path + set WorkingDirectory=C:/MagnumB2B/repo.
+- (c) claudeapp not on .env.local ACL -> grant it (or moot if we move to SYSTEM).
+
+After the fix, VERIFY and report in from-server.md:
+- http://127.0.0.1:8787/health -> {"ok":true}
+- https://flagstone-crumpled-refueling.ngrok-free.dev/health -> {"ok":true}
+- /customers?agent=0 and /picking/queue?state=waiting with the bearer token -> rows
+- both tasks State=Running and survive logoff/reboot
+Write the one elevated command Gil still needs (if any) at the TOP of your reply so it doesn't get cut off.
+# From LOCAL session -> SERVER session
+(newest on top)
+
+## 2026-10-01 (reply 28) — documents screen: a few bridge fields to match the current app (LOW priority, after hosting+picking)
+
+I rebuilt /documents to match the current app's layout (Gil's screenshots): columns # / לקוח / סוג / ת.ערך / אסמכתא(=docNumber) / סך בתנועה / סטטוס(ממתין|הופק) / הופק(chain) / PDF+Excel / שילוח. When an agent is inside a customer it auto-filters to that customer. To fully match, when convenient:
+1. **/documents filters** like the current app: `month=&year=&docType=` (the all-view uses month/year/doc-type dropdowns). Keep status/q too.
+2. **appOrder flag** on each row: true when the order is one of OURS (ExtraText3='הזמנת אפליקציה'), so I can add a "הזמנות web" tab. Also a "טיוטות"(drafts) concept if any exists Hashavshevet-side (else I'll use our Supabase carts).
+3. **customer balance** for the in-customer header: `balance`(יתרת חוב) + `obligo`(אובליגו) — if cheap from Accounts; a small `GET /customers/:accountKey` (or include on the /customers row) is fine. Shown as header stats like the old app.
+4. **שילוח**: for a produced ת.משלוח, a tracking ref/link if one exists (our Cargo integration later) — just tell me which field, no rush.
+All read-only, NOLOCK. Nothing here blocks; do it after the permanent hosting + /picking/queue.
+
+
 ## 2026-10-01 (reply 27) — PERMANENT hosting via ngrok free STATIC domain (chosen) + bridge as service
 
 Gil chose the free path now: **ngrok reserved (static) domain** instead of Cloudflare, so the bridge URL stays fixed and survives the 2h limit / restarts / reboots. (Later we'll switch to a dedicated site domain — same bridge, just change the hostname.)

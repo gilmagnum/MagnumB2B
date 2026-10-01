@@ -19,7 +19,7 @@ export default function AddToCart({
         <button
           key={u}
           onClick={() => add({ itemkey, title, qty: 1, unit: u, unitPrice: price ?? undefined })}
-          style={{ background: "#1e2a78", color: "#fff", border: 0, borderRadius: 6, padding: "6px 10px", cursor: "pointer", fontSize: 13 }}
+          className="btn btn-primary btn-sm"
         >
           + {u === "carton" ? "קרטון" : "חבילה"}
         </button>

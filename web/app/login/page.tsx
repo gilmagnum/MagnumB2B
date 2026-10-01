@@ -9,28 +9,28 @@ function LoginForm() {
   const next = useSearchParams().get("next") ?? "/customer";
 
   return (
-    <div style={{ maxWidth: 360, margin: "60px auto", textAlign: "center" }}>
-      <h1 style={{ color: "#1e2a78" }}>מגנום — כניסת סוכנים</h1>
-      <form action={action} style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 24, textAlign: "right" }}>
+    <div className="card card-pad" style={{ maxWidth: 380, margin: "8vh auto", textAlign: "center", boxShadow: "var(--shadow-lg)" }}>
+      <div style={{ fontSize: 30, fontWeight: 800, color: "var(--brand-strong)", letterSpacing: "-0.02em" }}>מגנום</div>
+      <h1 style={{ fontSize: 18, fontWeight: 600, color: "var(--ink-muted)", marginTop: 4 }}>כניסת סוכנים</h1>
+      <form action={action} style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 20, textAlign: "right" }}>
         <input type="hidden" name="next" value={next} />
-        <label>
-          אימייל
-          <input name="email" type="email" autoComplete="username" required style={inp} />
+        <label style={lbl}>אימייל
+          <input name="email" type="email" autoComplete="username" required className="input" style={{ marginTop: 6 }} />
         </label>
-        <label>
-          סיסמה
-          <input name="password" type="password" autoComplete="current-password" required style={inp} />
+        <label style={lbl}>סיסמה
+          <input name="password" type="password" autoComplete="current-password" required className="input" style={{ marginTop: 6 }} />
         </label>
-        {state.error && <p style={{ color: "#b00", margin: 0, fontSize: 14 }}>{state.error}</p>}
-        <button type="submit" disabled={pending}
-          style={{ background: "#1e2a78", color: "#fff", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer", opacity: pending ? 0.6 : 1 }}>
+        {state.error && <p className="chip chip-danger" style={{ margin: 0 }}>{state.error}</p>}
+        <button type="submit" disabled={pending} className="btn btn-primary" style={{ padding: "11px 18px", fontSize: 15 }}>
           {pending ? "מתחבר…" : "כניסה"}
         </button>
       </form>
-      <p style={{ color: "#888", fontSize: 12, marginTop: 20 }}>הגישה לסוכנים בלבד. חשבון נפתח על ידי המנהל.</p>
+      <p style={{ color: "var(--ink-muted)", fontSize: 12, marginTop: 20 }}>הגישה לסוכנים בלבד. חשבון נפתח על ידי המנהל.</p>
     </div>
   );
 }
+
+const lbl = { fontSize: 13, fontWeight: 600, color: "var(--ink)", display: "block" } as const;
 
 export default function LoginPage() {
   return (
@@ -39,5 +39,3 @@ export default function LoginPage() {
     </Suspense>
   );
 }
-
-const inp = { width: "100%", padding: 8, marginTop: 4, borderRadius: 6, border: "1px solid #ccc", boxSizing: "border-box" as const };

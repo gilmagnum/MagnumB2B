@@ -50,7 +50,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620 }}>
           <thead>
             <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
-              <th style={{ padding: 8 }}>מק״ט</th><th>תיאור</th><th>הוזמן</th><th>לוקט</th><th>סטטוס</th>
+              <th style={{ padding: 8 }}>מק״ט</th><th>תיאור</th><th>מלאי</th><th>הוזמן</th><th>לוקט</th><th>סטטוס</th>
             </tr>
           </thead>
           <tbody>
@@ -60,6 +60,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                 <tr key={l.itemkey} style={{ borderBottom: "1px solid #eee", background: sh === "full" ? "#fdecea" : sh === "partial" ? "#fff6e5" : undefined }}>
                   <td style={{ padding: 8, fontWeight: 700 }}>{l.itemkey}</td>
                   <td>{l.name}</td>
+                  <td style={{ color: (l.onHand ?? 0) < l.qty ? "#b00" : "#0a7" }}>{l.onHand ?? "—"}</td>
                   <td>{l.qty}{l.unit ? ` ${l.unit}` : ""}</td>
                   <td>
                     <input type="number" min={0} max={l.qty} value={picked[l.itemkey] ?? 0}
