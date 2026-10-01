@@ -52,7 +52,12 @@ export const bridge = {
     return call<Item[]>(`/items?${p.toString()}`);
   },
   item: (itemkey: string) => call<Item>(`/items/${encodeURIComponent(itemkey)}`),
-  customers: (agentId: number) => call<Customer[]>(`/customers?agent=${agentId}`),
+  // agentId 0 => all customers (admin). q => optional name/accountKey search.
+  customers: (agentId: number, opts: { q?: string } = {}) => {
+    const p = new URLSearchParams({ agent: String(agentId) });
+    if (opts.q) p.set("q", opts.q);
+    return call<Customer[]>(`/customers?${p.toString()}`);
+  },
   stock: (itemkey: string) => call<{ itemkey: string; qty: number }>(`/stock/${encodeURIComponent(itemkey)}`),
   price: (accountKey: string, item: string, qty: number) =>
     call<PriceResult>(`/price?account=${encodeURIComponent(accountKey)}&item=${encodeURIComponent(item)}&qty=${qty}`),
