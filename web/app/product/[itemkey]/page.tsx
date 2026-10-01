@@ -13,11 +13,23 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const [err, setErr] = useState("");
   const [unit, setUnit] = useState<Unit>("carton");
   const [cellQty, setCellQty] = useState<Record<string, number>>({});
+  const [finalPrice, setFinalPrice] = useState<number | null>(null);
 
   useEffect(() => {
     // Calls the server proxy; returns 503 until the bridge URL is configured.
     bridge.item(key).then(setItem).catch(() => setErr("הגשר עדיין לא מחובר — פרטי הפריט וגריד המטריצה ייטענו כשהגשר יעלה."));
   }, [key]);
+
+  // Inside a customer context, show that customer's FINAL price; otherwise the
+  // general list price (item.price).
+  useEffect(() => {
+    if (!ctx) { setFinalPrice(null); return; }
+    let cancelled = false;
+    bridge.price(ctx.accountKey, key, 1)
+      .then((r) => { if (!cancelled) setFinalPrice(r.unitPrice); })
+      .catch(() => { if (!cancelled) setFinalPrice(null); });
+    return () => { cancelled = true; };
+  }, [ctx, key]);
 
   // 2D: group cells by col (color axis); 1D: one group (col 0).
   const colorGroups = useMemo(() => {
@@ -31,10 +43,13 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   if (err) return <p style={{ color: "#a60" }}>{err}</p>;
   if (!item) return <p>טוען…</p>;
 
+  // Effective price: the customer's final price when entered, else the general list.
+  const effPrice = ctx && finalPrice != null ? finalPrice : item.price;
+
   const addCell = (c: MatrixCell) => {
     const qty = cellQty[c.itemkey] ?? 0;
     if (qty < 1) return;
-    add({ itemkey: c.itemkey, title: `${item.itemName} ${c.colorLabel ?? ""} ${c.sizeLabel ?? ""}`.trim(), qty, unit, unitPrice: item.price });
+    add({ itemkey: c.itemkey, title: `${item.itemName} ${c.colorLabel ?? ""} ${c.sizeLabel ?? ""}`.trim(), qty, unit, unitPrice: effPrice });
     setCellQty({ ...cellQty, [c.itemkey]: 0 });
   };
 
@@ -42,7 +57,9 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
     <>
       <h1>{item.itemName}</h1>
       <div style={{ color: "#666", marginBottom: 12 }}>
-        מק״ט: {item.itemkey}{item.brand ? ` · מותג: ${item.brand}` : ""}{item.price != null ? ` · ${item.price} ₪` : ""}
+        מק״ט: {item.itemkey}{item.brand ? ` · מותג: ${item.brand}` : ""}
+        {effPrice != null ? ` · ${effPrice} ₪` : ""}
+        {ctx ? (finalPrice != null ? <span style={{ color: "#0a7" }}> (מחיר {ctx.customerName})</span> : <span style={{ color: "#a60" }}> (מחירון כללי — מחיר הלקוח ייטען מהגשר)</span>) : <span style={{ color: "#888" }}> (מחירון כללי)</span>}
       </div>
       {!ctx && <p style={{ color: "#a60" }}>בחר לקוח לפני הזמנה (<a href="/customer">בחירת לקוח</a>).</p>}
 
@@ -81,7 +98,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
       ) : (
         <button
           disabled={!ctx}
-          onClick={() => add({ itemkey: item.itemkey, title: item.itemName, qty: 1, unit, unitPrice: item.price })}
+          onClick={() => add({ itemkey: item.itemkey, title: item.itemName, qty: 1, unit, unitPrice: effPrice })}
           style={{ ...addBtn, padding: "8px 16px" }}
         >הוסף לסל</button>
       )}

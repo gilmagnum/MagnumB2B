@@ -26,6 +26,16 @@ export type PriceResult = {
   unitPrice: number; discountPct: number;
   source: "special" | "wsprice" | "pricelist" | "promo" | "computed";
 };
+export type ProducedDoc = {
+  documentId: number; docTypeName: string; docNumber: number; date: string; total?: number;
+};
+export type Document = {
+  stockId: number; docNumber: number; documentId: number; docTypeName: string;
+  accountKey: string; customerName: string; agent?: number;
+  date: string; total?: number;
+  status: "open" | "produced";
+  producedDocs?: ProducedDoc[];
+};
 export type OrderKind = "picking" | "future";
 export type NewOrder = {
   accountKey: string; orderKind: OrderKind;
@@ -52,10 +62,23 @@ export const bridge = {
     return call<Item[]>(`/items?${p.toString()}`);
   },
   item: (itemkey: string) => call<Item>(`/items/${encodeURIComponent(itemkey)}`),
-  customers: (agentId: number) => call<Customer[]>(`/customers?agent=${agentId}`),
+  // agentId 0 => all customers (admin). q => optional name/accountKey search.
+  customers: (agentId: number, opts: { q?: string } = {}) => {
+    const p = new URLSearchParams({ agent: String(agentId) });
+    if (opts.q) p.set("q", opts.q);
+    return call<Customer[]>(`/customers?${p.toString()}`);
+  },
   stock: (itemkey: string) => call<{ itemkey: string; qty: number }>(`/stock/${encodeURIComponent(itemkey)}`),
   price: (accountKey: string, item: string, qty: number) =>
     call<PriceResult>(`/price?account=${encodeURIComponent(accountKey)}&item=${encodeURIComponent(item)}&qty=${qty}`),
   createOrder: (order: NewOrder) =>
     call<{ stockId: number }>(`/orders`, { method: "POST", body: JSON.stringify(order) }),
+  // Documents list. agentId 0 => all (admin); else the agent's customers.
+  documents: (agentId: number, opts: { status?: string; q?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams({ agent: String(agentId) });
+    if (opts.status) p.set("status", opts.status);
+    if (opts.q) p.set("q", opts.q);
+    if (opts.limit) p.set("limit", String(opts.limit));
+    return call<Document[]>(`/documents?${p.toString()}`);
+  },
 };

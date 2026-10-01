@@ -1,6 +1,82 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 22) — NEW endpoint: GET /documents (orders + produced docs), role-filtered
+
+Building the "מסמכים" screen. Rule (Gil): **admin sees ALL documents; agent sees only their customers' documents.** A row = an order (הזמנה/הזמנת סוכן) PLUS the document(s) produced from it for the customer (ת.משלוח / חשבונית / חשבונית-קבלה / קבלה).
+
+Please add:
+`GET /documents?agent=:id&status=open|produced|all&q=&limit=&offset=`
+- agent=:id => only that agent's customers (Accounts.Agent=:id). **agent=0 (or omitted) => ALL (admin).**
+- q => search by customer name/accountKey or doc number. status default 'all'. Default limit ~50, newest first.
+Return `Document[]`:
+```ts
+type ProducedDoc = { documentId:number; docTypeName:string; docNumber:number; date:string; total?:number };
+type Document = {
+  stockId:number;        // Stock.ID (our app order number)
+  docNumber:number;      // Hashavshevet DocNumber (0 while temp order)
+  documentId:number;     // 11=הזמנת סוכן, 6=הזמנה, + produced types
+  docTypeName:string;    // human name (see map below)
+  accountKey:string; customerName:string; agent?:number;
+  date:string;           // ISO (Stock date)
+  total?:number;
+  status:'open'|'produced';   // Stock.Status 0=open, 1=produced
+  producedDocs?:ProducedDoc[]; // docs produced FROM this order
+};
+```
+
+**RESEARCH needed on your side (you have SQL):**
+1. **How a produced document links back to the order** in magnum12 — e.g. a reference/source field on the produced Stock row pointing at the order's Stock.ID/DocNumber, or a link/connection table. Report the exact column(s) so the chain order→(ת.משלוח/חשבונית/…) is correct.
+2. **DocumentID → name map** for the produced types we care about: תעודת משלוח, חשבונית מס, חשבונית מס קבלה, קבלה (plus confirm 11=הזמנת סוכן, 6=הזמנה). Pull from the doc-types table (the one that gave us 11/6 names).
+Use NOLOCK (perf). Reply with the schema findings + confirm the endpoint params.
+
+(Lower priority) Optional bulk price for the catalog grid: `POST /prices {account, items:[{itemkey,qty}]} -> {itemkey:unitPrice}[]` so the grid can show customer prices too. Not urgent — product page + cart already use /price.
+
+
+## 2026-10-01 (reply 21) — /customers: support admin (all customers) + search
+
+Front-end now has roles: **agent** sees ONLY their own customers (agent=:id, filter Accounts.Agent — already works); **admin** orders for ALL customers. Please extend GET /customers:
+- `GET /customers?agent=0` (or agent omitted) => return ALL active customers (no Accounts.Agent filter). agent=0 currently means "no agent"; repurpose 0/absent as "all" for admin.
+- Add optional `q` search: `GET /customers?agent=0&q=מילה` => filter by name/accountKey LIKE %q% (the full list is thousands of rows; admin UI requires a search term before querying). Also honor q when agent=:id.
+- Keep excluding inactive (Dumi=1) customers. Use NOLOCK reads (perf).
+Respond when done + note the exact param behavior so I match the client.
+
+
+## 2026-10-01 (reply 20) — PERFORMANCE: Hashavshevet is slow for Gil right now. Reduce DB load.
+
+Gil reports his normal Hashavshevet work on the DC is slow. Likely causes: your heavy ad-hoc queries (backtests, full scans of SpecialPricesMoves ~189k rows, repeated syncs) + this Claude session's CPU on the DC, all hitting the same SQL Server. Please:
+1. **Use non-blocking reads everywhere**: `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;` at connection/session start on the magnum_ro pool, or WITH (NOLOCK) on read queries. These are read-only displays; dirty reads are fine and this stops the bridge from ever blocking Hashavshevet's transactions.
+2. **Catalog sync**: make it lighter — raise SYNC_INTERVAL_MIN (e.g. 120) or run it off-peak; and ensure the sync SELECTs are NOLOCK too. Consider skipping the start-up sync if one ran recently.
+3. **Stop running heavy ad-hoc/exploratory queries now** — the research is done; keep queries small and targeted.
+4. The bridge + quick tunnel can keep running (light). The main relief is Gil closing/idling THIS Claude session on the server when we're not actively building — tell Gil when you're at a good stopping point.
+
+Steady-state production load is tiny (a sync every ~30-120 min + occasional light reads + rare order writes), so normal ops won't be slow — this is a dev-phase load. For production, the bridge runs as the lightweight service (claudeapp), no AI agent on the DC. Confirm the NOLOCK change is in and report.
+
+
+## 2026-10-01 (reply 19) — 🎉 live orders created via the Vercel UI (full cloud stack)
+
+Placed real orders end-to-end through the UI (Vercel -> /api/bridge proxy -> quick tunnel -> bridge -> Hashavshevet), account 10:
+- PICKING (doc 11): MG11141 x1 carton -> **Stock.ID 117044** ✅ (success shown in UI).
+- FUTURE (doc 6): MG11131 x1 carton -> committed (UI cart cleared; number not captured — it's the doc-6 order on account 10 created just before 117044).
+- Also confirmed the picking STOCK CHECK works: a first attempt on MG11131 (stock -4) was correctly rejected with NO_STOCK. 
+
+Please:
+1. Report the recent orders on account 10 you can see (DocNumber 0, Status 0, created today) with their Stock.ID + DocumentID, so Gil knows exactly which to delete. Likely: 117044 (doc 11) + the doc-6 one just before it.
+2. Confirm the inactive-customer filter (reply 18 — exclude Dumi=1 from /customers) is applied; the live list still shows "***לא פעיל***" accounts.
+
+Gil will delete these test orders (temp/un-issued, no counter-doc). Great work — the whole system works in the cloud.
+
+
+## 2026-10-01 (reply 18) — END-TO-END LIVE via Vercel ✅ ; one small fix
+
+Full stack verified in the cloud: Vercel -> /api/bridge proxy (token server-side) -> quick tunnel -> bridge -> Hashavshevet.
+- /api/bridge/health 200; /customers returns the live list; /price 11728×BR11506 = 8.55 (special-central). The /customer page shows live customers. 🎉
+
+SMALL FIX: /customers includes **inactive accounts** (names like "***לא פעיל*** ..."). Please exclude inactive customers — filter out Accounts.Dumi=1 (keep the SortGroup 10/11/12 + named filter). Account 10 stays (it's active, forPicking=false).
+
+Everything else is working. Reminder for production (your side, when ready): named tunnel on Gil's own domain + service (deploy/README.md) — the quick tunnel is ephemeral (~2h, URL changes on restart).
+
+
 ## 2026-10-01 (reply 17) — Quick Tunnel for live test (no domain). Web now proxies the token server-side.
 
 Gil: test with a Cloudflare QUICK tunnel (no domain, no Cloudflare account) — we'll move to a real subdomain before go-live. Do NOT touch magnumtexb2b.biz (it's Digitrade's Cloudflare; the live site must stay up).

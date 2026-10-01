@@ -1,11 +1,13 @@
 "use client";
 import { useMemo, useState } from "react";
 import type { CatalogItem } from "../../lib/supabase";
+import { useOrderContext } from "../../lib/useOrderContext";
 import AddToCart from "./AddToCart";
 
 const uniq = (xs: (string | null)[]) => [...new Set(xs.filter(Boolean) as string[])].sort();
 
 export default function CatalogView({ categoryMain, items }: { categoryMain: string; items: CatalogItem[] }) {
+  const { ctx } = useOrderContext();
   const [sub, setSub] = useState<string>("");       // selected sub-category
   const [brand, setBrand] = useState<string>("");
   const [season, setSeason] = useState<string>("");
@@ -39,6 +41,11 @@ export default function CatalogView({ categoryMain, items }: { categoryMain: str
       </aside>
 
       <section>
+        <div style={{ marginBottom: 12, padding: "8px 12px", borderRadius: 8, fontSize: 13, background: ctx ? "#eef7ff" : "#f7f7f7", color: "#333" }}>
+          {ctx
+            ? <>מזמין עבור <b>{ctx.customerName}</b>. הקטלוג מציג מחירון כללי — המחיר הסופי של הלקוח מוצג בעמוד המוצר ובסל.</>
+            : <>מוצג <b>מחירון כללי</b>. לכניסה למחיר לקוח — <a href="/customer" style={{ color: "#1e2a78" }}>בחר לקוח</a>.</>}
+        </div>
         {/* filters */}
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
           <input placeholder="חיפוש חופשי…" value={q} onChange={(e) => setQ(e.target.value)} style={inp} />

@@ -130,5 +130,37 @@ create table if not exists orders (
   produced_at    timestamptz
 );
 
--- NOTE: RLS policies (agents see only their customers, customers see only themselves)
--- to be added once auth flow is decided. Keep RLS enabled + policies before production.
+-- ============ RLS ============
+-- profiles holds the agent↔agent_id / customer↔account_key mapping — must not leak
+-- between users. A logged-in user may read ONLY their own profile row.
+-- service_role (sync job, admin provisioning) bypasses RLS and is unaffected.
+alter table profiles enable row level security;
+
+drop policy if exists profiles_self_select on profiles;
+create policy profiles_self_select on profiles
+  for select using (auth.uid() = id);
+
+-- Cart/order drafts belong to the profile that created them.
+alter table carts enable row level security;
+drop policy if exists carts_owner on carts;
+create policy carts_owner on carts
+  for all using (auth.uid() = profile_id) with check (auth.uid() = profile_id);
+
+alter table cart_lines enable row level security;
+drop policy if exists cart_lines_owner on cart_lines;
+create policy cart_lines_owner on cart_lines
+  for all using (exists (select 1 from carts c where c.id = cart_lines.cart_id and c.profile_id = auth.uid()))
+  with check (exists (select 1 from carts c where c.id = cart_lines.cart_id and c.profile_id = auth.uid()));
+
+-- Orders mirror: an agent sees orders for their agent_id (admin sees all); service_role writes them.
+alter table orders enable row level security;
+drop policy if exists orders_agent_select on orders;
+create policy orders_agent_select on orders
+  for select using (
+    exists (select 1 from profiles p where p.id = auth.uid()
+            and (p.role = 'admin' or p.agent_id = orders.agent_id))
+  );
+
+-- Catalog tables (items, item_variants, rulers, colors, categories) stay WITHOUT RLS:
+-- non-sensitive product data read by the browser client. Revisit if an unauthenticated
+-- client should be blocked.
