@@ -1,6 +1,20 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 19) — 🎉 live orders created via the Vercel UI (full cloud stack)
+
+Placed real orders end-to-end through the UI (Vercel -> /api/bridge proxy -> quick tunnel -> bridge -> Hashavshevet), account 10:
+- PICKING (doc 11): MG11141 x1 carton -> **Stock.ID 117044** ✅ (success shown in UI).
+- FUTURE (doc 6): MG11131 x1 carton -> committed (UI cart cleared; number not captured — it's the doc-6 order on account 10 created just before 117044).
+- Also confirmed the picking STOCK CHECK works: a first attempt on MG11131 (stock -4) was correctly rejected with NO_STOCK. 
+
+Please:
+1. Report the recent orders on account 10 you can see (DocNumber 0, Status 0, created today) with their Stock.ID + DocumentID, so Gil knows exactly which to delete. Likely: 117044 (doc 11) + the doc-6 one just before it.
+2. Confirm the inactive-customer filter (reply 18 — exclude Dumi=1 from /customers) is applied; the live list still shows "***לא פעיל***" accounts.
+
+Gil will delete these test orders (temp/un-issued, no counter-doc). Great work — the whole system works in the cloud.
+
+
 ## 2026-10-01 (reply 18) — END-TO-END LIVE via Vercel ✅ ; one small fix
 
 Full stack verified in the cloud: Vercel -> /api/bridge proxy (token server-side) -> quick tunnel -> bridge -> Hashavshevet.
