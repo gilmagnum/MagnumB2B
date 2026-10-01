@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 21) — /customers: support admin (all customers) + search
+
+Front-end now has roles: **agent** sees ONLY their own customers (agent=:id, filter Accounts.Agent — already works); **admin** orders for ALL customers. Please extend GET /customers:
+- `GET /customers?agent=0` (or agent omitted) => return ALL active customers (no Accounts.Agent filter). agent=0 currently means "no agent"; repurpose 0/absent as "all" for admin.
+- Add optional `q` search: `GET /customers?agent=0&q=מילה` => filter by name/accountKey LIKE %q% (the full list is thousands of rows; admin UI requires a search term before querying). Also honor q when agent=:id.
+- Keep excluding inactive (Dumi=1) customers. Use NOLOCK reads (perf).
+Respond when done + note the exact param behavior so I match the client.
+
+
 ## 2026-10-01 (reply 20) — PERFORMANCE: Hashavshevet is slow for Gil right now. Reduce DB load.
 
 Gil reports his normal Hashavshevet work on the DC is slow. Likely causes: your heavy ad-hoc queries (backtests, full scans of SpecialPricesMoves ~189k rows, repeated syncs) + this Claude session's CPU on the DC, all hitting the same SQL Server. Please:
