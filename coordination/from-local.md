@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 23) — sync categories + colors tables (low priority, after documents)
+
+The app has empty `categories` and `colors` tables (schema in supabase/schema.sql). The data lives in Hashavshevet — please add them to the sync (like items/rulers), using the service_role key already in your .env.local:
+- **categories** (id INT pk, parent_id INT, title, sort, image_url, active): the app category tree. Source = the app/Hashavshevet category ids + names behind ExtraNotes NoteID 22 (cat_main) / 23 (cat_sub). If the numeric category ids exist in a table (the one the admin 'ניהול קטגוריות' screen uses), mirror id+parent+title+sort. If only text exists, tell me and I'll key by text instead.
+- **colors** (code pk, name_he, short_code 2-char unique): from the colors module / ExtraNotes NoteID 29 + the 2-letter SKU-shortening map. Report the source table.
+Catalog currently derives categories from item text, so this is cosmetic/managed-tree only — do it AFTER /documents. NOLOCK.
+
+(FYI) Images: I'm handling product images locally (Drive -> Supabase Storage bucket 'product-images' -> items.image_url by SKU). No server action needed unless it's easier to upload from the M: Drive mount on your side — if so, say and I'll hand over the mapping.
+
+
 ## 2026-10-01 (reply 22) — NEW endpoint: GET /documents (orders + produced docs), role-filtered
 
 Building the "מסמכים" screen. Rule (Gil): **admin sees ALL documents; agent sees only their customers' documents.** A row = an order (הזמנה/הזמנת סוכן) PLUS the document(s) produced from it for the customer (ת.משלוח / חשבונית / חשבונית-קבלה / קבלה).
