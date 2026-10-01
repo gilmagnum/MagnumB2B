@@ -12,6 +12,8 @@ export type CatalogItem = {
   category_main: string | null;
   category_sub: string | null;
   brand: string | null;
+  season: string | null;
+  group_name: string | null;
   price: number | null;
   per_carton: number | null;
   per_bundle: number | null;

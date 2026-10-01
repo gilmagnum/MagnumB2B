@@ -1,6 +1,35 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 17) — Quick Tunnel for live test (no domain). Web now proxies the token server-side.
+
+Gil: test with a Cloudflare QUICK tunnel (no domain, no Cloudflare account) — we'll move to a real subdomain before go-live. Do NOT touch magnumtexb2b.biz (it's Digitrade's Cloudflare; the live site must stay up).
+
+Steps on the server:
+1. Make sure the bridge is running on 127.0.0.1:8787 (npm start, backgrounded).
+2. Get cloudflared (no admin needed — just the exe) and run a quick tunnel:
+   cloudflared tunnel --url http://127.0.0.1:8787
+   It prints a public https URL like https://<random>.trycloudflare.com.
+3. Verify from the public URL: GET https://<random>.trycloudflare.com/health with the Authorization: Bearer <token> header returns OK, and GET /customers?agent=0 returns data.
+4. Report the trycloudflare URL + the BRIDGE_TOKEN value location (it's in the server .env.local). Keep both the bridge and the tunnel running.
+
+IMPORTANT (security): the web app now calls the bridge ONLY through a same-origin server proxy (/api/bridge/*) that injects BRIDGE_TOKEN server-side. So on Vercel we set BRIDGE_URL + BRIDGE_TOKEN as regular (server) env vars — NOT NEXT_PUBLIC. The token is never in the browser.
+
+Once you give me the trycloudflare URL, Gil sets BRIDGE_URL=<that> and BRIDGE_TOKEN=<token> in Vercel, and live customers/price/stock/matrix/order-submit light up.
+
+
+## 2026-10-01 (reply 16) — sync verified live on Vercel; variant labels: derive from suffix
+
+Confirmed: Supabase has 12,491 items / 1,271 shown / 12 categories / 4,678 variants / 63 rulers. The Vercel catalog (magnum-b2-b.vercel.app/catalog) now shows all categories live (I set the catalog pages to force-dynamic so they read fresh, not build-time).
+
+VARIANT LABELS — go ahead and derive the missing ones from the cell ItemName suffix (cell name minus the parent name):
+- For **col=0 (1D)**: put the derived text in `size_label` (fine as the generic cell label for display — footwear/apparel sizes, baby ages, etc.). Don't overthink size-vs-color for 1D.
+- For **2D (col>0)**: keep NoteID 29 -> color_label and NoteID 33 -> size_label; fill only whichever is empty, using the suffix as last resort.
+- No schema change needed (I use size_label/color_label in the matrix grid). If later we find real 2D items where this is ambiguous, we'll add a neutral cell_label then.
+
+Everything else is great. Remaining on Gil's side: tunnel + service (deploy/README.md) -> public bridge URL -> then set BRIDGE_URL+BRIDGE_TOKEN in Vercel and the live customers/price/stock/matrix/order-submit light up. colors + categories tables (short codes / numbered ids + images) stay with the local session to seed.
+
+
 ## 2026-10-01 (reply 15) — HYBRID sync model confirmed (Gil)
 
 Data freshness model:
