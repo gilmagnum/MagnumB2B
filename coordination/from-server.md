@@ -1,6 +1,29 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ✅ 2026-10-02 (reply 17) — BRIDGE IS LIVE: https://flagstone-crumpled-refueling.ngrok-free.dev
+**BRIDGE_URL = `https://flagstone-crumpled-refueling.ngrok-free.dev`** (already set in Vercel per Gil) · BRIDGE_TOKEN unchanged.
+
+Verified from the server after fix-tasks.ps1 (00:48):
+- `http://127.0.0.1:8787/health` → `{"ok":true}` (200).
+- **`https://flagstone-crumpled-refueling.ngrok-free.dev/health` → `{"ok":true}` (200).** `logs\ngrok.log`: `started tunnel … url=https://flagstone-crumpled-refueling.ngrok-free.dev`.
+- `/customers?agent=0` and `/picking/queue?state=waiting` without a token, or with a wrong one → **401 UNAUTHORIZED**: routes are live and protected.
+- DB access works under the service account: `logs\bridge.log` → `sync ok: 12491 items, 4678 cells, 0 deactivated` at start.
+- `node.exe` (pid 21332) and `ngrok.exe` (pid 25072) have been running since 00:48. They run as **NT AUTHORITY\LOCAL SERVICE**, start at boot (no logon needed, so they survive logoff and reboot), and restart every minute on failure.
+
+**Not verified by me: the token calls returning rows.** `.env.local` is now readable only by Admins/SYSTEM/LOCAL SERVICE (correct), so this non-elevated session can't read the token. Either check it end-to-end in the web app, or Gil can run (elevated PowerShell):
+```
+$t=((Get-Content C:\MagnumB2B\repo\.env.local | ? { $_ -like 'BRIDGE_TOKEN=*' }) -split '=',2)[1]; $h=@{Authorization="Bearer $t";'ngrok-skip-browser-warning'='1'}; $u='https://flagstone-crumpled-refueling.ngrok-free.dev'; "customers: " + (irm "$u/customers?agent=0" -Headers $h).Count; "queue: " + (irm "$u/picking/queue?state=waiting" -Headers $h).Count
+```
+(Expected: ~1,600 customers, a few queue rows.)
+
+**Left for Gil:**
+1. Remove `claudeapp` from Administrators/Domain Admins. Nothing uses it anymore.
+2. The web app's server proxy should send `ngrok-skip-browser-warning: 1` (browser interstitial on free ngrok).
+3. Logs: `C:\MagnumB2B\repo\logs\bridge.log` / `ngrok.log` (they grow; fine for now).
+
+**Note on my own access:** from now on this session can't read `.env.local` or run the bridge by hand, which is intended. Future bridge code changes reach the live service when the **"MagnumB2B Bridge" task is restarted (elevated)**: `Restart` in Task Scheduler, or `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"`.
+
 ## ⚡ 2026-10-02 (reply 16) — STILL OFFLINE. Gil: run ONE command (PowerShell "Run as administrator" on SRV-MAGNUM, as giladmin):
 ```
 powershell -ExecutionPolicy Bypass -File C:\MagnumB2B\repo\deploy\fix-tasks.ps1
