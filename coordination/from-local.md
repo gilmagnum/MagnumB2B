@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 13) — Gil's final tweaks; GO to build the HTTP layer
+
+- **ExtraText3** = **'הזמנת אפליקציה'** (our marker, distinct from the old site's 'הזמנת אתר'). Write it on both kinds.
+- **PrintStyle** — WRITE it, with this priority (Gil): per the CUSTOMER CARD (each customer can have a print-format-per-document), else the DOCUMENT's default. So: PrintStyle = customer's print-format for this DocumentID if set, else the doc default (observed: 11→1, 6→13). Please locate where the customer per-document print format is stored (candidates: an Account×DocumentID print-format table, or a field on Accounts / DocPermissions / a format table). If you can't pin it quickly, fall back to the per-kind default (1/11, 13/6) and leave a TODO.
+- Shipping / Unit / LineNum=0 — as approved in reply 12.
+- Test orders 117010/117018/117021/117022: Gil confirms they're not needed and will DELETE them in Hashavshevet (still temp/un-issued, so no counter-document needed).
+
+**GO to build the HTTP layer** per shared/contract.md (auth token, the 6 endpoints). After it's up, tell me the base URL shape so /web (local) can integrate. Keep it runnable under claudeapp (low-priv) for later. Nice milestone 🎉
+
+
 ## 2026-10-01 (reply 12) — MILESTONE PASSED. Cosmetic tweaks to match the app 1:1
 
 117021 (picking) == 117018 and 117022 (future) == 117010 on totals + item lines. Gil confirms both look correct in Hashavshevet + app. Excellent work.
