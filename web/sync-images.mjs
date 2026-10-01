@@ -38,10 +38,14 @@ const sb = createClient(url, serviceKey, { auth: { persistSession: false } });
 const IMG = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const TYPE = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif" };
 
-// Load existing itemkeys once, to match and report coverage.
-const { data: itemRows, error: itemErr } = await sb.from("items").select("itemkey");
-if (itemErr) { console.error("could not read items:", itemErr.message); process.exit(1); }
-const itemkeys = itemRows.map((r) => r.itemkey);
+// Load ALL itemkeys (paged — PostgREST caps a select at 1000 rows).
+const itemkeys = [];
+for (let from = 0; ; from += 1000) {
+  const { data, error } = await sb.from("items").select("itemkey").range(from, from + 999);
+  if (error) { console.error("could not read items:", error.message); process.exit(1); }
+  itemkeys.push(...data.map((r) => r.itemkey));
+  if (data.length < 1000) break;
+}
 const keySet = new Set(itemkeys);
 
 // Ensure the bucket exists (public read).
@@ -54,18 +58,34 @@ if (!dry) {
   }
 }
 
-const files = readdirSync(dir).filter((f) => IMG.has(extname(f).toLowerCase()) && statSync(join(dir, f)).isFile());
+// Sort so a plain name and "_1" come before "_2"/"_3" (angles of the same item).
+const files = readdirSync(dir)
+  .filter((f) => IMG.has(extname(f).toLowerCase()) && statSync(join(dir, f)).isFile())
+  .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 console.log(`${files.length} image files in ${dir}; ${itemkeys.length} catalog items; match=${match}${dry ? " [DRY RUN]" : ""}`);
 
+const resolve = (sku) => match === "prefix"
+  ? itemkeys.filter((k) => k === sku || k.startsWith(sku + "_"))
+  : (keySet.has(sku) ? [sku] : []);
+
+const assigned = new Set();           // itemkeys already given a main image this run
 let uploaded = 0, matched = 0, unmatched = [];
 for (const f of files) {
   const ext = extname(f).toLowerCase();
-  const sku = basename(f, extname(f)).trim();
+  const rawSku = basename(f, extname(f)).trim();
 
-  const targets = match === "prefix"
-    ? itemkeys.filter((k) => k === sku || k.startsWith(sku + "_") || k.startsWith(sku))
-    : (keySet.has(sku) ? [sku] : []);
-  if (targets.length === 0) { unmatched.push(sku); continue; }
+  // Try the full name; if nothing matches, strip a trailing "_<n>" photo index.
+  let sku = rawSku;
+  let targets = resolve(sku);
+  if (targets.length === 0) {
+    const stripped = rawSku.replace(/_\d+$/, "");
+    if (stripped !== rawSku) { const t = resolve(stripped); if (t.length) { sku = stripped; targets = t; } }
+  }
+  if (targets.length === 0) { unmatched.push(rawSku); continue; }
+
+  // Only set the image on items that don't already have one from a lower-index file.
+  targets = targets.filter((k) => !assigned.has(k));
+  if (targets.length === 0) continue;  // a lower-index angle already covered these
 
   const path = `${sku}${ext}`;
   let publicUrl;
@@ -83,6 +103,7 @@ for (const f of files) {
     const { error } = await sb.from("items").update({ image_url: publicUrl }).in("itemkey", targets);
     if (error) { console.error(`update ${sku}:`, error.message); continue; }
   }
+  for (const k of targets) assigned.add(k);
   matched += targets.length;
   if ((uploaded % 50) === 0 && !dry) console.log(`  …${uploaded} uploaded`);
 }
