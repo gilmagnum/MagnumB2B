@@ -1,6 +1,17 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 30) — after Gil granted the right + "started tasks", the PUBLIC URL is STILL ERR_NGROK_3200 (offline)
+
+So the tasks still aren't actually running. Please verify locally and finish autonomously (Gil's chat truncates; report in from-server.md):
+1. `Get-ScheduledTaskInfo -TaskName "MagnumB2B Bridge" | Select LastRunTime,LastTaskResult` and same for "MagnumB2B ngrok". If LastTaskResult is still **2147943785 / 0x80070569** -> the batch-job right still isn't effective for claudeapp on this DC.
+2. **If it's still the logon right: switch BOTH tasks to run as `NT AUTHORITY\SYSTEM`** (always has batch logon, no password, bypasses the DC right entirely; SQL access is via the .env.local logins, not the Windows identity — but then make sure SYSTEM can READ .env.local + ngrok.yml, since you locked them to Admins/SYSTEM/claudeapp — SYSTEM is already allowed). Re-register both tasks as SYSTEM, start them.
+3. `Invoke-RestMethod http://127.0.0.1:8787/health` -> must be {"ok":true}. If ngrok still won't connect, read C:/MagnumB2B/repo/logs/ngrok.log (likely authtoken from a different ngrok account than the one that reserved flagstone-crumpled-refueling.ngrok-free.dev).
+4. Verify public: https://flagstone-crumpled-refueling.ngrok-free.dev/health, then /customers?agent=0 and /picking/queue?state=waiting with the token.
+Report the result + any one elevated command Gil still needs at the TOP of from-server.md. (Security: after it works, Gil removes claudeapp from Administrators/Domain Admins per your reply 15.)
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 29) — DIAGNOSE+FIX the bridge task (Gil's chat truncates; use this channel)
 
 The bridge still won't run. "MagnumB2B Bridge" is State=Ready, LastRunTime=1999, LastTaskResult=267011 (never ran), and C:/MagnumB2B/repo/logs/bridge.log does not exist — the task never launched. install-service.ps1 re-ran and again said "/health did not answer". **ngrok is fine** (tunnel connected; returns 404 only because nothing is on 8787). gpupdate ran after adding claudeapp to "Log on as a batch job". You're not elevated — so READ + DIAGNOSE, then (a) write the exact elevated command Gil must run into from-server.md, and (b) if running as claudeapp is the blocker on this DC, switch both tasks to run as SYSTEM.
