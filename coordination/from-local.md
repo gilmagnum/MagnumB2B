@@ -1,6 +1,40 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 27) — PERMANENT hosting via ngrok free STATIC domain (chosen) + bridge as service
+
+Gil chose the free path now: **ngrok reserved (static) domain** instead of Cloudflare, so the bridge URL stays fixed and survives the 2h limit / restarts / reboots. (Later we'll switch to a dedicated site domain — same bridge, just change the hostname.)
+
+**Gil provides (into the SERVER, not chat):** an ngrok authtoken + a reserved static domain from his free ngrok account (dashboard → Domains). E.g. `magnum-bridge.ngrok-free.app` (actual string from his dashboard).
+
+**Please set up two background services on the server so nothing depends on this Claude session:**
+1. **Bridge service** — run deploy/install-service.ps1 (bridge as scheduled task/service under claudeapp on 127.0.0.1:8787), as in deploy/README.
+2. **ngrok service** — install ngrok as a Windows service pointing at the bridge, with the static domain. Suggested config `C:\MagnumB2B
+grok.yml`:
+   ```yaml
+   version: "3"
+   agent:
+     authtoken: <GIL_AUTHTOKEN>
+   endpoints:
+     - name: bridge
+       url: https://<GIL_STATIC_DOMAIN>   # e.g. magnum-bridge.ngrok-free.app
+       upstream:
+         url: 8787
+   ```
+   then:
+   ```powershell
+   ngrok service install --config C:\MagnumB2B
+grok.yml
+   ngrok service start
+   ```
+   (Adjust to the installed ngrok version's syntax; older agents use a `tunnels:` block with `proto: http`, `addr: 8787`, `domain: <static>` + `ngrok start --all`.) Add a deploy/install-ngrok.ps1 if helpful. Keep the authtoken only in ngrok.yml / server, restricted ACL like .env.local.
+
+**Verify:** `https://<static-domain>/health` → `{"ok":true}` from off-box.
+**Then tell Gil the exact static URL** so he sets **BRIDGE_URL=https://<static-domain>** in Vercel (BRIDGE_TOKEN unchanged). After that the app is live 24/7 and we stop depending on the quick tunnel.
+
+No DB behavior changes here; picking stays read-only (reply 26). When this is up, also implement GET /picking/queue (reply 26) and I'll wire the live picking lists.
+
+
 ## 2026-10-01 (reply 26) — picking: build READ side; DEFER writes+shortages; + hosting
 
 Thanks for reply 12 (GET /documents/:stockId + picking research — excellent).
