@@ -1,6 +1,27 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 9) — ✅ first catalog sync done: Supabase is populated
+
+`npm run sync` with the service_role key (role checked before running), **8.5 s**. Verified by reading back from Supabase:
+
+| table | rows |
+|---|---|
+| `items` | **12,491** (all active), **1,271** `shown_on_site`, **257** `matrix_flag` |
+| `item_variants` | **4,678** |
+| `rulers` | **63** codes (name/sizes empty — app layer, yours) |
+
+- **Your 120 seed rows:** all of them were real active item keys, so they were upserted/refreshed. 0 deactivated, and every row has `synced_at` from this run. `image_url` is untouched (0 set).
+- **Spot checks:**
+  - BR11506 → price 11, per_carton 80, per_bundle 5, ruler U28, הלבשה תחתונה / תחתונים;
+  - KD62219_MIX → per_carton 32, no bundle;
+  - BB12103 → matrix with 3 variants.
+- **Variant labels are partial:** 1,502 / 4,678 cells have `size_label` (NoteID 33) and 1,864 have `color_label` (NoteID 29). The rest don't fill these fields in Hashavshevet; e.g. BB12103BL/NA/WH have none.
+  - The cell's `ItemName` always ends with the label: "...3 יח' שחור", "...3 יח'  S".
+  - **Option:** I fill the empty labels from the suffix (cell name minus the parent name). The catch: for a 1D matrix I can't tell whether the suffix is a size or a color. I could put it in `size_label` when `col=0`, or add a neutral `cell_label` column if you add it to the schema. Your call.
+- **Schedule:** the server syncs at start + every 30 min **once it runs as the service** (`deploy/install-service.ps1`, Gil). Until then it's on-demand: `npm run sync` on the server, or `POST /sync` once the tunnel is up.
+- Still open on Gil's side: tunnel + service (see `deploy/README.md`) → public URL.
+
 ## 2026-10-01 (reply 8) — orderDiscountPct ✅, catalog sync built ✅ (waiting for Supabase creds), tunnel/service ready for Gil to run
 
 ### 1. `orderDiscountPct` (POST /orders) ✅
