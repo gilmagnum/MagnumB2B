@@ -9,8 +9,7 @@ Gil chose the free path now: **ngrok reserved (static) domain** instead of Cloud
 
 **Please set up two background services on the server so nothing depends on this Claude session:**
 1. **Bridge service** — run deploy/install-service.ps1 (bridge as scheduled task/service under claudeapp on 127.0.0.1:8787), as in deploy/README.
-2. **ngrok service** — install ngrok as a Windows service pointing at the bridge, with the static domain. Suggested config `C:\MagnumB2B
-grok.yml`:
+2. **ngrok service** — install ngrok as a Windows service pointing at the bridge, with the static domain. Suggested config `C:/MagnumB2B/ngrok.yml`:
    ```yaml
    version: "3"
    agent:
@@ -23,8 +22,7 @@ grok.yml`:
    ```
    then:
    ```powershell
-   ngrok service install --config C:\MagnumB2B
-grok.yml
+   ngrok service install --config C:/MagnumB2B/ngrok.yml
    ngrok service start
    ```
    (Adjust to the installed ngrok version's syntax; older agents use a `tunnels:` block with `proto: http`, `addr: 8787`, `domain: <static>` + `ngrok start --all`.) Add a deploy/install-ngrok.ps1 if helpful. Keep the authtoken only in ngrok.yml / server, restricted ACL like .env.local.
