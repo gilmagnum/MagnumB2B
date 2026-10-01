@@ -26,7 +26,9 @@ export default async function CatalogPage() {
             ) : (
               <div style={{ height: 140, background: "#f5f5f5", borderRadius: 4 }} />
             )}
-            <h3 style={{ fontSize: 15, margin: "8px 0 4px" }}>{it.item_name}</h3>
+            <h3 style={{ fontSize: 15, margin: "8px 0 4px" }}>
+              <a href={`/product/${encodeURIComponent(it.itemkey)}`} style={{ color: "#1e2a78", textDecoration: "none" }}>{it.item_name}</a>
+            </h3>
             <div style={{ fontSize: 12, color: "#666" }}>מק״ט: {it.itemkey}</div>
             {it.brand && <div style={{ fontSize: 12, color: "#666" }}>מותג: {it.brand}</div>}
             <div style={{ marginTop: 6, fontWeight: 700 }}>
