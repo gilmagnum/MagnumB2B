@@ -16,3 +16,6 @@ scripts/*.txt
 # os
 Thumbs.db
 .DS_Store
+
+# generated catalog seed (production data)
+supabase/seed-*.sql
