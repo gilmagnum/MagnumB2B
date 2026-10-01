@@ -1,6 +1,42 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-02 (reply 13) — picking queue ✅ (read-only) · ngrok + services: scripts ready, **Gil must run them** (no static URL yet)
+
+### `GET /picking/queue` ✅ (read-only, no writes)
+`GET /picking/queue?agent=&q=&state=waiting|picked&limit=200&offset=0` → `Document[]` (same row shape as /documents), **oldest first**.
+- Only open agent orders: **doc 11, Status 0**.
+  - `state=waiting` (default) = no picker marker (`ExtraText2` not `לוקט…`);
+  - `state=picked` = `ExtraText2 = 'לוקט - <name>'` (picked, waiting for production in Hashavshevet).
+- `agent=0`/missing = all; `q` as in /documents.
+- New fields on **every** /documents row (list, queue, detail):
+  - `picked: boolean`
+  - `picker?: string` (name from the marker, e.g. "משה אריה")
+  - `pickedMarker?: string` (raw ExtraText2)
+- `GET /documents/:stockId` lines now also carry **`onHand`** (current general stock, Items.Quantity) for the picker screen.
+- Now: waiting = **5** orders (oldest 116979 from 2026-09-29), picked = **1** (116417, משה אריה). 23–260 ms.
+- Contract updated.
+
+### Permanent hosting (ngrok static domain + services under claudeapp) — prepared, NOT installed
+**What I can't do from this session:**
+- it is **not elevated** (Medium integrity), so it can't register tasks/services or set ACLs for claudeapp;
+- **the ngrok authtoken and static domain are not on the server yet** (no ngrok.yml anywhere);
+- I don't have the claudeapp password.
+- So **there is no static URL yet** and nothing runs under claudeapp yet. I did not start a quick tunnel (reply 26: hold).
+
+**Ready for Gil — one Administrator PowerShell, two scripts** (deploy/README.md):
+1. `deploy\install-service.ps1` → the bridge as scheduled task **"MagnumB2B Bridge"**:
+   - runs as **claudeapp** at boot, whether anyone is logged on or not; survives logoff/reboot; restarts on failure;
+   - logs to `repo\logs\bridge.log`.
+2. `deploy\install-ngrok.ps1 -Domain <static>.ngrok-free.app` → ngrok as scheduled task **"MagnumB2B ngrok"**, same properties:
+   - asks for the authtoken and stores it only in `C:\MagnumB2B\ngrok.yml`, readable by Administrators/SYSTEM/claudeapp;
+   - uses the official signed `C:\MagnumB2B\tools\ngrok.exe` (v3.39.11, already downloaded);
+   - config format validated with `ngrok config check`;
+   - ends by calling `https://<static>/health`.
+- On a DC, claudeapp may need **"Log on as a batch job"** (README has the path).
+- Then **BRIDGE_URL = `https://<static>.ngrok-free.app`** in Vercel, **BRIDGE_TOKEN unchanged**. Free ngrok shows a warning page to *browsers* only; your server-side proxy can send `ngrok-skip-browser-warning: 1` to be safe.
+- After Gil runs them I'll verify from outside: /health, /customers with the token returns rows, /picking/queue. Then I'll report the exact URL.
+
 ## 2026-10-01 (reply 12) — (a) GET /documents/:stockId ✅ · (b) picking research: findings + proposal
 
 ### (a) `GET /documents/:stockId[?agent=:id]` ✅ (contract: `DocumentDetail`)

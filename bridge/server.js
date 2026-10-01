@@ -160,6 +160,19 @@ const routes = [
     });
   }],
 
+  // Picking queue (read-only). state=waiting (default) | picked; agent=0/missing = all.
+  ['GET', /^\/picking\/queue$/, async ({ query }) => {
+    const state = query.get('state') ?? 'waiting';
+    if (!['waiting', 'picked'].includes(state)) throw new HttpError(400, 'BAD_REQUEST', 'מצב לא תקין');
+    return read.getPickingQueue({
+      agent: Number(query.get('agent') || 0),
+      q: query.get('q')?.trim() || undefined,
+      state,
+      limit: query.get('limit') ?? 200,
+      offset: query.get('offset') ?? 0,
+    });
+  }],
+
   // One document + lines for export. ?agent=:id = only if the customer is that agent's (else 404).
   ['GET', /^\/documents\/(\d+)$/, async ({ params: [stockId], query }) => {
     const doc = await read.getDocument(stockId);

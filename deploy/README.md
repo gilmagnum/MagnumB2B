@@ -20,7 +20,21 @@ powershell -ExecutionPolicy Bypass -File C:\MagnumB2B\repo\deploy\install-servic
   Policies → Windows Settings → Security Settings → Local Policies → User Rights Assignment), then `gpupdate /force`.
 - DB access is via the SQL logins in `.env.local` (magnum_ro / magnumapp), not via the Windows user.
 
-## 2. Cloudflare Tunnel (public HTTPS hostname)
+## 2. Public URL — ngrok static domain (chosen for now)
+Free ngrok account → dashboard → **Domains** (your one free static domain, e.g. `something.ngrok-free.app`)
+and **Your Authtoken**. Then, as Administrator (run **install-service.ps1 first**, the bridge must be up):
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\MagnumB2B\repo\deploy\install-ngrok.ps1 -Domain <your-domain>.ngrok-free.app
+```
+- Asks for the authtoken (stored only in `C:\MagnumB2B\ngrok.yml`, readable by Administrators/SYSTEM/claudeapp)
+  and the claudeapp password.
+- Registers the scheduled task **"MagnumB2B ngrok"**: at boot, as claudeapp, restarts on failure,
+  log in `repo\logs\ngrok.log`. Uses `C:\MagnumB2B\tools\ngrok.exe` (official, signed).
+- Checks `https://<domain>/health` at the end.
+- Vercel: `BRIDGE_URL=https://<domain>`. ngrok free shows a browser warning page to *browsers* only;
+  the web app's server-side proxy can add the header `ngrok-skip-browser-warning: 1` to be safe.
+
+## 2b. (later) Cloudflare Tunnel on your own domain
 1. Cloudflare dashboard (**your** account that holds the domain) → **Zero Trust → Networks → Tunnels →
    Create a tunnel → Cloudflared**, name it `magnum-bridge`.
 2. Copy the install **token** shown on the "Install connector" page (the long string after `service install`).

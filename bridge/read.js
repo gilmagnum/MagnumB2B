@@ -278,7 +278,9 @@ async function ordersProducing(docNumber, orderDocIds) {
 // (Stock.BaseOrderStockId is unused, 0). Chains seen: 11->1, 6->4, 4->1, 6->1, 11->4, so two
 // levels are followed (order -> delivery note -> invoice). Receipts (31) pay invoices through
 // payment matching, not order lines, so they never appear here.
-export async function getDocuments({ agent, status = 'all', q, limit = 50, offset = 0, orderDocIds = [6, 11] } = {}) {
+export async function getDocuments({
+  agent, status = 'all', q, limit = 50, offset = 0, orderDocIds = [6, 11], picked, oldestFirst = false,
+} = {}) {
   const params = {
     limit: Math.min(Math.max(Number(limit) || 50, 1), 200),
     offset: Math.max(Number(offset) || 0, 0),
@@ -289,6 +291,9 @@ export async function getDocuments({ agent, status = 'all', q, limit = 50, offse
     params.agent = Number(agent);
   }
   if (status === 'open') where += ' AND s.Status = 0';
+  // picked = the warehouse app's marker ExtraText2 = 'לוקט - <picker>'
+  if (picked === true) where += " AND s.ExtraText2 LIKE N'לוקט%'";
+  else if (picked === false) where += " AND ISNULL(s.ExtraText2, '') NOT LIKE N'לוקט%'";
   else if (status === 'produced') where += ' AND s.Status <> 0';
   if (q) {
     params.q = { type: sql.NVarChar(100), value: `%${likeEscape(q)}%` };
@@ -304,18 +309,25 @@ export async function getDocuments({ agent, status = 'all', q, limit = 50, offse
   }
   const orders = await query(
     `SELECT s.ID, s.DocNumber, s.DocumentID, d.DocName, s.AccountKey, s.AccountName, a.FullName, a.Agent,
-            s.IssueDate, s.TFtal, s.Status
+            s.IssueDate, s.TFtal, s.Status, s.ExtraText2
      FROM Stock s
      LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
      LEFT JOIN DocumentsDef d ON d.DocumentID = s.DocumentID
      WHERE ${where}
-     ORDER BY s.ID DESC OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
+     ORDER BY s.ID ${oldestFirst ? 'ASC' : 'DESC'} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
     params,
   );
   if (!orders.length) return [];
 
   const produced = await producedDocsFor(orders.map((o) => o.ID));
   return orders.map((o) => toDocumentRow(o, produced.get(o.ID)));
+}
+
+// Warehouse app marker on the order: ExtraText2 = 'לוקט - <picker name>'.
+function pickMarker(text) {
+  const marker = trim(text) || undefined;
+  const picked = Boolean(marker && marker.startsWith('לוקט'));
+  return { picked, picker: picked ? marker.replace(/^לוקט\s*-?\s*/, '') || undefined : undefined, pickedMarker: marker };
 }
 
 const isoDate = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : null);
@@ -357,6 +369,7 @@ function toDocumentRow(o, produced = []) {
     date: isoDate(o.IssueDate),
     total: o.TFtal ?? undefined,
     status: o.Status === 0 ? 'open' : 'produced',
+    ...pickMarker(o.ExtraText2),
     producedDocs: produced.map((p) => ({
       stockId: p.ID,
       documentId: p.DocumentID,
@@ -373,7 +386,7 @@ function toDocumentRow(o, produced = []) {
 export async function getDocument(stockId) {
   const [o] = await query(
     `SELECT s.ID, s.DocNumber, s.DocumentID, d.DocName, s.AccountKey, s.AccountName, a.FullName, a.Agent,
-            s.IssueDate, s.TFtal, s.TFtalVat, s.VatPrc, s.DiscountPrc, s.Status, s.Remarks,
+            s.IssueDate, s.TFtal, s.TFtalVat, s.VatPrc, s.DiscountPrc, s.Status, s.Remarks, s.ExtraText2,
             s.Address, s.City, s.Phone, a.Address AS accAddress, a.City AS accCity, a.Phone AS accPhone,
             a.EMail, a.TaxFileNum
      FROM Stock s
@@ -385,8 +398,9 @@ export async function getDocument(stockId) {
   if (!o) return null;
   const [lines, produced] = await Promise.all([
     query(
-      `SELECT ItemKey, ItemName, Quantity, Unit, Price, DiscountPrc, TFtal, Tree
-       FROM StockMoves WHERE StockID = @id ORDER BY LineNoForSorting, ID`,
+      `SELECT m.ItemKey, m.ItemName, m.Quantity, m.Unit, m.Price, m.DiscountPrc, m.TFtal, m.Tree, i.Quantity AS onHand
+       FROM StockMoves m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
+       WHERE m.StockID = @id ORDER BY m.LineNoForSorting, m.ID`,
       { id: o.ID },
     ),
     producedDocsFor([o.ID]),
@@ -415,7 +429,16 @@ export async function getDocument(stockId) {
         unitPrice: l.Price,
         discountPct: l.DiscountPrc || 0,
         lineTotal: l.TFtal,
+        onHand: l.onHand ?? undefined, // current general stock (Items.Quantity)
         ...(shipping.has(trim(l.ItemKey)) && { isShipping: true }),
       })),
   };
+}
+
+// Picking queue (read-only): open agent orders (doc 11, Status 0), oldest first.
+// state 'waiting' = no picker marker yet; 'picked' = marked by the warehouse app, waiting for production.
+export function getPickingQueue({ agent, q, state = 'waiting', limit = 200, offset = 0 } = {}) {
+  return getDocuments({
+    agent, q, limit, offset, status: 'open', orderDocIds: [11], picked: state === 'picked', oldestFirst: true,
+  });
 }
