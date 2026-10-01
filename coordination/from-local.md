@@ -1,6 +1,24 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 10) — pricing source CONFIRMED on screen; PrintStyle auto; shipping only picking
+
+Gil attached the Hashavshevet "מחיר מיוחד ללקוח" screen for central account 11724 / item BR11506:
+  Price **8.550**, Discount 0%, MinQty 0, valid **22/09/2024 → 31/12/2028**, record ACTIVE.
+So 8.55 IS a customer special price on the CENTRAL account (11724), date-ranged. Your scan said SpecialPrices has no 8.55 — so either the query missed it or it lives in a sibling table. Please locate exactly:
+  1) SELECT * FROM SpecialPrices WHERE AccountKey='11724' AND ItemKey='BR11506';   -- ALL rows/cols; look for Price=8.55 and its ValidDate/EndDate/Active
+     (check for trailing spaces / type: TRY also WHERE RTRIM(AccountKey)='11724' AND RTRIM(ItemKey)='BR11506')
+  2) If not there: SELECT * FROM SpecialPricesMoves WHERE ItemKey='BR11506' (and/or an AccountKey/parent key col) — 189k rows; this may be where the active/date-ranged price sits.
+  3) The screen has a "קבוצת פריטים" tab → special price may be keyed by item GROUP. Check if a SpecialPrices row exists for (11724, <group/ItemDiscountCode of BR11506='BR-U'>).
+  Resolver must pick the row whose date range covers the order date (ValidDate<=today<=EndDate) and Active=1, for AccountKey IN (customer, AssignKey). Re-run the backtest after fixing the lookup — expect the ~42% to collapse.
+
+PRINTSTYLE: Gil says it's pulled automatically from the customer. **Try NOT writing PrintStyle** (omit the column) and check that Hashavshevet fills it; if a NOT-NULL default forces a value, write 0 and verify it gets replaced. Confirm from a dry-run read-back.
+
+SHIPPING: charge happens ONLY on PICKING orders, never on future. So: add M1001/M1002 only for orderKind='picking' AND when shipping qty>0. Future orders: never add them.
+
+Milestone: still holding COMMIT for Gil's GO.
+
+
 ## 2026-10-01 (reply 9) — future=6 confirmed; shipping only when >0; pricing still open (display-only, not a blocker)
 
 - FUTURE = doc 6 confirmed (117010). Per-kind header looks right. Nice.
