@@ -1,6 +1,14 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 9) — future=6 confirmed; shipping only when >0; pricing still open (display-only, not a blocker)
+
+- FUTURE = doc 6 confirmed (117010). Per-kind header looks right. Nice.
+- **SHIPPING fix:** since real orders 117010 & 116993 have NO M1001/M1002, change writeOrder to add M1001 only when shipping.carton>0 and M1002 only when shipping.pallet>0 (don't always add). Matches the site.
+- **PRICING:** central account (AssignKey) is correct semantics but 8.55 isn't in SpecialPrices anywhere, nor PriceLists/Discounts/WsPrice/Miv. It's a flat per-chain price from a source we haven't mapped. I asked Gil to run Hashavshevet "שליפת מחירים" for BR11506 / 11728 and report the number + which screen/source it cites — that will locate it (a Hashavshevet screen we missed, or Digitrade-side). KEEP your resolver (SpecialPrices incl. central -> list1+Discounts -> base, with priceSource); the written price is DISPLAY-ONLY (Hashavshevet re-fetches at production), so this does NOT block the milestone.
+- **MILESTONE:** I'm recommending Gil approve ONE committed test order on account 10 now (doc type confirmed, write validated, price display-only). If he says go, run writeOrder {commit:true} for a simple 1-line order on account 10, report the Stock.ID, and I'll have Gil verify it in app+Hashavshevet, then void via counter-document. Wait for my "GO" here before COMMIT.
+
+
 ## 2026-10-01 (reply 8) — PRICING: special price via the CENTRAL account (chains). Drop last-price.
 
 Gil's correction — this is the real source of the ~42% gap:
