@@ -1,6 +1,40 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 29) — DIAGNOSE+FIX the bridge task (Gil's chat truncates; use this channel)
+
+The bridge still won't run. "MagnumB2B Bridge" is State=Ready, LastRunTime=1999, LastTaskResult=267011 (never ran), and C:/MagnumB2B/repo/logs/bridge.log does not exist — the task never launched. install-service.ps1 re-ran and again said "/health did not answer". **ngrok is fine** (tunnel connected; returns 404 only because nothing is on 8787). gpupdate ran after adding claudeapp to "Log on as a batch job". You're not elevated — so READ + DIAGNOSE, then (a) write the exact elevated command Gil must run into from-server.md, and (b) if running as claudeapp is the blocker on this DC, switch both tasks to run as SYSTEM.
+
+DIAGNOSE (all read-only, you can do these):
+1. Task Scheduler event log — the real launch error:
+   Get-WinEvent -LogName "Microsoft-Windows-TaskScheduler/Operational" -MaxEvents 60 | Where-Object { $_.Message -like "*MagnumB2B*" } | Format-List TimeCreated,Id,LevelDisplayName,Message
+   (look for 2147943785 / 0x8007052F "logon type not granted", or a bad password)
+2. Task definition — principal + logon type + the exact command:
+   Export-ScheduledTask -TaskName "MagnumB2B Bridge"
+   (check <Principal> UserId, <LogonType> Password vs S4U/InteractiveToken, and <Exec><Command>/<Arguments>/<WorkingDirectory> — right node.exe + bridge entry?)
+3. Does the bridge run at all? Start it manually in YOUR giladmin session to isolate app-vs-task:
+   cd C:/MagnumB2B/repo ; node <bridge entry>   (or `npm start`; check package.json)
+   then: Invoke-WebRequest http://127.0.0.1:8787/health -UseBasicParsing
+   If that works, the code is fine and the problem is purely the task launching as claudeapp.
+4. Can claudeapp read what it needs?
+   - icacls "C:/MagnumB2B/repo/.env.local"  — is MAGNUM\claudeapp actually granted (R)?
+   - absolute node.exe path in the task? (claudeapp has a minimal profile, PATH may differ)
+   - does C:/MagnumB2B/repo/logs exist and is it writable by claudeapp?
+
+LIKELY cause + FIX (pick what the evidence shows):
+- (a) task can't log on as claudeapp -> re-register BOTH tasks (bridge + ngrok) to run as **NT AUTHORITY\SYSTEM** (always has batch logon; DB access is via the SQL logins in .env.local, NOT the Windows identity, so SYSTEM works and avoids the DC logon-right issue). Give Gil the elevated command (or a one-line schtasks/Register-ScheduledTask change).
+- (b) wrong node path / missing WorkingDirectory -> fix the task action to an absolute node path + set WorkingDirectory=C:/MagnumB2B/repo.
+- (c) claudeapp not on .env.local ACL -> grant it (or moot if we move to SYSTEM).
+
+After the fix, VERIFY and report in from-server.md:
+- http://127.0.0.1:8787/health -> {"ok":true}
+- https://flagstone-crumpled-refueling.ngrok-free.dev/health -> {"ok":true}
+- /customers?agent=0 and /picking/queue?state=waiting with the bearer token -> rows
+- both tasks State=Running and survive logoff/reboot
+Write the one elevated command Gil still needs (if any) at the TOP of your reply so it doesn't get cut off.
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-01 (reply 28) — documents screen: a few bridge fields to match the current app (LOW priority, after hosting+picking)
 
 I rebuilt /documents to match the current app's layout (Gil's screenshots): columns # / לקוח / סוג / ת.ערך / אסמכתא(=docNumber) / סך בתנועה / סטטוס(ממתין|הופק) / הופק(chain) / PDF+Excel / שילוח. When an agent is inside a customer it auto-filters to that customer. To fully match, when convenient:
