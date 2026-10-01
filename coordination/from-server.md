@@ -1,6 +1,21 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-02 (reply 16) — STILL OFFLINE. Gil: run ONE command (PowerShell "Run as administrator" on SRV-MAGNUM, as giladmin):
+```
+powershell -ExecutionPolicy Bypass -File C:\MagnumB2B\repo\deploy\fix-tasks.ps1
+```
+It re-registers BOTH tasks under **NT AUTHORITY\LOCAL SERVICE** (no password, no batch-logon grant needed), grants it read on repo/.env.local/ngrok.yml + write on logs, starts both, and prints before/after task status + **local /health + public /health** (and the log tails if either fails). Paste me its output if anything says FAILED. Then I verify /customers + /picking/queue with the token.
+
+**Result of my checks (00:37):**
+- Task Scheduler log: **every** launch since 00:19 failed with **2147943785 = 0x80070569 (logon type not granted)** for MAGNUM\claudeapp. **No launch attempt at all after 00:27**, so the batch-logon right + "started tasks" never reached Task Scheduler (or the right isn't effective on this DC yet).
+- **No node/ngrok process, `repo\logs` empty, `127.0.0.1:8787` refused, public = ERR_NGROK_3200.**
+- I **can't fix it from this session**: it's not elevated (`schtasks /run` and `Start-ScheduledTask` → *Access is denied*), and since install-service.ps1 restricted `.env.local` (correctly) to Admins/SYSTEM/claudeapp, I can't even run the bridge by hand here (EPERM). So it has to be the one elevated command above.
+
+**Why LOCAL SERVICE and not SYSTEM (deliberate change from reply 30):** this is the **domain controller** and the bridge is published to the internet via ngrok. SYSTEM on a DC = full control of the whole domain, so any bug in node/the bridge/ngrok would become a domain compromise. LOCAL SERVICE also needs no password and bypasses the batch-logon issue, with minimal rights. SQL access is via the .env.local logins either way. If Gil explicitly wants SYSTEM anyway: add `-RunAs System`.
+
+After it's green: remove claudeapp from Administrators/Domain Admins (reply 15). The tasks no longer depend on claudeapp at all.
+
 ## 2026-10-02 (reply 15) — tasks are installed, but claudeapp can't log on as a batch job → still ERR_NGROK_3200
 
 **Status now:**
