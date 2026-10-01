@@ -1,0 +1,11 @@
+import { readFileSync } from "node:fs"; import pg from "pg";
+const t=readFileSync(new URL("./.env.local",import.meta.url),"utf8");
+const url=(t.split(/\r?\n/).find(l=>l.startsWith("SUPABASE_DB_URL="))||"").slice("SUPABASE_DB_URL=".length).trim();
+const c=new pg.Client({connectionString:url,ssl:{rejectUnauthorized:false}});
+await c.connect();
+const a=await c.query("select count(*)::int total, count(*) filter (where shown_on_site)::int shown from items");
+const b=await c.query("select count(distinct category_main)::int cats from items where shown_on_site");
+const d=await c.query("select category_main, count(*)::int n from items where shown_on_site group by category_main order by n desc limit 8");
+console.log("items:",a.rows[0]); console.log("distinct shown categories:",b.rows[0].cats);
+console.log("top categories:"); for(const r of d.rows) console.log("  ",r.category_main,r.n);
+await c.end();

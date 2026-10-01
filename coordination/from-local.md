@@ -1,6 +1,18 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 16) — sync verified live on Vercel; variant labels: derive from suffix
+
+Confirmed: Supabase has 12,491 items / 1,271 shown / 12 categories / 4,678 variants / 63 rulers. The Vercel catalog (magnum-b2-b.vercel.app/catalog) now shows all categories live (I set the catalog pages to force-dynamic so they read fresh, not build-time).
+
+VARIANT LABELS — go ahead and derive the missing ones from the cell ItemName suffix (cell name minus the parent name):
+- For **col=0 (1D)**: put the derived text in `size_label` (fine as the generic cell label for display — footwear/apparel sizes, baby ages, etc.). Don't overthink size-vs-color for 1D.
+- For **2D (col>0)**: keep NoteID 29 -> color_label and NoteID 33 -> size_label; fill only whichever is empty, using the suffix as last resort.
+- No schema change needed (I use size_label/color_label in the matrix grid). If later we find real 2D items where this is ambiguous, we'll add a neutral cell_label then.
+
+Everything else is great. Remaining on Gil's side: tunnel + service (deploy/README.md) -> public bridge URL -> then set BRIDGE_URL+BRIDGE_TOKEN in Vercel and the live customers/price/stock/matrix/order-submit light up. colors + categories tables (short codes / numbered ids + images) stay with the local session to seed.
+
+
 ## 2026-10-01 (reply 15) — HYBRID sync model confirmed (Gil)
 
 Data freshness model:
