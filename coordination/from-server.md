@@ -1,6 +1,58 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 7) — app-matching tweaks done (zero structural diff); HTTP layer up (localhost)
+
+### 1. Tweaks (reply 12 + 13) ✅
+- `ExtraText3` = **'הזמנת אפליקציה'** on both kinds.
+- **PrintStyle = customer card, else document default**, found in the data:
+  - customer card = **`AccDocRpt`** (AccountKey × DocumentID → RptID, Copies), 993 rows / 444 customers;
+  - document default = **`DocumentsDef.RptFormat`**: doc 6 → **13**, doc 11 → **12**.
+  - Verified on 2026 orders: for doc 6, PrintStyle = the card RptID in 155/158 orders that have a card row, and mostly 13 otherwise.
+  - ⚠️ **Doc 11:** no customer has a card row for doc 11, so the rule gives **12** (the Hashavshevet default). The old site/app wrote **1** on its own (755 orders); Hashavshevet users' doc-11 orders have 12/18.
+  - I follow Gil's rule (12). **If Gil prefers 1 for app picking orders, it's one line.**
+- **Shipping:** picking orders always get **M1001 + M1002** (qty 0 when unused), Unit "יח'", no ExtraDate1/2. Future orders: none.
+- `LineNum` = 0 on all lines; LineNoForSorting 100, 200, …
+
+### 2. Dry-run diff (account 10, rolled back)
+Gil deleted the reference orders 117010/117018/117021/117022, so:
+- **Picking** was diffed against **117008** (a real un-issued site order from today, another customer). Item line: **no differences**. Header: only the intended ones:
+  - PrintStyle 12 vs 1 (rule above);
+  - ExtraText3 'הזמנת אפליקציה' vs 'הזמנת אתר';
+  - `DiscountPrcR` 0 vs 5: a header discount typed on that one order, which 42 of the last 2,000 site orders have. Per-order data, not structural. **Q:** do we need an order-level discount % in the API? If yes, I'll add `discountPct` on the order.
+- **Future:** no un-issued doc 6 is left to diff against. Versus the last 117010 diff, the only change is PrintStyle, which is now **13** (= what 117010 had) plus the ExtraText3 marker.
+- **Structural differences: zero.**
+
+### 3. HTTP layer — `bridge/server.js` (`npm start`) ✅
+- **Base URL: `http://127.0.0.1:8787`.** Bound to **localhost only**. Plain `node:http`, no new dependencies, runs under any user (DB access goes through the SQL logins), so `claudeapp` is fine.
+- **Reaching it from Vercel needs an exposure step** I have NOT done (no ports opened). Suggested: Cloudflare Tunnel → `https://bridge.<domain>` (the site is already behind Cloudflare). **Gil's decision.** Until then /web can use a mock built from the contract.
+- **Auth:** `Authorization: Bearer <BRIDGE_TOKEN>`.
+  - The token is generated (32 random bytes) and sits in the server's `.env.local`. **Not in git.** Gil can copy it into Vercel env when the tunnel exists.
+  - `/health` is public.
+- **Endpoints, per `shared/contract.md`** (updated; please re-read):
+  - `GET /items`, `/items/:itemkey` (+ matrix `cells` with size/color labels and stock), `/customers?agent=`, `/stock/:itemkey`, `/price?account=&item=&qty=`;
+  - `POST /orders` (+ `?dryRun=1` = validate and write inside a rolled-back transaction).
+- **Contract changes from my side:**
+  - `PriceResult.source` = `special | special-central | pricelist`, plus a `netUnitPrice` field;
+  - `POST /orders` accepts `remarks` and `discountPct`, and returns `{stockId, dryRun, documentId, totals, lines}`;
+  - errors are `{ error: { code, message } }` with Hebrew messages (codes listed in the contract);
+  - `Item.stock` added.
+- **Tested** locally with curl:
+  - auth 401 (missing or bad token);
+  - items: 1,271 shown, search, category;
+  - matrix item BB12103 → 3 cells with stock;
+  - price 11728 × BR11506 → **8.55, special-central** ✅;
+  - customers: agent 101 → 403;
+  - POST dry runs: picking (352 / 415.36 + M1001 + M1002), future, matrix cell (both kinds);
+  - error cases: NO_STOCK, NO_PACKING, ITEM_NOT_FOUND, BAD_KIND, BAD_JSON, and **WRITE_DISABLED** for a real customer without the flag.
+- **Fix found while testing:** matrix cell SKUs have no extra fields of their own. Cells now inherit מוצג באתר / pack sizes / התעלם ממלאי from the parent model; stock and price stay per cell.
+- **Latency:** warm requests take 30–400 ms. One series of POSTs took 10–24 s (most likely lock waits on Stock/StockMoves during Hashavshevet activity) and didn't recur. The request timeout is 30 s.
+
+### Still open
+- Exposure (tunnel) + running as a service under `claudeapp` — Gil.
+- PrintStyle 12 vs 1 for app picking orders — Gil.
+- Order-level discount % — your call.
+
 ## 2026-10-01 (reply 6) — MILESTONE: two orders COMMITTED on account 10 → **117021** (picking) / **117022** (future)
 
 Procedure: each order was first run with ROLLBACK, then committed (`scripts/test-order.js … --commit`). The saved rows were read back via magnum_ro and diffed column-by-column against Gil's app orders. Columns that differ per order by nature (IDs, dates, remarks, customer snapshot) are excluded.

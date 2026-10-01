@@ -103,6 +103,26 @@ export function getMatrixChildren(fatherItemKey) {
   return query('SELECT * FROM IMatrixItems WHERE FItemKey = @k ORDER BY Line, Col', { k: key(fatherItemKey) });
 }
 
+// Matrix cells with stock and their size/color labels (ExtraNotes 33 "מידה למטריצה", 29 "צבע").
+export async function getMatrixCells(fatherItemKey) {
+  const rows = await query(
+    `SELECT m.ItemKey, m.Line, m.Col, i.Quantity AS stock,
+       (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 33) AS sizeLabel,
+       (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 29) AS colorLabel
+     FROM IMatrixItems m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
+     WHERE m.FItemKey = @k ORDER BY m.Line, m.Col`,
+    { k: key(fatherItemKey) },
+  );
+  return rows.map((r) => ({
+    itemkey: trim(r.ItemKey),
+    sizeLabel: trim(r.sizeLabel) || undefined,
+    colorLabel: trim(r.colorLabel) || undefined,
+    line: r.Line,
+    col: r.Col,
+    stock: r.stock ?? 0,
+  }));
+}
+
 // Active accounts; pass agent to get only that agent's customers.
 export function getAccounts({ agent } = {}) {
   const where = agent == null ? '' : ' AND Agent = @agent';
@@ -177,4 +197,16 @@ export async function getPrintStyle(accountKey, documentId) {
     { acc: key(accountKey), doc: documentId },
   );
   return rows[0]?.printStyle ?? null;
+}
+
+// Parent model of matrix cell SKUs: Map<cellItemKey, fatherItemKey>.
+export async function getMatrixFathers(itemKeys) {
+  const keys = [...new Set(itemKeys.map((k) => String(k).trim()))];
+  if (!keys.length) return new Map();
+  const params = Object.fromEntries(keys.map((k, i) => [`k${i}`, key(k)]));
+  const rows = await query(
+    `SELECT ItemKey, FItemKey FROM IMatrixItems WHERE ItemKey IN (${keys.map((_, i) => `@k${i}`).join(',')})`,
+    params,
+  );
+  return new Map(rows.map((r) => [trim(r.ItemKey), trim(r.FItemKey)]));
 }

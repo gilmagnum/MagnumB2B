@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "MagnumB2B - Hashavshevet bridge",
   "scripts": {
+    "start": "node bridge/server.js",
     "smoke": "node scripts/smoke-read.js",
     "inspect": "node scripts/inspect-schema.js",
     "check-pricing": "node scripts/check-pricing.js",

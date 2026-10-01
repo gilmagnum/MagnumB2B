@@ -1,5 +1,5 @@
 import { sql, getPool, bind, key } from './db.js';
-import { getAccount, getItem, getItemRows, getTableColumns, getPrintStyle } from './read.js';
+import { getAccount, getItem, getItemRows, getTableColumns, getPrintStyle, getMatrixFathers } from './read.js';
 import { resolvePrices } from './pricing.js';
 import {
   ORDER_DOCUMENT_IDS,
@@ -150,6 +150,24 @@ export async function writeOrder(order, { commit = false } = {}) {
   if (Number(account.Dumi) === 1) throw new OrderError('ACCOUNT_INACTIVE', `הלקוח ${accountKey} אינו פעיל`);
 
   const itemByKey = new Map(itemKeys.map((k, i) => [k, items[i]]));
+
+  // Matrix cell SKUs carry no extra fields of their own: "shown on site", pack sizes and
+  // "ignore stock" come from the parent model. Stock and price stay per cell.
+  const fathers = await getMatrixFathers(itemKeys);
+  const fatherKeys = [...new Set(fathers.values())];
+  const fatherItems = new Map(await Promise.all(fatherKeys.map(async (k) => [k, await getItem(k)])));
+  for (const [cellKey, fatherKey] of fathers) {
+    const cell = itemByKey.get(cellKey);
+    const father = fatherItems.get(fatherKey);
+    if (!cell || !father) continue;
+    itemByKey.set(cellKey, {
+      ...cell,
+      shownOnSite: father.shownOnSite,
+      ignoreStock: father.ignoreStock,
+      perCarton: cell.perCarton || father.perCarton,
+      perPack: cell.perPack || father.perPack,
+    });
+  }
   const unitsByItem = new Map();
   const checked = order.lines.map((line) => {
     const itemKey = String(line.itemkey).trim();

@@ -1,0 +1,215 @@
+// HTTP API for the web app (shared/contract.md). Plain node:http, no extra dependencies.
+//   node bridge/server.js            (npm start)
+// Env (.env.local): BRIDGE_TOKEN (required), BRIDGE_HOST (default 127.0.0.1), BRIDGE_PORT (default 8787).
+// Binds to localhost by default: exposing it (e.g. a tunnel for Vercel) is a separate, deliberate step.
+import http from 'node:http';
+import crypto from 'node:crypto';
+import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
+import { ORDER_DOCUMENT_IDS } from './config.js';
+
+const TOKEN = process.env.BRIDGE_TOKEN;
+const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
+const PORT = Number(process.env.BRIDGE_PORT || 8787);
+const ITEMS_TTL_MS = 60_000;
+const MAX_BODY = 1_000_000;
+
+if (!TOKEN || TOKEN.length < 24) {
+  console.error('BRIDGE_TOKEN missing or shorter than 24 chars - set it in .env.local');
+  process.exit(1);
+}
+
+class HttpError extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+// --- item shaping (contract type Item) ---------------------------------------------
+const toItem = (i) => ({
+  itemkey: i.itemKey,
+  itemName: i.name,
+  foreignName: i.foreignName || undefined,
+  price: i.price,
+  barcode: i.barCode || undefined,
+  brand: i.brand || undefined,
+  categoryMain: i.mainCategory || undefined,
+  categorySub: i.subCategory || undefined,
+  season: i.season || undefined,
+  rulerCode: i.sizeRulerCode || undefined,
+  color: i.color || undefined,
+  perCarton: i.perCarton || undefined,
+  perBundle: i.perPack || undefined,
+  shownOnSite: i.shownOnSite,
+  ignoreStock: i.ignoreStock,
+  isMatrix: i.isMatrix,
+  stock: i.stock ?? 0,
+});
+
+// The full catalog read is ~1s (12k items + extra fields), so it is cached briefly.
+let itemsCache;
+async function allItems() {
+  if (!itemsCache || Date.now() - itemsCache.at > ITEMS_TTL_MS) {
+    itemsCache = { at: Date.now(), items: read.getItems() };
+    itemsCache.items.catch(() => (itemsCache = undefined));
+  }
+  return itemsCache.items;
+}
+
+// --- routes ------------------------------------------------------------------------
+const routes = [
+  ['GET', /^\/health$/, async () => ({ ok: true }), { public: true }],
+
+  ['GET', /^\/items$/, async ({ query }) => {
+    let items = await allItems();
+    if (query.get('shownOnSite') === '1') items = items.filter((i) => i.shownOnSite);
+    const category = query.get('category');
+    if (category) items = items.filter((i) => i.subCategory === category || i.mainCategory === category);
+    const search = query.get('search')?.trim().toLowerCase();
+    if (search) {
+      items = items.filter((i) =>
+        [i.itemKey, i.name, i.foreignName, i.barCode].some((v) => v && String(v).toLowerCase().includes(search)),
+      );
+    }
+    return items.map(toItem);
+  }],
+
+  ['GET', /^\/items\/([^/]+)$/, async ({ params: [itemKey] }) => {
+    const item = await read.getItem(itemKey);
+    if (!item || !item.active) throw new HttpError(404, 'ITEM_NOT_FOUND', `הפריט ${itemKey} לא נמצא`);
+    const result = toItem(item);
+    if (item.isMatrix) result.cells = await read.getMatrixCells(item.itemKey);
+    return result;
+  }],
+
+  ['GET', /^\/customers$/, async ({ query }) => {
+    const agent = query.get('agent');
+    const rows = await read.getAccounts(agent ? { agent: Number(agent) } : {});
+    return rows.map((a) => ({
+      accountKey: a.AccountKey.trim(),
+      fullName: a.FullName?.trim(),
+      agent: a.Agent || undefined,
+      discountCode: a.DiscountCode ? String(a.DiscountCode) : undefined,
+      totalDiscountPct: a.TFtalDiscount || 0,
+      forPicking: !/לא לליקוט/.test(a.FullName ?? ''),
+    }));
+  }],
+
+  ['GET', /^\/stock\/([^/]+)$/, async ({ params: [itemKey] }) => {
+    const item = await read.getItem(itemKey);
+    if (!item) throw new HttpError(404, 'ITEM_NOT_FOUND', `הפריט ${itemKey} לא נמצא`);
+    if (!item.isMatrix) return { itemkey: item.itemKey, qty: item.stock ?? 0 };
+    const cells = await read.getMatrixCells(item.itemKey);
+    return {
+      itemkey: item.itemKey,
+      qty: cells.reduce((sum, c) => sum + c.stock, 0),
+      cells: cells.map((c) => ({ itemkey: c.itemkey, qty: c.stock })),
+    };
+  }],
+
+  ['GET', /^\/price$/, async ({ query }) => {
+    const accountKey = query.get('account')?.trim();
+    const itemKey = query.get('item')?.trim();
+    const qty = Number(query.get('qty') ?? 0);
+    if (!accountKey || !itemKey) throw new HttpError(400, 'BAD_REQUEST', 'חסרים לקוח או פריט');
+    const p = (await resolvePrices(accountKey, [itemKey], { quantities: { [itemKey]: qty } })).get(itemKey);
+    if (!p) throw new HttpError(404, 'ITEM_NOT_FOUND', `הפריט ${itemKey} לא נמצא`);
+    return {
+      itemkey: itemKey,
+      accountKey,
+      qty,
+      unitPrice: p.price,
+      discountPct: p.discountPrc,
+      netUnitPrice: Math.round(p.price * (1 - p.discountPrc / 100) * 100) / 100,
+      source: p.source === 'discount' || p.source === 'base' ? 'pricelist' : p.source,
+    };
+  }],
+
+  // ?dryRun=1 validates and writes inside a rolled-back transaction (nothing saved).
+  ['POST', /^\/orders$/, async ({ query, body }) => {
+    if (!body || typeof body !== 'object') throw new HttpError(400, 'BAD_REQUEST', 'גוף הבקשה חסר');
+    const dryRun = query.get('dryRun') === '1';
+    const result = await writeOrder(
+      {
+        accountKey: body.accountKey,
+        orderKind: body.orderKind ?? 'picking',
+        remarks: body.remarks,
+        lines: body.lines,
+        shipping: body.shipping,
+      },
+      { commit: !dryRun },
+    );
+    return {
+      stockId: dryRun ? null : result.orderId,
+      dryRun,
+      documentId: result.documentId,
+      totals: result.totals,
+      lines: result.lines,
+    };
+  }],
+];
+
+// --- plumbing ----------------------------------------------------------------------
+function authorized(req) {
+  const header = req.headers.authorization ?? '';
+  const given = Buffer.from(header.startsWith('Bearer ') ? header.slice(7) : '');
+  const expected = Buffer.from(TOKEN);
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+}
+
+async function readBody(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > MAX_BODY) throw new HttpError(413, 'TOO_LARGE', 'הבקשה גדולה מדי');
+    chunks.push(chunk);
+  }
+  if (!size) return undefined;
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    throw new HttpError(400, 'BAD_JSON', 'JSON לא תקין');
+  }
+}
+
+function send(res, status, payload) {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': Buffer.byteLength(body) });
+  res.end(body);
+}
+
+const server = http.createServer(async (req, res) => {
+  const started = Date.now();
+  const url = new URL(req.url, 'http://bridge');
+  let status = 500;
+  try {
+    const match = routes
+      .map(([method, pattern, handler, opts]) => ({ method, m: url.pathname.match(pattern), handler, opts }))
+      .find((r) => r.m && r.method === req.method);
+    if (!match) throw new HttpError(404, 'NOT_FOUND', 'נתיב לא קיים');
+    if (!match.opts?.public && !authorized(req)) throw new HttpError(401, 'UNAUTHORIZED', 'אין הרשאה');
+    const body = req.method === 'POST' ? await readBody(req) : undefined;
+    const params = match.m.slice(1).map(decodeURIComponent);
+    const result = await match.handler({ query: url.searchParams, params, body });
+    status = 200;
+    send(res, status, result);
+  } catch (err) {
+    if (err instanceof HttpError) status = err.status;
+    else if (err instanceof OrderError) status = err.code === 'SCHEMA' ? 500 : 422;
+    else console.error(err);
+    const message = status === 500 && !(err instanceof OrderError) ? 'שגיאת שרת' : err.message;
+    send(res, status, { error: { code: err.code ?? 'INTERNAL', message } });
+  } finally {
+    console.log(`${new Date().toISOString()} ${req.method} ${url.pathname} ${status} ${Date.now() - started}ms`);
+  }
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
+});
+
+const shutdown = () => server.close(() => closeAll().finally(() => process.exit(0)));
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
