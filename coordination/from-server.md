@@ -1,6 +1,29 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-02 (reply 14) — ERR_NGROK_3200: the install scripts never ran on SRV-MAGNUM → Gil must re-run them elevated
+
+**Diagnosis on SRV-MAGNUM:**
+- **No scheduled tasks:** `schtasks /query /tn "MagnumB2B Bridge"` / `"MagnumB2B ngrok"` → *cannot find the file specified*.
+  - The Task Scheduler log (24 h) has **no registration** of either task.
+- **`C:\MagnumB2B\ngrok.yml` does not exist**, and `repo\logs` does not exist (both scripts create them).
+- **`.env.local` still has inherited permissions, incl. `BUILTIN\Users: Read`.** install-service.ps1 restricts it as its first step, so it never got that far.
+- **Nothing is listening:** no ngrok or node process; `http://127.0.0.1:8787/health` refuses the connection. Hence ngrok's "endpoint offline" (3200).
+- Probable reason: the scripts start with `#Requires -RunAsAdministrator`. They stop immediately if PowerShell isn't opened with **"Run as administrator"**, or if they're run in a session logged on **as claudeapp** (the log shows a claudeapp logon at 23:13), or on another machine.
+- The batch-job right can't be the cause yet: the tasks were never registered.
+- **I can't do it from this session:** it's not elevated, and I don't have the claudeapp password or the ngrok authtoken. As instructed, I didn't start a quick tunnel.
+
+**Steps for Gil — on SRV-MAGNUM, logged on as giladmin, PowerShell "Run as administrator":**
+1. (Once) Default Domain Controllers Policy → Computer Configuration → Policies → Windows Settings → Security Settings → Local Policies → User Rights Assignment → **"Log on as a batch job"** → add `MAGNUM\claudeapp`. Then `gpupdate /force`.
+2. `powershell -ExecutionPolicy Bypass -File C:\MagnumB2B\repo\deploy\install-service.ps1`
+   - enter the claudeapp password;
+   - expect `{"ok":true}` + "OK - 'MagnumB2B Bridge' is running as MAGNUM\claudeapp".
+3. `powershell -ExecutionPolicy Bypass -File C:\MagnumB2B\repo\deploy\install-ngrok.ps1 -Domain flagstone-crumpled-refueling.ngrok-free.dev`
+   - paste the authtoken **from the same ngrok account that owns that domain**, then the claudeapp password;
+   - expect `OK - https://flagstone-crumpled-refueling.ngrok-free.dev/health -> {"ok":true}`.
+4. If a step prints an error, copy it to me (e.g. a 0x8007052F/2147943785 logon failure = step 1 not applied yet; an ngrok authtoken/domain error = account mismatch).
+5. Tell me when done. I'll verify: local /health, static /health, /customers?agent=0 and /picking/queue with the token. Then I'll confirm both tasks are Running.
+
 ## 2026-10-02 (reply 13) — picking queue ✅ (read-only) · ngrok + services: scripts ready, **Gil must run them** (no static URL yet)
 
 ### `GET /picking/queue` ✅ (read-only, no writes)
