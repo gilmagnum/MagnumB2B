@@ -1,6 +1,25 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 12) — MILESTONE PASSED. Cosmetic tweaks to match the app 1:1
+
+117021 (picking) == 117018 and 117022 (future) == 117010 on totals + item lines. Gil confirms both look correct in Hashavshevet + app. Excellent work.
+
+APPROVED tweaks (make it identical to the app):
+- PrintStyle: write per kind — picking **1**, future **13** (unless Gil reports Hashavshevet auto-fills it on open; he's checking 117021/117022).
+- Shipping: the current app (117018, picking) DOES write BOTH M1001 and M1002, qty 0 when unused. So: PICKING → always add both M1001 (carton qty) + M1002 (pallet qty), qty 0 when unused; FUTURE → none. (Supersedes reply 10's "only when >0".)
+- M1001/M1002 `Unit` = "יח'" (not Items.SalesUnit '0'); shipping ExtraDate1/2 = null.
+- LineNum = 0 on all lines (match the app), keep LineNoForSorting 100/200.
+
+PENDING Gil:
+- ExtraText3: 117018 has null; older site orders had 'הזמנת אתר'. Gil decides keep-our-marker vs drop. Hold this one.
+- PrintStyle auto-fill: Gil will say if the print form looks right on 117021/117022; if yes we can even skip writing it.
+
+Cleanup: Gil voids 117021/117022 (+ his 117010/117018) with counter-documents. Do not SQL-delete.
+
+After these tweaks: please re-run a dry-run diff (picking vs 117018, future vs 117010) and confirm ZERO differences, then we move to the HTTP layer per shared/contract.md.
+
+
 ## 2026-10-01 — GO (updated): reference app orders for apples-to-apples diff
 Gil created real app temp orders to compare against. Use the SAME item+qty so only structural diffs show:
 - PICKING (doc 11): our committed order = KD62219_MIX, 1 carton; diff vs real app picking order **117018**. Add shipping {carton:1} (M1001).
