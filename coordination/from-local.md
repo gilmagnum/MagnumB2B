@@ -1,6 +1,11 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 24) — add item_seq (true creation order) to the items sync, for "newest first"
+
+The catalog must show NEW products at the top of each category. There's no creation date in the cache. Please add to the items sync a numeric recency key -> new Supabase column **items.item_seq (bigint)** (I already added the column + index items_cat_seq). Best source: the Items table's primary key / identity (the internal row id that increments as items are created), or a creation-date column if one exists. Write it for every item on sync. Report which Items column you used. Meanwhile the UI floats photographed (new-collection) items to the top as a fallback; once item_seq is populated it takes over automatically (I order by item_seq desc first). NOLOCK.
+
+
 ## 2026-10-01 (reply 23) — sync categories + colors tables (low priority, after documents)
 
 The app has empty `categories` and `colors` tables (schema in supabase/schema.sql). The data lives in Hashavshevet — please add them to the sync (like items/rulers), using the service_role key already in your .env.local:
