@@ -1,6 +1,51 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 5) — 8.55 found (SpecialPricesMoves); backtest 56.9% → **91.5%**; shipping/PrintStyle done
+
+### Pricing: the price lives in `SpecialPricesMoves`, not `SpecialPrices`
+- **`SpecialPrices` is only the header:** AccountKey, ItemKey, ValidDate/EndDate. Its `Price` column is always 0. That's why every earlier scan found nothing.
+- **The price itself is in `SpecialPricesMoves`:** one row per header (`SPID` = SpecialPrices.ID) with Price, DiscountPrc, MinQuantity, Active. That's 189,497 rows; 189,378 have Price > 0.
+- **11724 × BR11506** has 3 headers:
+  - 161023: 2022-03-13, 14 at −28%;
+  - 163084: 2022-03-27, 14 at −28.5%;
+  - **200208: 2024-09-22 → 2028-12-31, Price 8.55, 0%** — the row on Gil's screen. ✅
+- **`Active` must be ignored.** The 8.55 row has Active = 0 (header and move), yet it's what gets charged. The older Active = 1 rows are the superseded ones.
+  - Backtest with an Active = 1 filter: **51.5%**. Without it: **91.5%**.
+  - The rule is the latest ValidDate whose range covers the order date.
+- **Resolver now** (`bridge/pricing.js`):
+  1. Special: SpecialPrices header ⋈ SpecialPricesMoves, AccountKey IN (customer, AssignKey), ValidDate ≤ date ≤ EndDate, move Price > 0, MinQuantity ≤ units. Order: own account first, then latest ValidDate, then highest tier. Gives Price + DiscountPrc from the move.
+  2. Else price list (latest DatF ≤ date) minus Discounts % (AccountKey × Items.DiscountCode).
+  - `/price` returns `source`: `special` | `special-central` | `discount` | `base`.
+- **Backtest** (last 60 site orders, 656 lines, each priced as of its own IssueDate + quantities): **600 / 656 = 91.5%** (was 56.9%).
+
+  | source | match | miss |
+  |---|---|---|
+  | special-central | 112 | 17 |
+  | special | 154 | 26 |
+  | discount | 303 | 11 |
+  | base | 31 | 2 |
+
+- **Remaining 56 misses** look like manual edits on the order, not a missing rule:
+  - 11356: 25% instead of the customer's 20%;
+  - 11507: 12.7 net instead of 15 − 10% (= 13.5);
+  - 11719: 14.53 while the central special is 17;
+  - 10446: the site charged 21 − 20% although central has a special 15.5;
+  - 11728 BR19625: 8.5 vs 8.55.
+  - If you want, Gil can spot-check one or two in Hashavshevet. I consider pricing done for display.
+
+### Shipping — picking only, when used ✅
+M1001 (`shipping.carton`) / M1002 (`shipping.pallet`) are added only when `orderKind = 'picking'` **and** qty > 0, at price 0. Future orders never get them.
+Dry run: picking with `{carton:1, pallet:0}` → M1001 only; future → none.
+
+### PrintStyle — omitted ✅ (to verify on the milestone order)
+- writeOrder no longer writes PrintStyle. The read-back shows the column default, **0**, for both doc 11 and doc 6 (site orders have 1 / 13).
+- Whether Hashavshevet replaces the 0 from the customer when the document is opened or printed can't be seen in a rolled-back dry run. I'll check it on the committed milestone order. If it stays 0 and printing breaks, we'll write the customer's value.
+
+### Status
+- Dry runs: account 10 only, all rolled back (Stock.ID 117014–117017 consumed as gaps).
+- **Committed milestone order: still on hold for Gil's GO.**
+
 ## 2026-10-01 (reply 4) — future = DocumentID 6 confirmed; central-account pricing does NOT close the gap
 
 ### 1. Future order 117010 → **DocumentID 6 ("הזמנה")** ✅

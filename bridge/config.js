@@ -34,7 +34,7 @@ export const ORDER_WAREHOUSE = 1;
 export const VAT_PRC = 18;
 export const TEST_ACCOUNT_KEY = '10'; // "לקוחות שונים לא לליקוט"
 
-// Always added, price 0 (priced manually in Hashavshevet). API shipping.carton -> parcel line.
+// Picking orders only, when used; price 0 (priced manually in Hashavshevet). API shipping.carton -> parcel line.
 export const SHIPPING_ITEMS = {
   carton: { itemKey: 'M1001', name: 'משלוח חבילה B2B' },
   pallet: { itemKey: 'M1002', name: 'משלוח משטח B2B' },
@@ -61,9 +61,10 @@ export const HEADER_DEFAULTS = {
   ExtraDate2: new Date(Date.UTC(1997, 0, 1)),
 };
 // Per order kind, as the current site writes them (picking: order 116993, future: order 117010).
+// PrintStyle is not written - Hashavshevet takes it from the customer.
 export const HEADER_BY_KIND = {
-  picking: { PrintStyle: 1, ExtraText3: 'הזמנת אתר' },
-  future: { PrintStyle: 13, ExtraText3: null },
+  picking: { ExtraText3: 'הזמנת אתר' },
+  future: { ExtraText3: null },
 };
 export const LINE_DEFAULTS = {
   CurrencyCode: CURRENCY,

@@ -140,11 +140,10 @@ export async function writeOrder(order, { commit = false } = {}) {
 
   const itemKeys = [...new Set(order.lines.map((l) => String(l.itemkey).trim()))];
   const shippingKeys = Object.values(SHIPPING_ITEMS).map((s) => s.itemKey);
-  const [account, items, rows, prices, columns] = await Promise.all([
+  const [account, items, rows, columns] = await Promise.all([
     getAccount(accountKey),
     Promise.all(itemKeys.map((k) => getItem(k))),
     getItemRows([...itemKeys, ...shippingKeys]),
-    resolvePrices(accountKey, itemKeys),
     tableColumns(),
   ]);
   if (!account) throw new OrderError('ACCOUNT_NOT_FOUND', `הלקוח ${accountKey} לא נמצא`);
@@ -152,7 +151,7 @@ export async function writeOrder(order, { commit = false } = {}) {
 
   const itemByKey = new Map(itemKeys.map((k, i) => [k, items[i]]));
   const unitsByItem = new Map();
-  const orderLines = order.lines.map((line) => {
+  const checked = order.lines.map((line) => {
     const itemKey = String(line.itemkey).trim();
     const item = itemByKey.get(itemKey);
     if (!item) throw new OrderError('ITEM_NOT_FOUND', `הפריט ${itemKey} לא נמצא`);
@@ -164,6 +163,12 @@ export async function writeOrder(order, { commit = false } = {}) {
     }
     const quantity = line.qty * perUnit;
     unitsByItem.set(itemKey, (unitsByItem.get(itemKey) ?? 0) + quantity);
+    return { line, itemKey, quantity };
+  });
+
+  // Quantity tiers of special prices count the total units per item.
+  const prices = await resolvePrices(accountKey, itemKeys, { quantities: Object.fromEntries(unitsByItem) });
+  const orderLines = checked.map(({ line, itemKey, quantity }) => {
     const resolved = prices.get(itemKey);
     const price = line.price ?? resolved?.price;
     if (!(price >= 0)) throw new OrderError('NO_PRICE', `לא נמצא מחיר לפריט ${itemKey}`);
@@ -181,14 +186,18 @@ export async function writeOrder(order, { commit = false } = {}) {
     }
   }
 
-  const shippingLines = Object.entries(SHIPPING_ITEMS).map(([kind, s]) => ({
-    itemKey: s.itemKey,
-    quantity: order.shipping?.[kind] ?? 0,
-    price: 0,
-    discountPrc: 0,
-    fallbackName: s.name,
-    priceSource: 'shipping',
-  }));
+  // Shipping is charged on picking orders only, and only the lines actually used (price 0,
+  // priced manually in Hashavshevet). Future orders never get shipping lines.
+  const shippingLines = orderKind !== 'picking' ? [] : Object.entries(SHIPPING_ITEMS)
+    .filter(([kind]) => (order.shipping?.[kind] ?? 0) > 0)
+    .map(([kind, s]) => ({
+      itemKey: s.itemKey,
+      quantity: order.shipping[kind],
+      price: 0,
+      discountPrc: 0,
+      fallbackName: s.name,
+      priceSource: 'shipping',
+    }));
   const allLines = [...orderLines, ...shippingLines];
 
   // Hashavshevet stores dates as midnight; the driver sends Date objects as UTC.
