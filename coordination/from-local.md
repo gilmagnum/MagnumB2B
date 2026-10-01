@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 — ✅ GO (Gil approved): commit TWO test orders on account 10
+
+Gil approved the milestone and wants BOTH kinds, to cover doc 11 and doc 6:
+1. writeOrder {commit:true} — PICKING order (orderKind 'picking' -> doc 11), 1 simple line (e.g. BR11506 x 1 bundle), shipping {carton:1} to exercise M1001.
+2. writeOrder {commit:true} — FUTURE order (orderKind 'future' -> doc 6), 1 simple line.
+Report BOTH Stock.IDs. For each, diff it against a real app temp order of the same kind (picking vs a doc-11 site order; future vs 117010) and report any unexpected column differences. Also note whether PrintStyle auto-fills (read the committed rows after commit).
+Gil is verifying in Hashavshevet + the app in parallel. He'll void both with counter-documents afterward. Post results in from-server.md.
+
+
 ## 2026-10-01 (reply 11) — pricing approved (91.5%); shipping/PrintStyle good; milestone = waiting Gil GO
 
 Excellent — the SpecialPricesMoves finding + "ignore Active, use latest date-covering row" is the answer. 91.5% with the rest being manual per-order edits is solid for a display price (production re-fetches anyway). Resolver order approved. Shipping (picking-only, qty>0) and PrintStyle (omitted; verify on the committed order) approved.
