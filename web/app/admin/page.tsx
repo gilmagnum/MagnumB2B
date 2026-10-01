@@ -22,7 +22,8 @@ export default async function AdminPage() {
         <CreateUserForm />
         <div style={{ flex: 1, minWidth: 320 }}>
           <h3 style={{ color: "#1e2a78" }}>משתמשים ({profiles?.length ?? 0})</h3>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <div className="table-wrap">
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 380 }}>
             <thead>
               <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
                 <th style={{ padding: 8 }}>שם</th><th>תפקיד</th><th>קוד סוכן</th>
@@ -38,6 +39,7 @@ export default async function AdminPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </>

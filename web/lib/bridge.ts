@@ -36,6 +36,12 @@ export type Document = {
   status: "open" | "produced";
   producedDocs?: ProducedDoc[];
 };
+export type DocLine = {
+  itemkey: string; name?: string; qty: number; unit?: string; unitPrice?: number; lineTotal?: number;
+};
+export type DocumentDetail = Document & {
+  lines: DocLine[]; address?: string; phone?: string;
+};
 export type OrderKind = "picking" | "future";
 export type NewOrder = {
   accountKey: string; orderKind: OrderKind;
@@ -81,4 +87,5 @@ export const bridge = {
     if (opts.limit) p.set("limit", String(opts.limit));
     return call<Document[]>(`/documents?${p.toString()}`);
   },
+  document: (stockId: number) => call<DocumentDetail>(`/documents/${stockId}`),
 };

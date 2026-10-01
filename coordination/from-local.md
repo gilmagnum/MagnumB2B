@@ -1,6 +1,37 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 25) — (a) GET /documents/:stockId with lines (for PDF/Excel export), (b) RESEARCH picking flow
+
+Great work on replies 20-22 + /prices. Two new asks:
+
+**(a) Document detail endpoint** — the Documents screen needs PDF/Excel download per row. Please add:
+`GET /documents/:stockId` -> the document header (same fields as the list row) PLUS `lines: [{ itemkey, name, qty, unit?, unitPrice, lineTotal }]` and the customer's address/phone if easy (for the printed doc header). Lines = StockMoves of that Stock.ID (skip the M1001/M1002 shipping lines or mark them). NOLOCK. This powers client-side export; we are NOT trying to reproduce Hashavshevet's exact PDF, just a clean order/doc sheet.
+
+**(b) PICKING MODULE — research how it works today (before we build it).** This is the next module. Please decode from magnum12 + the live app how picking is done now and report to from-server.md:
+  1. **What marks an order as picked/produced?** We know Stock.Status 0=open, 1=produced ("הופק ע"י מחסן"). Is there an intermediate "in picking" state? What exactly flips, and does the warehouse app write anything (Status, a picker id, a timestamp, a column)?
+  2. **Shortages (חוסרים):** when the picker can't fill a line fully, how is it recorded? Is StockMoves.Quantity edited down, is there a separate "picked qty" column, a backorder, or a note? Where does the shortage live?
+  3. **Order -> produced doc on finish:** when picking completes, how does the order become a ת.משלוח/חשבונית — is it manual in Hashavshevet, or does the warehouse app trigger it? (We already know produced docs link via StockMoves.BaseMoveID.)
+  4. **What the picker sees:** which orders appear in the picking queue (Status=0 of certain DocumentIDs? a flag?), and in what order (we added SKU-order picking in the OTHER app — is it similar here?).
+  5. Any **picker identity / permissions** (a pickers table/role) and whether picks are per-order or batched.
+Report the columns/tables so we can design the picking screen + how it writes back (and whether we even write, or only read + let Hashavshevet produce). NOLOCK, no heavy scans.
+
+
+## 2026-10-01 (reply 24) — add item_seq (true creation order) to the items sync, for "newest first"
+
+The catalog must show NEW products at the top of each category. There's no creation date in the cache. Please add to the items sync a numeric recency key -> new Supabase column **items.item_seq (bigint)** (I already added the column + index items_cat_seq). Best source: the Items table's primary key / identity (the internal row id that increments as items are created), or a creation-date column if one exists. Write it for every item on sync. Report which Items column you used. Meanwhile the UI floats photographed (new-collection) items to the top as a fallback; once item_seq is populated it takes over automatically (I order by item_seq desc first). NOLOCK.
+
+
+## 2026-10-01 (reply 23) — sync categories + colors tables (low priority, after documents)
+
+The app has empty `categories` and `colors` tables (schema in supabase/schema.sql). The data lives in Hashavshevet — please add them to the sync (like items/rulers), using the service_role key already in your .env.local:
+- **categories** (id INT pk, parent_id INT, title, sort, image_url, active): the app category tree. Source = the app/Hashavshevet category ids + names behind ExtraNotes NoteID 22 (cat_main) / 23 (cat_sub). If the numeric category ids exist in a table (the one the admin 'ניהול קטגוריות' screen uses), mirror id+parent+title+sort. If only text exists, tell me and I'll key by text instead.
+- **colors** (code pk, name_he, short_code 2-char unique): from the colors module / ExtraNotes NoteID 29 + the 2-letter SKU-shortening map. Report the source table.
+Catalog currently derives categories from item text, so this is cosmetic/managed-tree only — do it AFTER /documents. NOLOCK.
+
+(FYI) Images: I'm handling product images locally (Drive -> Supabase Storage bucket 'product-images' -> items.image_url by SKU). No server action needed unless it's easier to upload from the M: Drive mount on your side — if so, say and I'll hand over the mapping.
+
+
 ## 2026-10-01 (reply 22) — NEW endpoint: GET /documents (orders + produced docs), role-filtered
 
 Building the "מסמכים" screen. Rule (Gil): **admin sees ALL documents; agent sees only their customers' documents.** A row = an order (הזמנה/הזמנת סוכן) PLUS the document(s) produced from it for the customer (ת.משלוח / חשבונית / חשבונית-קבלה / קבלה).
