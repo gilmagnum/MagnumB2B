@@ -30,7 +30,7 @@ export function exportPdf(d: DocumentDetail) {
     th,td{border:1px solid #ccc;padding:6px 8px;font-size:13px;text-align:right}
     thead th{background:#1e2a78;color:#fff}tfoot td{font-weight:700}</style></head>
     <body><h1>${d.docTypeName} ${d.docNumber ? "#" + d.docNumber : "(זמני " + d.stockId + ")"}</h1>
-    <div class="meta">${d.customerName} (${d.accountKey})${d.address ? " · " + d.address : ""}${d.phone ? " · " + d.phone : ""}<br>${d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""}</div>
+    <div class="meta">${d.customerName} (${d.accountKey})${d.customer?.address ? " · " + d.customer.address : ""}${d.customer?.phone ? " · " + d.customer.phone : ""}<br>${d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""}</div>
     <table><thead><tr><th>מק״ט</th><th>תיאור</th><th>כמות</th><th>יחידה</th><th>מחיר יח׳</th><th>סה״כ שורה</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr><td colspan="5" style="text-align:left">סה״כ</td><td style="text-align:left">${money(d.total)}</td></tr></tfoot></table>

@@ -35,12 +35,17 @@ export type Document = {
   date: string; total?: number;
   status: "open" | "produced";
   producedDocs?: ProducedDoc[];
+  picked?: boolean;      // Stock.ExtraText2 set (לוקט - …)
+  picker?: string;       // picker name parsed from ExtraText2
 };
 export type DocLine = {
-  itemkey: string; name?: string; qty: number; unit?: string; unitPrice?: number; lineTotal?: number;
+  itemkey: string; name?: string; qty: number; unit?: string;
+  unitPrice?: number; discountPct?: number; lineTotal?: number; isShipping?: boolean;
 };
 export type DocumentDetail = Document & {
-  lines: DocLine[]; address?: string; phone?: string;
+  lines: DocLine[];
+  totalBeforeVat?: number; vatPct?: number; orderDiscountPct?: number; remarks?: string;
+  customer?: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
 };
 export type OrderKind = "picking" | "future";
 export type NewOrder = {
@@ -88,4 +93,12 @@ export const bridge = {
     return call<Document[]>(`/documents?${p.toString()}`);
   },
   document: (stockId: number) => call<DocumentDetail>(`/documents/${stockId}`),
+  // Picking queue (read-only). state "waiting" = awaiting picking (ExtraText2 empty),
+  // "picked" = picked but not yet produced. agentId 0 = all.
+  pickingQueue: (agentId: number, opts: { q?: string; state?: "waiting" | "picked" } = {}) => {
+    const p = new URLSearchParams({ agent: String(agentId) });
+    if (opts.q) p.set("q", opts.q);
+    if (opts.state) p.set("state", opts.state === "picked" ? "picked" : "waiting");
+    return call<Document[]>(`/picking/queue?${p.toString()}`);
+  },
 };
