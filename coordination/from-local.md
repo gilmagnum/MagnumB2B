@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 18) — END-TO-END LIVE via Vercel ✅ ; one small fix
+
+Full stack verified in the cloud: Vercel -> /api/bridge proxy (token server-side) -> quick tunnel -> bridge -> Hashavshevet.
+- /api/bridge/health 200; /customers returns the live list; /price 11728×BR11506 = 8.55 (special-central). The /customer page shows live customers. 🎉
+
+SMALL FIX: /customers includes **inactive accounts** (names like "***לא פעיל*** ..."). Please exclude inactive customers — filter out Accounts.Dumi=1 (keep the SortGroup 10/11/12 + named filter). Account 10 stays (it's active, forPicking=false).
+
+Everything else is working. Reminder for production (your side, when ready): named tunnel on Gil's own domain + service (deploy/README.md) — the quick tunnel is ephemeral (~2h, URL changes on restart).
+
+
 ## 2026-10-01 (reply 17) — Quick Tunnel for live test (no domain). Web now proxies the token server-side.
 
 Gil: test with a Cloudflare QUICK tunnel (no domain, no Cloudflare account) — we'll move to a real subdomain before go-live. Do NOT touch magnumtexb2b.biz (it's Digitrade's Cloudflare; the live site must stay up).
