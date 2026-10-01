@@ -1,4 +1,5 @@
 import { supabase, type CatalogItem } from "../../lib/supabase";
+import AddToCart from "../components/AddToCart";
 
 // Catalog list — reads shown-on-site items from Supabase (synced from Hashavshevet by the bridge).
 export default async function CatalogPage() {
@@ -32,6 +33,7 @@ export default async function CatalogPage() {
               {it.price != null ? `${it.price} ₪` : ""} {it.per_carton ? `· ${it.per_carton} בקרטון` : ""}
             </div>
             {it.matrix_flag && <span style={{ fontSize: 11, color: "#1e2a78" }}>מטריצה</span>}
+            <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={it.price} />
           </article>
         ))}
       </div>

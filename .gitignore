@@ -19,3 +19,6 @@ Thumbs.db
 
 # schema dumps contain real customer/order samples (put copies in the Drive folder if needed)
 schema-dump/
+
+# generated catalog seed (production data)
+supabase/seed-*.sql
