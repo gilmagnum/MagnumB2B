@@ -10,6 +10,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const me = await getProfile();
   const agentName = me?.full_name ?? "";
   const isAdmin = me?.role === "admin";
+  const canPick = me?.role === "picker" || me?.role === "admin";
 
   return (
     <html lang="he" dir="rtl">
@@ -23,6 +24,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
               <a href="/catalog">קטלוג</a>
               <a href="/cart">🛒 סל</a>
               <a href="/documents">מסמכים</a>
+              {canPick && <a href="/picking">ליקוט</a>}
               {isAdmin && <a href="/admin">ניהול</a>}
               {agentName && <span style={{ opacity: 0.85 }}>{agentName}</span>}
               <form action={logout} style={{ display: "inline" }}>

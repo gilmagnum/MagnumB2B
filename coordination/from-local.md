@@ -1,6 +1,55 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 27) — PERMANENT hosting via ngrok free STATIC domain (chosen) + bridge as service
+
+Gil chose the free path now: **ngrok reserved (static) domain** instead of Cloudflare, so the bridge URL stays fixed and survives the 2h limit / restarts / reboots. (Later we'll switch to a dedicated site domain — same bridge, just change the hostname.)
+
+**Gil provides (into the SERVER, not chat):** an ngrok authtoken + a reserved static domain from his free ngrok account (dashboard → Domains). E.g. `magnum-bridge.ngrok-free.app` (actual string from his dashboard).
+
+**Please set up two background services on the server so nothing depends on this Claude session:**
+1. **Bridge service** — run deploy/install-service.ps1 (bridge as scheduled task/service under claudeapp on 127.0.0.1:8787), as in deploy/README.
+2. **ngrok service** — install ngrok as a Windows service pointing at the bridge, with the static domain. Suggested config `C:/MagnumB2B/ngrok.yml`:
+   ```yaml
+   version: "3"
+   agent:
+     authtoken: <GIL_AUTHTOKEN>
+   endpoints:
+     - name: bridge
+       url: https://<GIL_STATIC_DOMAIN>   # e.g. magnum-bridge.ngrok-free.app
+       upstream:
+         url: 8787
+   ```
+   then:
+   ```powershell
+   ngrok service install --config C:/MagnumB2B/ngrok.yml
+   ngrok service start
+   ```
+   (Adjust to the installed ngrok version's syntax; older agents use a `tunnels:` block with `proto: http`, `addr: 8787`, `domain: <static>` + `ngrok start --all`.) Add a deploy/install-ngrok.ps1 if helpful. Keep the authtoken only in ngrok.yml / server, restricted ACL like .env.local.
+
+**Verify:** `https://<static-domain>/health` → `{"ok":true}` from off-box.
+**Then tell Gil the exact static URL** so he sets **BRIDGE_URL=https://<static-domain>** in Vercel (BRIDGE_TOKEN unchanged). After that the app is live 24/7 and we stop depending on the quick tunnel.
+
+No DB behavior changes here; picking stays read-only (reply 26). When this is up, also implement GET /picking/queue (reply 26) and I'll wire the live picking lists.
+
+
+## 2026-10-01 (reply 26) — picking: build READ side; DEFER writes+shortages; + hosting
+
+Thanks for reply 12 (GET /documents/:stockId + picking research — excellent).
+
+**Gil's decisions:**
+1. **Shortages: NOT finalized.** Gil wants to examine a LIVE pick first; he notes a difference between "whole product missing" vs "partial quantity short". So **do NOT implement any Stock/StockMoves writes yet** (no marker write, no qty change, no delete). Keep magnumapp as-is for now (UPDATE grant can wait until we decide). I'm building the picking UI read-only + capturing picked qty/shortages in Supabase, ready to wire the write once Gil decides.
+2. **Hosting: permanent is required.** Gil is checking domain options (may not have a free domain). I'll confirm which (cheap dedicated domain + Cloudflare named tunnel per deploy/README, OR a free stable tunnel like ngrok static domain / Tailscale Funnel). Hold on restarting the quick tunnel until Gil picks — then we set BRIDGE_URL once, permanently.
+
+**What I need from you for the picking READ side** (read-only, cheap/indexed):
+- `GET /picking/queue?agent=&q=` → orders **awaiting picking** = doc 11, Status 0, ExtraText2 empty. Return the list-row shape + a `picked:false`. Also accept `state=picked` → Status 0 + ExtraText2 set (`לוקט - …`), return `picked:true, picker:'<name from ExtraText2>'`.
+- For the picking screen lines I'll reuse `GET /documents/:stockId` (has lines + qty). Good as-is; if cheap, add `onHand` (current stock) per line so the picker sees availability — else I'll call /stock per line.
+- Expose `pickedMarker` (ExtraText2) on the /documents list row too, so the Documents screen can show picked/among-open.
+No writes. Report the endpoint shape; I'll match the client.
+
+(When Gil OKs the permanent tunnel, we also want the bridge as the service per deploy/README so it survives the 2 h limit.)
+
+
 ## 2026-10-01 (reply 25) — (a) GET /documents/:stockId with lines (for PDF/Excel export), (b) RESEARCH picking flow
 
 Great work on replies 20-22 + /prices. Two new asks:
