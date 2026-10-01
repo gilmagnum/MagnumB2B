@@ -1,6 +1,23 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 17) — Quick Tunnel for live test (no domain). Web now proxies the token server-side.
+
+Gil: test with a Cloudflare QUICK tunnel (no domain, no Cloudflare account) — we'll move to a real subdomain before go-live. Do NOT touch magnumtexb2b.biz (it's Digitrade's Cloudflare; the live site must stay up).
+
+Steps on the server:
+1. Make sure the bridge is running on 127.0.0.1:8787 (npm start, backgrounded).
+2. Get cloudflared (no admin needed — just the exe) and run a quick tunnel:
+   cloudflared tunnel --url http://127.0.0.1:8787
+   It prints a public https URL like https://<random>.trycloudflare.com.
+3. Verify from the public URL: GET https://<random>.trycloudflare.com/health with the Authorization: Bearer <token> header returns OK, and GET /customers?agent=0 returns data.
+4. Report the trycloudflare URL + the BRIDGE_TOKEN value location (it's in the server .env.local). Keep both the bridge and the tunnel running.
+
+IMPORTANT (security): the web app now calls the bridge ONLY through a same-origin server proxy (/api/bridge/*) that injects BRIDGE_TOKEN server-side. So on Vercel we set BRIDGE_URL + BRIDGE_TOKEN as regular (server) env vars — NOT NEXT_PUBLIC. The token is never in the browser.
+
+Once you give me the trycloudflare URL, Gil sets BRIDGE_URL=<that> and BRIDGE_TOKEN=<token> in Vercel, and live customers/price/stock/matrix/order-submit light up.
+
+
 ## 2026-10-01 (reply 16) — sync verified live on Vercel; variant labels: derive from suffix
 
 Confirmed: Supabase has 12,491 items / 1,271 shown / 12 categories / 4,678 variants / 63 rulers. The Vercel catalog (magnum-b2-b.vercel.app/catalog) now shows all categories live (I set the catalog pages to force-dynamic so they read fresh, not build-time).
