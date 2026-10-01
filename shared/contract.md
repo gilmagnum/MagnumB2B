@@ -71,6 +71,9 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /customers[?agent=:agentId]` → `Customer[]` (the web must pass the logged-in agent's id; no agent = all)
 - `GET /stock/:itemkey` → `{ itemkey, qty }` · matrix: `{ itemkey, qty: <sum>, cells: [{ itemkey, qty }] }`
 - `GET /price?account=&item=&qty=` → `PriceResult`
+- `POST /sync` → full catalog refresh Hashavshevet → Supabase (`items`, `item_variants`, ruler codes); returns
+  `{ items, shown, variants, rulers, deactivated, ms }` (also runs at start + every `SYNC_INTERVAL_MIN`).
+  `GET /sync` → `{ running, last }`. Images/colors/categories are app-layer and never touched.
 - `POST /orders[?dryRun=1]` → create a temp order (DocNumber 0, Status 0):
   ```jsonc
   // body
@@ -78,12 +81,13 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
     "accountKey": "10",
     "orderKind": "picking" | "future",      // picking -> DocumentID 11 "הזמנת סוכן", future -> DocumentID 6 "הזמנה"
     "remarks": "...",                        // optional -> Stock.Remarks
+    "orderDiscountPct": 0,                  // optional, header-level discount % (Stock.DiscountPrc/DiscountPrcR)
     "lines": [ { "itemkey": "WF3400036", "qty": 2, "unit": "carton" | "bundle", "price"?: 8.55, "discountPct"?: 0 } ],
     "shipping": { "carton": 1, "pallet": 0 } // picking only -> M1001 / M1002 (both always written, qty 0 when unused)
   }
   // 200 response
   { "stockId": 117030, "dryRun": false, "documentId": 11,
-    "totals": { "net": 352, "vatPrc": 18, "gross": 415.36 },
+    "totals": { "net": 352, "orderDiscountPct": 5, "netAfterDiscount": 334.4, "vatPrc": 18, "gross": 394.59 },
     "lines": [ { "itemKey": "...", "quantity": 32, "price": 11, "discountPrc": 0, "priceSource": "base" } ] }
   // ?dryRun=1: full validation + write inside a rolled-back transaction; stockId = null, nothing saved
   ```
@@ -91,7 +95,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   - Omit `price` → the bridge prices it (same as /price). If sent, `price` (+ `discountPct`) is written as-is.
   - Matrix: one line per cell SKU (`cells[].itemkey`); the cell inherits shownOnSite/pack sizes/ignoreStock from its parent.
   - Errors: 422 `ApiError` with codes `NO_ACCOUNT, ACCOUNT_NOT_FOUND, ACCOUNT_INACTIVE, BAD_KIND, NO_LINES, BAD_LINE,
-    BAD_SHIPPING, ITEM_NOT_FOUND, ITEM_INACTIVE, ITEM_HIDDEN, NO_PACKING, NO_STOCK, NO_PRICE, WRITE_DISABLED`;
+    BAD_SHIPPING, BAD_DISCOUNT, ITEM_NOT_FOUND, ITEM_INACTIVE, ITEM_HIDDEN, NO_PACKING, NO_STOCK, NO_PRICE, WRITE_DISABLED`;
     400 `BAD_JSON/BAD_REQUEST`; 401 `UNAUTHORIZED`; 500 `INTERNAL/SCHEMA`.
 
 ## Rules the bridge enforces (server owns)

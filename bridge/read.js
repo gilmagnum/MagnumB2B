@@ -3,7 +3,7 @@ import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS } from './config.js';
 
 const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
 const ITEM_COLUMNS =
-  'ItemKey, ItemName, ForignName, Price, BarCode, DiscountCode, MatrixFlag, SuF4, Quantity, SalesUnit';
+  'ItemKey, ItemName, ForignName, Price, BarCode, DiscountCode, MatrixFlag, SuF4, Quantity, SalesUnit, SortGroup';
 
 const trim = (v) => (typeof v === 'string' ? v.trim() : v);
 
@@ -48,6 +48,7 @@ function shapeItem(row, extra = {}) {
     price: row.Price,
     barCode: trim(row.BarCode),
     discountCode: trim(row.DiscountCode),
+    sortGroup: row.SortGroup,
     isMatrix: false, // Items.MatrixFlag is unused here - callers set it from IMatrixItems
     packQuantity: row.SuF4,
     stock: row.Quantity,
@@ -209,4 +210,22 @@ export async function getMatrixFathers(itemKeys) {
     params,
   );
   return new Map(rows.map((r) => [trim(r.ItemKey), trim(r.FItemKey)]));
+}
+
+// All matrix cells of all models, with size/color labels (for the catalog sync).
+export async function getAllMatrixCells() {
+  const rows = await query(
+    `SELECT m.ItemKey, m.FItemKey, m.Line, m.Col, sz.Note AS sizeLabel, cl.Note AS colorLabel
+     FROM IMatrixItems m
+     LEFT JOIN ExtraNotes sz ON sz.KeF = m.ItemKey AND sz.NoteID = 33
+     LEFT JOIN ExtraNotes cl ON cl.KeF = m.ItemKey AND cl.NoteID = 29`,
+  );
+  return rows.map((r) => ({
+    itemKey: trim(r.ItemKey),
+    fatherKey: trim(r.FItemKey),
+    line: r.Line,
+    col: r.Col,
+    sizeLabel: trim(r.sizeLabel) || null,
+    colorLabel: trim(r.colorLabel) || null,
+  }));
 }

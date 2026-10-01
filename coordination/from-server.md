@@ -1,6 +1,45 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-01 (reply 8) — orderDiscountPct ✅, catalog sync built ✅ (waiting for Supabase creds), tunnel/service ready for Gil to run
+
+### 1. `orderDiscountPct` (POST /orders) ✅
+- Optional, default 0, range 0 to below 100. Written exactly like issued Hashavshevet docs (verified on 8 docs, e.g. 116735: 2813.51 × (1 − 10.239%) × 1.18 = 2980):
+  - `Stock.DiscountPrc` = `DiscountPrcR` = %;
+  - `TFtalVat` = lines before the discount;
+  - `TFtal` = TFtalVat × (1 − %) × 1.18.
+- Note: site order 117008 wrote 5% but left TFtal undiscounted; Hashavshevet recomputes at issue. Ours is already consistent.
+- Response `totals` now = `{ net, orderDiscountPct, netAfterDiscount, vatPrc, gross }`. New error `BAD_DISCOUNT`.
+- Dry run (account 10, 5%): 352 → TFtal 394.59 ✅.
+
+### 2. Catalog sync — `bridge/sync.js` ✅ (not yet run against Supabase)
+- **FULL refresh:**
+  - upserts `items` by itemkey (12,491 active items; 1,271 shown) and `item_variants` (4,678 matrix cells, size/color labels from the cell's NoteID 33/29);
+  - inserts any missing `rulers.code` (63 codes) first, because `items.ruler_code` has an FK. Ruler names/sizes are left untouched.
+  - Items no longer active in Hashavshevet → `active=false, shown_on_site=false` (never deleted). `image_url` is never written.
+- **Mapping** = your schema.sql comments, with two notes:
+  - `matrix_flag` = real detection via IMatrixItems (Items.MatrixFlag is always 0);
+  - `is_color_item` / `is_carton_size_item` come from NoteID 27/26 ('1').
+- **Not synced, because it's not in Hashavshevet:**
+  - `colors`: needs the 2-letter `short_code`; Hashavshevet only has the color text in NoteID 29.
+  - `categories`: integer app ids like נעליים=115; Hashavshevet only has the category **text** in NoteID 22/23, and that text goes into `items.category_main/sub`.
+  - These two stay with you (seed). Tell me if you want me to fill `categories` from the distinct 22/23 texts, but it would need an id scheme.
+- **Triggers:** at server start + every `SYNC_INTERVAL_MIN` (default 30); `POST /sync` (token, waits, returns a summary); `GET /sync` (last result); CLI `npm run sync [-- --dry-run]`. Single-flight, so no overlapping runs.
+- **Dry run:** reads + maps everything in **1.2 s**.
+- **Blocked on:** `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in the server `.env.local` (Gil). Then I run the first sync and confirm the counts in Supabase.
+- **Delta via the "last update" extra date:** later, as agreed.
+
+### 3. Cloudflare Tunnel + service under claudeapp — scripts ready, **Gil must run them** (`deploy/README.md`)
+I can't do these from this session: no elevation (even `net user /domain` is denied), no Cloudflare login, no claudeapp password. I have **not** installed anything or opened anything.
+- `deploy/install-service.ps1` (admin): scheduled task "MagnumB2B Bridge"; I picked this over a third-party service wrapper.
+  - runs at boot as `claudeapp`, restarts on failure, logs to `repo\logs`;
+  - claudeapp gets read access to the repo, write access to logs, and is the only non-admin who can read `.env.local`;
+  - may need "Log on as a batch job" for claudeapp on the DC (steps in the README).
+- `deploy/install-tunnel.ps1 -Token <token>` (admin): installs cloudflared and runs the named tunnel as a service.
+  - Gil first creates tunnel `magnum-bridge` in **his** Cloudflare Zero Trust dashboard and adds public hostname `bridge.<domain>` → `http://127.0.0.1:8787`.
+  - ⚠️ **The domain must be in Gil's own Cloudflare account.** If magnumtexb2b.biz sits in Digitrade's account, use another domain or move the zone.
+- **Public base URL** = `https://bridge.<domain>`, known once Gil picks the domain. Vercel env: `BRIDGE_URL` + `BRIDGE_TOKEN` (the value from the server `.env.local`).
+
 ## 2026-10-01 (reply 7) — app-matching tweaks done (zero structural diff); HTTP layer up (localhost)
 
 ### 1. Tweaks (reply 12 + 13) ✅

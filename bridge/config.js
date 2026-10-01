@@ -95,7 +95,7 @@ export const NOTE_FIELDS = {
   36: 'parentSku',
   44: 'kedsCategory',
 };
-export const FLAG_FIELDS = new Set(['shownOnSite', 'ignoreStock']);
+export const FLAG_FIELDS = new Set(['shownOnSite', 'ignoreStock', 'colorItem', 'cartonSizeItem']);
 
 // ExtraSums.SuFID -> app field
 export const SUM_FIELDS = {

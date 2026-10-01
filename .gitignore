@@ -22,3 +22,6 @@ schema-dump/
 
 # generated catalog seed (production data)
 supabase/seed-*.sql
+
+# bridge service logs
+logs/

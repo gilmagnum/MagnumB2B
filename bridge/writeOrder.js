@@ -105,6 +105,8 @@ function validate(order) {
     const discount = line.discountPct ?? 0;
     if (!(discount >= 0 && discount <= 100)) throw new OrderError('BAD_LINE', `הנחה לא תקינה לפריט ${line.itemkey}`);
   }
+  const orderDiscount = order.orderDiscountPct ?? 0;
+  if (!(orderDiscount >= 0 && orderDiscount < 100)) throw new OrderError('BAD_DISCOUNT', 'הנחת הזמנה לא תקינה');
   for (const [kind, qty] of Object.entries(order.shipping ?? {})) {
     if (!(kind in SHIPPING_ITEMS) || !Number.isInteger(qty) || qty < 0) throw new OrderError('BAD_SHIPPING', 'נתוני משלוח לא תקינים');
   }
@@ -116,6 +118,7 @@ function validate(order) {
  * Body shape = shared/contract.md POST /orders:
  *
  * order = {
+ *   orderDiscountPct?: header-level discount % (default 0),
  *   accountKey, orderKind: 'picking' (DocumentID 11) | 'future' (DocumentID 6), remarks?,
  *   lines: [{ itemkey, qty, unit: 'carton' | 'bundle', price?, discountPct? }],   // matrix: one line per cell SKU
  *   shipping?: { carton?: qty, pallet?: qty },                                    // M1001 / M1002, price 0
@@ -268,7 +271,16 @@ export async function writeOrder(order, { commit = false } = {}) {
   });
 
   // Like Hashavshevet: totals come from the unrounded line sums.
-  const totals = { net: round2(net), vatPrc: VAT_PRC, gross: round2(net * vat) };
+  // Like issued Hashavshevet documents: TFtalVat = lines before the order discount,
+  // DiscountPrc/DiscountPrcR = order discount %, TFtal = TFtalVat x (1 - discount) x VAT.
+  const orderDiscountPct = order.orderDiscountPct ?? 0;
+  const totals = {
+    net: round2(net),
+    orderDiscountPct,
+    netAfterDiscount: round2(net * (1 - orderDiscountPct / 100)),
+    vatPrc: VAT_PRC,
+    gross: round2(net * (1 - orderDiscountPct / 100) * vat),
+  };
 
   const header = fitRow('Stock', columns.Stock, {
     required: {
@@ -278,7 +290,9 @@ export async function writeOrder(order, { commit = false } = {}) {
       CloseType: 0,
       AccountKey: key(trim(account.AccountKey)),
       TFtal: totals.gross, // incl. VAT
-      TFtalVat: totals.net, // net
+      TFtalVat: totals.net, // lines, before the order discount
+      DiscountPrc: orderDiscountPct,
+      DiscountPrcR: orderDiscountPct,
       VatPrc: VAT_PRC,
       Warehouse: ORDER_WAREHOUSE,
     },

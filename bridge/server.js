@@ -6,12 +6,14 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
 import { ORDER_DOCUMENT_IDS } from './config.js';
+import { syncCatalog } from './sync.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
 const PORT = Number(process.env.BRIDGE_PORT || 8787);
 const ITEMS_TTL_MS = 60_000;
 const MAX_BODY = 1_000_000;
+const SYNC_INTERVAL_MIN = Number(process.env.SYNC_INTERVAL_MIN ?? 30); // 0 = no scheduled sync
 
 if (!TOKEN || TOKEN.length < 24) {
   console.error('BRIDGE_TOKEN missing or shorter than 24 chars - set it in .env.local');
@@ -55,6 +57,20 @@ async function allItems() {
     itemsCache.items.catch(() => (itemsCache = undefined));
   }
   return itemsCache.items;
+}
+
+// --- catalog sync (single flight: a running sync is shared, never started twice) -------
+let syncRun;
+let lastSync;
+function runSync(trigger) {
+  syncRun ??= syncCatalog()
+    .then((result) => (lastSync = { ...result, trigger, at: new Date().toISOString() }))
+    .catch((err) => {
+      lastSync = { error: err.message, trigger, at: new Date().toISOString() };
+      throw err;
+    })
+    .finally(() => (syncRun = undefined));
+  return syncRun;
 }
 
 // --- routes ------------------------------------------------------------------------
@@ -126,6 +142,16 @@ const routes = [
     };
   }],
 
+  // Full catalog refresh Hashavshevet -> Supabase. Waits for the result (a few seconds).
+  ['POST', /^\/sync$/, async () => {
+    try {
+      return await runSync('api');
+    } catch (err) {
+      throw new HttpError(502, 'SYNC_FAILED', `הסנכרון נכשל: ${err.message}`);
+    }
+  }],
+  ['GET', /^\/sync$/, async () => ({ running: Boolean(syncRun), last: lastSync ?? null })],
+
   // ?dryRun=1 validates and writes inside a rolled-back transaction (nothing saved).
   ['POST', /^\/orders$/, async ({ query, body }) => {
     if (!body || typeof body !== 'object') throw new HttpError(400, 'BAD_REQUEST', 'גוף הבקשה חסר');
@@ -135,6 +161,7 @@ const routes = [
         accountKey: body.accountKey,
         orderKind: body.orderKind ?? 'picking',
         remarks: body.remarks,
+        orderDiscountPct: body.orderDiscountPct,
         lines: body.lines,
         shipping: body.shipping,
       },
@@ -207,6 +234,17 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  if (SYNC_INTERVAL_MIN > 0 && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const tick = () => runSync('schedule').then(
+      (r) => console.log(`sync ok: ${r.items} items, ${r.variants} cells, ${r.deactivated} deactivated, ${r.ms}ms`),
+      (err) => console.error(`sync failed: ${err.message}`),
+    );
+    tick();
+    setInterval(tick, SYNC_INTERVAL_MIN * 60_000).unref();
+    console.log(`catalog sync every ${SYNC_INTERVAL_MIN} min`);
+  } else {
+    console.log('catalog sync schedule off (SYNC_INTERVAL_MIN=0 or Supabase env missing)');
+  }
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
 });
 
