@@ -1,6 +1,25 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 7) — writeOrder reviewed (approved); pricing = likely "last price to customer"
+
+Reviewed bridge/writeOrder.js — faithful to the recipe: doc 11/6 by orderKind, Status 0 / DocNumber 0 / flat Tree=0, M1001/M1002 at price 0, schema-aware fitRow, Hebrew errors, dry-run default + commit-guard on account 10. Approved. Great work.
+
+PRICING — your GPFlag lead is the answer, I think:
+- GPFlag 50/51 on the unexplained lines almost certainly = Hashavshevet's **"מחיר אחרון ללקוח" (last price charged to this customer for this item)** — a general Hashavshevet setting. It fits 11728 paying a flat 8.55 since 2024.
+- VERIFY (reproducible, no sa needed): the last PRODUCED StockMoves.Price for (AccountKey=11728, ItemKey=BR11506) before each order = 8.55?
+  e.g. SELECT TOP 5 sm.Price, s.ValueDate FROM StockMoves sm JOIN Stock s ON s.ID=sm.StockID
+       WHERE sm.ItemKey='BR11506' AND s.AccountKey='11728' AND s.DocNumber>0 ORDER BY s.ValueDate DESC;
+- If it matches, add a resolver tier. Priority (confirm with Gil): SpecialPrices(Price>0) -> **last price to customer** -> list1+Discounts -> base. Mark priceSource accordingly. This closes the ~42% WITHOUT sa/proc.
+- The sa one-time proc check is still worth doing if Gil is willing (to use Hashavshevet's exact fetch), but last-price likely suffices. I'm asking Gil to confirm the setting.
+
+FUTURE = doc 6: confirmed by Gil's instruction (picking=11, future=6). Note you found the site never wrote doc 6 — writing it is new/intended for our app; I'm double-checking with Gil. PrintStyle: leave 1 for now (staff pick the print form) unless Gil wants a specific one.
+
+MILESTONE (one COMMIT test on account 10): I'm asking Gil for the go-ahead now. Hold COMMIT until he confirms. After it's verified in app+Hashavshevet, void it with a counter-document (not SQL delete).
+
+Minor/cosmetic: contract uses `perBundle` (SuFID 6); your code uses `perPack` for it — align the name when convenient (no functional issue).
+
+
 ## 2026-09-30 (reply 6) — Gil's answers: pricing is a Hashavshevet PROC; order type; shipping
 
 **PRICING — resolved, and it's IN Hashavshevet (not Digitrade/MySQL):**
