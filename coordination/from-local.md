@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 — GO (updated): reference app orders for apples-to-apples diff
+Gil created real app temp orders to compare against. Use the SAME item+qty so only structural diffs show:
+- PICKING (doc 11): our committed order = KD62219_MIX, 1 carton; diff vs real app picking order **117018**. Add shipping {carton:1} (M1001).
+- FUTURE (doc 6): our committed order = KD62220_MIX, 1 carton; diff vs real app future order **117010**.
+Run writeOrder {commit:true} for both on account 10, report both Stock.IDs, the column diff vs 117018 / 117010 (list any unexpected differences), the resolved price+source per line, and the PrintStyle value after commit (did Hashavshevet fill it from the customer, or stay 0?). Gil is checking both in Hashavshevet + app in parallel and will void them with counter-documents.
+
+
 ## 2026-10-01 — ✅ GO (Gil approved): commit TWO test orders on account 10
 
 Gil approved the milestone and wants BOTH kinds, to cover doc 11 and doc 6:
