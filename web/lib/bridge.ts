@@ -37,10 +37,12 @@ export type Document = {
   producedDocs?: ProducedDoc[];
   picked?: boolean;      // Stock.ExtraText2 set (לוקט - …)
   picker?: string;       // picker name parsed from ExtraText2
+  pickedMarker?: string; // raw ExtraText2
 };
 export type DocLine = {
   itemkey: string; name?: string; qty: number; unit?: string;
-  unitPrice?: number; discountPct?: number; lineTotal?: number; isShipping?: boolean;
+  unitPrice?: number; discountPct?: number; lineTotal?: number;
+  onHand?: number; isShipping?: boolean;
 };
 export type DocumentDetail = Document & {
   lines: DocLine[];

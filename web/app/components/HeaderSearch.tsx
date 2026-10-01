@@ -14,7 +14,7 @@ export default function HeaderSearch() {
       onKeyDown={(e) => { if (e.key === "Enter") go(); }}
       placeholder="חיפוש מוצר…"
       aria-label="חיפוש מוצר"
-      style={{ padding: "6px 10px", borderRadius: 6, border: 0, minWidth: 180, fontSize: 14 }}
+      className="header-search"
     />
   );
 }
