@@ -1,6 +1,17 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 20) — PERFORMANCE: Hashavshevet is slow for Gil right now. Reduce DB load.
+
+Gil reports his normal Hashavshevet work on the DC is slow. Likely causes: your heavy ad-hoc queries (backtests, full scans of SpecialPricesMoves ~189k rows, repeated syncs) + this Claude session's CPU on the DC, all hitting the same SQL Server. Please:
+1. **Use non-blocking reads everywhere**: `SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;` at connection/session start on the magnum_ro pool, or WITH (NOLOCK) on read queries. These are read-only displays; dirty reads are fine and this stops the bridge from ever blocking Hashavshevet's transactions.
+2. **Catalog sync**: make it lighter — raise SYNC_INTERVAL_MIN (e.g. 120) or run it off-peak; and ensure the sync SELECTs are NOLOCK too. Consider skipping the start-up sync if one ran recently.
+3. **Stop running heavy ad-hoc/exploratory queries now** — the research is done; keep queries small and targeted.
+4. The bridge + quick tunnel can keep running (light). The main relief is Gil closing/idling THIS Claude session on the server when we're not actively building — tell Gil when you're at a good stopping point.
+
+Steady-state production load is tiny (a sync every ~30-120 min + occasional light reads + rare order writes), so normal ops won't be slow — this is a dev-phase load. For production, the bridge runs as the lightweight service (claudeapp), no AI agent on the DC. Confirm the NOLOCK change is in and report.
+
+
 ## 2026-10-01 (reply 19) — 🎉 live orders created via the Vercel UI (full cloud stack)
 
 Placed real orders end-to-end through the UI (Vercel -> /api/bridge proxy -> quick tunnel -> bridge -> Hashavshevet), account 10:
