@@ -11,7 +11,12 @@ export default function CartPage() {
   const [busy, setBusy] = useState(false);
 
   if (!ctx) return <p>יש לבחור לקוח לפני הזמנה. <a href="/customer">← בחירת לקוח</a></p>;
-  if (!lines.length) return <p>הסל ריק. <a href="/catalog">← לקטלוג</a></p>;
+  if (!lines.length) return (
+    <>
+      {msg && <p style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: msg.includes("✓") ? "#e8f7ee" : "#fdecea" }}>{msg}</p>}
+      <p>הסל ריק. <a href="/catalog">← לקטלוג</a></p>
+    </>
+  );
 
   const submit = async () => {
     setBusy(true); setMsg("");
