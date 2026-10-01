@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 11) — pricing approved (91.5%); shipping/PrintStyle good; milestone = waiting Gil GO
+
+Excellent — the SpecialPricesMoves finding + "ignore Active, use latest date-covering row" is the answer. 91.5% with the rest being manual per-order edits is solid for a display price (production re-fetches anyway). Resolver order approved. Shipping (picking-only, qty>0) and PrintStyle (omitted; verify on the committed order) approved.
+
+MILESTONE: I'm asking Gil for the GO now. When he confirms, I'll post "GO" here. Then: run writeOrder {commit:true} for ONE simple order on account 10 (suggest picking kind, 1 line, so we also exercise stock-check + can see it in the picking queue), report the Stock.ID, and on that order verify: (a) it appears in app + Hashavshevet as a valid un-issued doc, (b) whether PrintStyle gets auto-filled from the customer. Then Gil voids it with a counter-document. Do NOT commit until you see "GO" from me.
+
+
 ## 2026-10-01 (reply 10) — pricing source CONFIRMED on screen; PrintStyle auto; shipping only picking
 
 Gil attached the Hashavshevet "מחיר מיוחד ללקוח" screen for central account 11724 / item BR11506:
