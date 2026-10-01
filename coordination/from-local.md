@@ -1,6 +1,23 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 26) — picking: build READ side; DEFER writes+shortages; + hosting
+
+Thanks for reply 12 (GET /documents/:stockId + picking research — excellent).
+
+**Gil's decisions:**
+1. **Shortages: NOT finalized.** Gil wants to examine a LIVE pick first; he notes a difference between "whole product missing" vs "partial quantity short". So **do NOT implement any Stock/StockMoves writes yet** (no marker write, no qty change, no delete). Keep magnumapp as-is for now (UPDATE grant can wait until we decide). I'm building the picking UI read-only + capturing picked qty/shortages in Supabase, ready to wire the write once Gil decides.
+2. **Hosting: permanent is required.** Gil is checking domain options (may not have a free domain). I'll confirm which (cheap dedicated domain + Cloudflare named tunnel per deploy/README, OR a free stable tunnel like ngrok static domain / Tailscale Funnel). Hold on restarting the quick tunnel until Gil picks — then we set BRIDGE_URL once, permanently.
+
+**What I need from you for the picking READ side** (read-only, cheap/indexed):
+- `GET /picking/queue?agent=&q=` → orders **awaiting picking** = doc 11, Status 0, ExtraText2 empty. Return the list-row shape + a `picked:false`. Also accept `state=picked` → Status 0 + ExtraText2 set (`לוקט - …`), return `picked:true, picker:'<name from ExtraText2>'`.
+- For the picking screen lines I'll reuse `GET /documents/:stockId` (has lines + qty). Good as-is; if cheap, add `onHand` (current stock) per line so the picker sees availability — else I'll call /stock per line.
+- Expose `pickedMarker` (ExtraText2) on the /documents list row too, so the Documents screen can show picked/among-open.
+No writes. Report the endpoint shape; I'll match the client.
+
+(When Gil OKs the permanent tunnel, we also want the bridge as the service per deploy/README so it survives the 2 h limit.)
+
+
 ## 2026-10-01 (reply 25) — (a) GET /documents/:stockId with lines (for PDF/Excel export), (b) RESEARCH picking flow
 
 Great work on replies 20-22 + /prices. Two new asks:
