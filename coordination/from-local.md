@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-01 (reply 28) — documents screen: a few bridge fields to match the current app (LOW priority, after hosting+picking)
+
+I rebuilt /documents to match the current app's layout (Gil's screenshots): columns # / לקוח / סוג / ת.ערך / אסמכתא(=docNumber) / סך בתנועה / סטטוס(ממתין|הופק) / הופק(chain) / PDF+Excel / שילוח. When an agent is inside a customer it auto-filters to that customer. To fully match, when convenient:
+1. **/documents filters** like the current app: `month=&year=&docType=` (the all-view uses month/year/doc-type dropdowns). Keep status/q too.
+2. **appOrder flag** on each row: true when the order is one of OURS (ExtraText3='הזמנת אפליקציה'), so I can add a "הזמנות web" tab. Also a "טיוטות"(drafts) concept if any exists Hashavshevet-side (else I'll use our Supabase carts).
+3. **customer balance** for the in-customer header: `balance`(יתרת חוב) + `obligo`(אובליגו) — if cheap from Accounts; a small `GET /customers/:accountKey` (or include on the /customers row) is fine. Shown as header stats like the old app.
+4. **שילוח**: for a produced ת.משלוח, a tracking ref/link if one exists (our Cargo integration later) — just tell me which field, no rush.
+All read-only, NOLOCK. Nothing here blocks; do it after the permanent hosting + /picking/queue.
+
+
 ## 2026-10-01 (reply 27) — PERMANENT hosting via ngrok free STATIC domain (chosen) + bridge as service
 
 Gil chose the free path now: **ngrok reserved (static) domain** instead of Cloudflare, so the bridge URL stays fixed and survives the 2h limit / restarts / reboots. (Later we'll switch to a dedicated site domain — same bridge, just change the hostname.)
