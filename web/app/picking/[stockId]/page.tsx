@@ -66,18 +66,27 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         shortages: shortageRows, created_by: user?.id ?? null,
       });
     } catch { /* log best-effort */ }
-    // 2) Hashavshevet write (marker + shortages + notes) — when the endpoint is live.
+    // 2) Hashavshevet write (marker + shortages + notes).
+    let note = "";
     try {
       await bridge.finishPicking(doc.stockId, {
         picker, notes: notes.trim() || undefined,
         lines: lines.map((l) => ({ itemkey: l.itemkey, pickedQty: picked[l.itemkey] ?? 0 })),
       });
       hashavshevetOk = true;
-    } catch { /* endpoint/permissions pending */ }
+    } catch (e) {
+      const m = (e as Error).message || "";
+      note = /NO_PERMISSION|501/.test(m) ? "חסרות הרשאות בשרת (GRANT ל-magnumapp) — יוחל לאחר ההרשאה."
+        : /WRITE_DISABLED|403/.test(m) ? "כתיבה לחשבשבת מושבתת כרגע (מצב בדיקה / ORDER_WRITE_ENABLED)."
+        : /NOT_OPEN|409/.test(m) ? "המסמך אינו פתוח (ייתכן שכבר הופק)."
+        : /TREE_UNSUPPORTED/.test(m) ? "הזמנת מטריצה מחשבשבת — יש לסיים אותה בחשבשבת."
+        : /ITEM_NOT_IN_ORDER|422/.test(m) ? "פריט שאינו בהזמנה."
+        : "הגשר לא זמין כרגע.";
+    }
     setSaving(false); setConfirm(false);
     setDone(hashavshevetOk
-      ? `הליקוט הושלם ונשמר ✓ · לוקט ע״י ${picker}`
-      : `התיעוד נשמר באפליקציה ✓ · לוקט ע״י ${picker}. (העדכון בחשבשבת יבוצע כשה-endpoint וההרשאות יוקצו.)`);
+      ? `הליקוט הושלם ונכתב לחשבשבת ✓ · לוקט ע״י ${picker}`
+      : `התיעוד נשמר באפליקציה ✓ · לוקט ע״י ${picker}. (${note})`);
   };
 
   if (err) return <p className="chip chip-warn">{err} <a href="/picking">← לתור</a></p>;

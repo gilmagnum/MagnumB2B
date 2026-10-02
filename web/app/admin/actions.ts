@@ -64,6 +64,20 @@ export async function saveBannerAction(_prev: AdminState, formData: FormData): P
   return { ok: "הבאנר נשמר" };
 }
 
+// Save a ruler's size values (ordered). Used by the simulated-matrix picker.
+export async function saveRulerAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  try { await requireAdmin(); } catch { return { error: "אין הרשאה" }; }
+  const code = String(formData.get("code") ?? "").trim();
+  if (!code) return { error: "קוד סרגל חסר" };
+  const sizes = JSON.parse(String(formData.get("sizes") ?? "[]")) as string[];
+  const clean = sizes.map((s) => String(s).trim()).filter(Boolean);
+  const { error } = await supabaseAdmin().from("rulers")
+    .update({ sizes: clean }).eq("code", code);
+  if (error) return { error: error.message };
+  revalidatePath("/admin/rulers");
+  return { ok: `נשמר (${clean.length} מידות)` };
+}
+
 // Reset a user's password.
 export async function resetPasswordAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
   try { await requireAdmin(); } catch { return { error: "אין הרשאה" }; }
