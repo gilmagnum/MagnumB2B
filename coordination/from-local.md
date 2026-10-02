@@ -1,6 +1,17 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 34) — /documents needs an EXACT account filter (q is LIKE, leaks other customers)
+
+Bug: inside a customer, the Documents screen showed OTHER customers' docs. Reason: I pass the customer's accountKey as `q`, but `q` is a LIKE/contains match (name/accountKey/produced-doc-number), so e.g. account `10` matches 10xxx keys, numbers containing "10", etc. I added a client-side exact filter as a stopgap, but with `limit` the right customer's docs can also be pushed out of the page.
+
+Please add an **exact** account filter:
+- `GET /documents?account=<accountKey>` → only rows where Stock.AccountKey = accountKey (exact), newest first, with the same shape. Keep `q` for free text; `account` wins when both are sent. Honor `agent` too (admin: any; agent: only if that account is theirs, else 403/empty).
+- Same for **`GET /picking/queue?account=`** if easy (for a per-customer picking view later).
+Report when added; I'll switch the in-customer Documents view from `q` to `account`.
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 33) — BRIDGE DOWN after the restart to load the finish code (502 for 45s+)
 
 Gil ran the GRANT, then `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"` to load your reply-18 finish code. Now the public /health has been **502 (ngrok upstream down)** for 45s+ — nothing is answering on 127.0.0.1:8787. The ngrok tunnel task is fine; the BRIDGE process didn't come back (likely crashed on startup — possibly a syntax/runtime error in the new /picking/:id/finish code, or port 8787 wasn't released). Please diagnose + fix (you're on the machine; Gil's chat truncates, so handle it and report):

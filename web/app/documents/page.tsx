@@ -90,6 +90,8 @@ export default function DocumentsPage() {
   useEffect(() => { void load(); }, [agentId, status, onlyCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const colCount = (ctx && onlyCustomer) ? 8 : 9;
+  // Inside a customer, the bridge q is a LIKE match — enforce the exact accountKey here.
+  const visible = (ctx && onlyCustomer) ? docs.filter((d) => String(d.accountKey) === String(ctx.accountKey)) : docs;
 
   return (
     <>
@@ -126,8 +128,8 @@ export default function DocumentsPage() {
               </tr>
             </thead>
             <tbody>
-              {docs.length === 0 && !err && <tr><td colSpan={colCount} style={{ padding: 16, color: "var(--ink-muted)" }}>אין מסמכים להצגה.</td></tr>}
-              {docs.map((d) => {
+              {visible.length === 0 && !err && <tr><td colSpan={colCount} style={{ padding: 16, color: "var(--ink-muted)" }}>אין מסמכים להצגה.</td></tr>}
+              {visible.map((d) => {
                 const open = expanded.has(d.stockId);
                 const dd = detail[d.stockId];
                 return (
