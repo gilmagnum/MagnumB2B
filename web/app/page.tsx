@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "../lib/auth";
 import { supabase } from "../lib/supabase";
+import EnableNotifications from "./components/EnableNotifications";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,8 @@ export default async function Home() {
           <a href={b.cta_link} className="btn" style={{ marginTop: 16, background: "#fff", color: "var(--brand-strong)", border: 0, fontWeight: 700 }}>{b.cta_text}</a>
         )}
       </section>
+
+      <div style={{ margin: "0 0 16px" }}><EnableNotifications /></div>
 
       {/* menu tiles */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 16 }}>

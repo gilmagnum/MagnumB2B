@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Refreshes the Supabase auth session on every request and protects app routes.
 // Agents only: an unauthenticated visitor to a protected page is sent to /login.
-const PUBLIC_PREFIXES = ["/login", "/_next", "/favicon", "/api/bridge",
+const PUBLIC_PREFIXES = ["/login", "/_next", "/favicon", "/api",
   "/manifest.webmanifest", "/sw.js", "/icons"];
 
 export async function middleware(request: NextRequest) {
