@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { logout } from "../login/actions";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { useCart } from "../../lib/useCart";
@@ -11,9 +12,19 @@ type Role = "agent" | "customer" | "picker" | "admin" | "";
 // Home + logout live inside the hamburger.
 export default function AppHeader({ role, name }: { role: Role; name: string }) {
   const { ctx, exit } = useOrderContext();
-  const { count } = useCart();
+  const { count, clear } = useCart();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Exiting a customer is like signing back out to the agent: confirm, empty the
+  // cart, reset pricing (clearing ctx), and return home.
+  const exitCustomer = () => {
+    if (count > 0 && !window.confirm(`יציאה מהלקוח תרוקן את סל ההזמנה (${count} פריטים) ותחזור למחירון הכללי. להמשיך?`)) return;
+    clear();
+    exit();
+    router.push("/");
+  };
   const isAdmin = role === "admin";
   const canPick = role === "picker" || role === "admin";
   const pickerOnly = role === "picker";
@@ -60,7 +71,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
       {ctx && !pickerOnly && (
         <span className="chip chip-info hdr-customer" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ctx.customerName}</span>
-          <button onClick={exit} title="יציאה מהלקוח" aria-label="יציאה מהלקוח"
+          <button onClick={exitCustomer} title="יציאה מהלקוח" aria-label="יציאה מהלקוח"
             style={{ flex: "0 0 auto", border: 0, background: "rgba(0,0,0,.08)", borderRadius: 999, width: 16, height: 16, lineHeight: 1, cursor: "pointer", color: "inherit", fontSize: 11, display: "grid", placeItems: "center" }}>✕</button>
         </span>
       )}
