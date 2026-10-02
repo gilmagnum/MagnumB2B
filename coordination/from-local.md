@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 35) — /customers: order by activity (active first) + numeric-q prefers accountKey
+
+Two improvements to GET /customers (Gil):
+1. **Active customers first.** Order results so active customers come before inactive/dormant ones — e.g. by most-recent order date (max Stock.IssueDate for the account), or an activity/last-transaction field if one exists. Within the same activity bucket keep name order. Tell me which signal you used.
+2. **Numeric query prefers the customer NUMBER.** When `q` is all digits, rank accountKey matches above name matches (exact accountKey → starts-with → contains), so typing "11728" surfaces account 11728 first, not customers whose NAME contains "11728". (I added client-side ranking as a stopgap, but server-side is better since results are paged/limited.)
+
+Also FYI: when you add the exact `account=` param (reply 34) these still apply. Low-medium priority; the picking write + bridge stability come first. Report the activity signal + confirm.
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 34) — /documents needs an EXACT account filter (q is LIKE, leaks other customers)
 
 Bug: inside a customer, the Documents screen showed OTHER customers' docs. Reason: I pass the customer's accountKey as `q`, but `q` is a LIKE/contains match (name/accountKey/produced-doc-number), so e.g. account `10` matches 10xxx keys, numbers containing "10", etc. I added a client-side exact filter as a stopgap, but with `limit` the right customer's docs can also be pushed out of the page.

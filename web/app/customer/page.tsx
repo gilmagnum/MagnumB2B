@@ -57,10 +57,19 @@ export default function CustomerPage() {
 
   // Agent: filter their own list client-side as you type.
   const shown = useMemo(() => {
-    if (role === "admin") return results;
     const term = q.trim().toLowerCase();
-    if (!term) return all;
-    return all.filter((c) => c.fullName?.toLowerCase().includes(term) || String(c.accountKey).includes(term));
+    let list = role === "admin"
+      ? results
+      : (!term ? all : all.filter((c) => c.fullName?.toLowerCase().includes(term) || String(c.accountKey).includes(term)));
+    // If the query is a number, prefer customer-number matches (exact → starts-with → contains → rest).
+    if (/^\d+$/.test(term)) {
+      const rank = (c: Customer) => {
+        const k = String(c.accountKey);
+        return k === term ? 0 : k.startsWith(term) ? 1 : k.includes(term) ? 2 : 3;
+      };
+      list = [...list].sort((a, b) => rank(a) - rank(b));
+    }
+    return list;
   }, [role, results, all, q]);
 
   const choose = (accountKey: string, customerName: string) => select({ accountKey, customerName, orderKind: kind });
