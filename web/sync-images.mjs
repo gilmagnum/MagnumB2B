@@ -68,45 +68,44 @@ const resolve = (sku) => match === "prefix"
   ? itemkeys.filter((k) => k === sku || k.startsWith(sku + "_"))
   : (keySet.has(sku) ? [sku] : []);
 
-const assigned = new Set();           // itemkeys already given a main image this run
-let uploaded = 0, matched = 0, unmatched = [];
+// Group all files (angles) under their base SKU, e.g. WF34000, WF34000_2, WF34000_3 -> WF34000.
+const groups = new Map();   // baseSku -> [files sorted]
+const unmatched = [];
 for (const f of files) {
-  const ext = extname(f).toLowerCase();
   const rawSku = basename(f, extname(f)).trim();
-
-  // Try the full name; if nothing matches, strip a trailing "_<n>" photo index.
-  let sku = rawSku;
-  let targets = resolve(sku);
-  if (targets.length === 0) {
+  let base = rawSku;
+  if (resolve(base).length === 0) {
     const stripped = rawSku.replace(/_\d+$/, "");
-    if (stripped !== rawSku) { const t = resolve(stripped); if (t.length) { sku = stripped; targets = t; } }
+    if (stripped !== rawSku && resolve(stripped).length) base = stripped;
   }
-  if (targets.length === 0) { unmatched.push(rawSku); continue; }
-
-  // Only set the image on items that don't already have one from a lower-index file.
-  targets = targets.filter((k) => !assigned.has(k));
-  if (targets.length === 0) continue;  // a lower-index angle already covered these
-
-  const path = `${sku}${ext}`;
-  let publicUrl;
-  if (dry) {
-    publicUrl = `${url}/storage/v1/object/public/${bucket}/${path}`;
-  } else {
-    const body = readFileSync(join(dir, f));
-    const up = await sb.storage.from(bucket).upload(path, body, { contentType: TYPE[ext] ?? "image/jpeg", upsert: true });
-    if (up.error) { console.error(`upload ${path}:`, up.error.message); continue; }
-    publicUrl = sb.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-    uploaded++;
-  }
-
-  if (!dry) {
-    const { error } = await sb.from("items").update({ image_url: publicUrl }).in("itemkey", targets);
-    if (error) { console.error(`update ${sku}:`, error.message); continue; }
-  }
-  for (const k of targets) assigned.add(k);
-  matched += targets.length;
-  if ((uploaded % 50) === 0 && !dry) console.log(`  …${uploaded} uploaded`);
+  if (resolve(base).length === 0) { unmatched.push(rawSku); continue; }
+  (groups.get(base) ?? groups.set(base, []).get(base)).push(f);
 }
 
-console.log(`\nDone. uploaded=${uploaded} items updated=${matched} unmatched files=${unmatched.length}`);
+let uploaded = 0, itemsUpdated = 0;
+for (const [base, groupFiles] of groups) {
+  const targets = resolve(base);
+  const urls = [];
+  for (const f of groupFiles) {                 // first file = primary, rest = secondary angles
+    const ext = extname(f).toLowerCase();
+    const path = `${basename(f, extname(f)).trim()}${ext}`;
+    if (dry) {
+      urls.push(`${url}/storage/v1/object/public/${bucket}/${path}`);
+    } else {
+      const up = await sb.storage.from(bucket).upload(path, readFileSync(join(dir, f)), { contentType: TYPE[ext] ?? "image/jpeg", upsert: true });
+      if (up.error) { console.error(`upload ${path}:`, up.error.message); continue; }
+      urls.push(sb.storage.from(bucket).getPublicUrl(path).data.publicUrl);
+      uploaded++;
+      if ((uploaded % 50) === 0) console.log(`  …${uploaded} uploaded`);
+    }
+  }
+  if (!urls.length) continue;
+  if (!dry) {
+    const { error } = await sb.from("items").update({ image_url: urls[0], images: urls }).in("itemkey", targets);
+    if (error) { console.error(`update ${base}:`, error.message); continue; }
+  }
+  itemsUpdated += targets.length;
+}
+
+console.log(`\nDone. ${groups.size} products (${uploaded} files uploaded), items updated=${itemsUpdated}, unmatched files=${unmatched.length}`);
 if (unmatched.length) console.log("unmatched (first 20):", unmatched.slice(0, 20).join(", "));
