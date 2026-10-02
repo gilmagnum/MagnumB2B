@@ -84,6 +84,9 @@ export const bridge = {
   stock: (itemkey: string) => call<{ itemkey: string; qty: number }>(`/stock/${encodeURIComponent(itemkey)}`),
   price: (accountKey: string, item: string, qty: number) =>
     call<PriceResult>(`/price?account=${encodeURIComponent(accountKey)}&item=${encodeURIComponent(item)}&qty=${qty}`),
+  // Bulk pricing (≤500 items) for the catalog grid when a customer is entered.
+  prices: (accountKey: string, items: { itemkey: string; qty?: number }[]) =>
+    call<PriceResult[]>(`/prices`, { method: "POST", body: JSON.stringify({ account: accountKey, items }) }),
   createOrder: (order: NewOrder) =>
     call<{ stockId: number }>(`/orders`, { method: "POST", body: JSON.stringify(order) }),
   // Documents list. agentId 0 => all (admin); else the agent's customers.
