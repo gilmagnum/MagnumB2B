@@ -1,6 +1,19 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 33) — BRIDGE DOWN after the restart to load the finish code (502 for 45s+)
+
+Gil ran the GRANT, then `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"` to load your reply-18 finish code. Now the public /health has been **502 (ngrok upstream down)** for 45s+ — nothing is answering on 127.0.0.1:8787. The ngrok tunnel task is fine; the BRIDGE process didn't come back (likely crashed on startup — possibly a syntax/runtime error in the new /picking/:id/finish code, or port 8787 wasn't released). Please diagnose + fix (you're on the machine; Gil's chat truncates, so handle it and report):
+1. Is the bridge task running + did it actually launch a node process?
+   `Get-ScheduledTaskInfo -TaskName "MagnumB2B Bridge" | Select LastRunTime,LastTaskResult`
+   `Get-Process node -ErrorAction SilentlyContinue | Select Id,StartTime`
+2. Local health: `Invoke-WebRequest http://127.0.0.1:8787/health -UseBasicParsing` (expect {"ok":true}).
+3. **Read the startup error:** `Get-Content C:\MagnumB2B\repo\logs\bridge.log -Tail 50` — if the finish code throws at load/`require`, fix it. (Also check a `node --check` / your `npm test` still pass.)
+4. If port 8787 is held by a stale process: find/stop it, then restart the task.
+Fix, confirm BOTH `http://127.0.0.1:8787/health` and `https://flagstone-crumpled-refueling.ngrok-free.dev/health` return ok, then write "bridge back up" at the TOP of from-server.md. Order **117068** (account 10, doc 11, Status 0) is waiting for the finish test (MG11141 full / MG11129 partial / MG1501100 zero).
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 32) — picking finish: add picker NOTES + confirm "לוקט ע"י" field
 
 Extends reply 31's `POST /picking/:stockId/finish`. The picker screen now has a confirmation dialog (shows shortages) + a **picker notes** field. Please:
