@@ -110,6 +110,23 @@ h3 { font-size: 16px; font-weight: 700; }
 }
 .header-search:focus { outline: none; border-color: var(--brand); background: var(--surface); }
 
+/* header icon buttons + hamburger menu */
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 10px; font-size: 18px; line-height: 1;
+  background: var(--surface-muted); border: 1px solid var(--border); color: var(--ink);
+  cursor: pointer; text-decoration: none;
+}
+.icon-btn:hover { border-color: var(--brand); background: var(--surface); }
+.menu-pop {
+  position: absolute; inset-inline-end: 0; top: 46px; z-index: 50;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow-lg); padding: 6px; min-width: 180px; display: flex; flex-direction: column;
+}
+.menu-item { padding: 10px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 600; }
+.menu-item:hover { background: var(--surface-muted); color: var(--brand); }
+@media (max-width: 480px) { .header-search { min-width: 120px; } }
+
 /* ---- layout helpers (kept from before) ---- */
 .img-square { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; background: var(--surface-muted); border-radius: var(--radius-sm); display: block; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
