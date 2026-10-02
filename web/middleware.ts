@@ -41,9 +41,20 @@ export async function middleware(request: NextRequest) {
 
   if (user && path === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/customer";
+    url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  // Pickers are restricted to the picking screens only.
+  if (user && !path.startsWith("/picking")) {
+    const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    if (prof?.role === "picker") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/picking";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

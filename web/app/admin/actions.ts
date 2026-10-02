@@ -47,6 +47,23 @@ export async function createUserAction(_prev: AdminState, formData: FormData): P
   return { ok: `נוצר ${role === "admin" ? "מנהל" : "סוכן"}: ${email}` };
 }
 
+// Save the home-page banner (admin-controlled).
+export async function saveBannerAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  try { await requireAdmin(); } catch { return { error: "אין הרשאה" }; }
+  const value = {
+    title: String(formData.get("title") ?? "").trim(),
+    subtitle: String(formData.get("subtitle") ?? "").trim(),
+    image_url: String(formData.get("image_url") ?? "").trim(),
+    cta_text: String(formData.get("cta_text") ?? "").trim(),
+    cta_link: String(formData.get("cta_link") ?? "").trim(),
+  };
+  const { error } = await supabaseAdmin().from("app_settings")
+    .upsert({ key: "home_banner", value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) return { error: error.message };
+  revalidatePath("/");
+  return { ok: "הבאנר נשמר" };
+}
+
 // Reset a user's password.
 export async function resetPasswordAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
   try { await requireAdmin(); } catch { return { error: "אין הרשאה" }; }

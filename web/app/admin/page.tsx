@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "../../lib/auth";
 import { supabaseAdmin } from "../../lib/supabase/admin";
 import CreateUserForm from "./CreateUserForm";
+import BannerForm from "./BannerForm";
 
 export const dynamic = "force-dynamic";
 
@@ -10,16 +11,21 @@ export default async function AdminPage() {
   if (!me) redirect("/login?next=/admin");
   if (me.role !== "admin") redirect("/customer");
 
-  const { data: profiles } = await supabaseAdmin()
+  const admin = supabaseAdmin();
+  const { data: profiles } = await admin
     .from("profiles")
     .select("id, role, agent_id, full_name, created_at")
     .order("created_at", { ascending: true });
+  const { data: bannerRow } = await admin.from("app_settings").select("value").eq("key", "home_banner").single();
 
   return (
     <>
       <h1>ניהול</h1>
       <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <CreateUserForm />
+        <div style={{ display: "grid", gap: 20 }}>
+          <CreateUserForm />
+          <BannerForm banner={(bannerRow?.value as Record<string, string>) ?? {}} />
+        </div>
         <div style={{ flex: 1, minWidth: 320 }}>
           <h3 style={{ color: "#1e2a78" }}>משתמשים ({profiles?.length ?? 0})</h3>
           <div className="table-wrap">

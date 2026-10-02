@@ -20,5 +20,13 @@ export default async function CategoryPage({ params }: { params: Promise<{ main:
     .limit(3000);
 
   if (error) return <p>שגיאה: {error.message}</p>;
-  return <CatalogView categoryMain={name} items={(data ?? []) as CatalogItem[]} />;
+
+  // All main categories (for the top category bar), ordered by item count.
+  const { data: catRows } = await supabase
+    .from("items").select("category_main").eq("shown_on_site", true).not("category_main", "is", null).limit(5000);
+  const counts = new Map<string, number>();
+  for (const r of catRows ?? []) { const k = (r as { category_main: string }).category_main; counts.set(k, (counts.get(k) ?? 0) + 1); }
+  const allCategories = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+
+  return <CatalogView categoryMain={name} items={(data ?? []) as CatalogItem[]} allCategories={allCategories} />;
 }

@@ -8,10 +8,18 @@ const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN ?? "";
 
 export const dynamic = "force-dynamic";
 
+// Normalize the configured base URL: trim, ensure an https:// scheme, drop a trailing slash.
+function baseUrl(): string {
+  let u = BRIDGE_URL.trim();
+  if (!u) return "";
+  if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+  return u.replace(/\/+$/, "");
+}
+
 async function forward(req: NextRequest, path: string[]) {
-  if (!BRIDGE_URL) return Response.json({ error: "BRIDGE_URL not configured" }, { status: 503 });
-  const search = req.nextUrl.search;
-  const url = `${BRIDGE_URL.replace(/\/$/, "")}/${path.join("/")}${search}`;
+  const base = baseUrl();
+  if (!base) return Response.json({ error: "BRIDGE_URL not configured" }, { status: 503 });
+  const url = `${base}/${path.join("/")}${req.nextUrl.search}`;
   const init: RequestInit = {
     method: req.method,
     headers: {
@@ -23,9 +31,14 @@ async function forward(req: NextRequest, path: string[]) {
     cache: "no-store",
   };
   if (req.method !== "GET" && req.method !== "HEAD") init.body = await req.text();
-  const res = await fetch(url, init);
-  const body = await res.text();
-  return new Response(body, { status: res.status, headers: { "Content-Type": res.headers.get("content-type") ?? "application/json" } });
+  try {
+    const res = await fetch(url, init);
+    const body = await res.text();
+    return new Response(body, { status: res.status, headers: { "Content-Type": res.headers.get("content-type") ?? "application/json" } });
+  } catch (e) {
+    // Surface the real reason (bad URL, DNS, TLS, bridge down) instead of a blank 500.
+    return Response.json({ error: "bridge unreachable", detail: (e as Error).message, url }, { status: 502 });
+  }
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {

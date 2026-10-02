@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useCart } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { bridge } from "../../lib/bridge";
+import { fetchImages } from "../../lib/images";
 
 export default function CartPage() {
   const { lines, setQty, remove, clear } = useCart();
@@ -12,6 +13,13 @@ export default function CartPage() {
   // Final per-unit price for each line, resolved for the entered customer.
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [priceErr, setPriceErr] = useState(false);
+  const [images, setImages] = useState<Record<string, string>>({});
+
+  // Thumbnails for the cart lines.
+  useEffect(() => {
+    if (!lines.length) return;
+    fetchImages(lines.map((l) => l.itemkey)).then(setImages).catch(() => {});
+  }, [lines]);
 
   // Resolve the customer's final price for each line (display-only; Hashavshevet
   // recomputes at production). Keyed by itemkey|unit.
@@ -88,7 +96,17 @@ export default function CartPage() {
             const p = priceOf(l.itemkey, l.unit, l.unitPrice);
             return (
               <tr key={l.itemkey + l.unit} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: 8 }}>{l.title}<div style={{ fontSize: 11, color: "#888" }}>{l.itemkey}</div></td>
+                <td style={{ padding: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {images[l.itemkey] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={images[l.itemkey]} alt="" style={{ width: 40, height: 40, objectFit: "contain", borderRadius: 6, background: "var(--surface-muted)" }} />
+                    ) : (
+                      <div style={{ width: 40, height: 40, borderRadius: 6, background: "var(--surface-muted)" }} />
+                    )}
+                    <div>{l.title}<div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.itemkey}</div></div>
+                  </div>
+                </td>
                 <td>{l.unit === "carton" ? "קרטון" : "חבילה"}</td>
                 <td>
                   <input type="number" min={1} value={l.qty}

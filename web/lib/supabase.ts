@@ -26,6 +26,7 @@ export type CatalogItem = {
   per_carton: number | null;
   per_bundle: number | null;
   image_url: string | null;
+  images?: string[] | null;
   shown_on_site: boolean;
   matrix_flag: boolean;
 };
