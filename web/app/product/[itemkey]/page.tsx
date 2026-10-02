@@ -5,6 +5,7 @@ import { useCart, type Unit } from "../../../lib/useCart";
 import { useOrderContext } from "../../../lib/useOrderContext";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import type { CatalogItem } from "../../../lib/supabase";
+import AddToCart from "../../components/AddToCart";
 
 export default function ProductPage({ params }: { params: Promise<{ itemkey: string }> }) {
   const { itemkey } = use(params);
@@ -126,7 +127,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
 
         {!ctx && <p className="chip chip-warn" style={{ marginBottom: 12 }}>בחר לקוח לפני הזמנה — <a href="/customer" style={{ color: "inherit", textDecoration: "underline" }}>בחירת לקוח</a></p>}
 
-        {(perCarton > 0 || perBundle > 0) && (
+        {isMatrix && (perCarton > 0 || perBundle > 0) && (
           <label style={{ display: "block", margin: "8px 0" }}>
             יחידה:{" "}
             <select value={unit} onChange={(e) => setUnit(e.target.value as Unit)} className="select" style={{ maxWidth: 200, display: "inline-block" }}>
@@ -163,11 +164,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
             ? <p className="chip chip-warn">גריד המידות והמלאי ייטענו כשהגשר יחובר.</p>
             : <p>טוען מידות…</p>
         ) : (
-          <button
-            disabled={!ctx}
-            onClick={() => add({ itemkey: cat.itemkey, title: name, qty: 1, unit, unitPrice: effPrice ?? undefined })}
-            className="btn btn-primary"
-          >הוסף לסל</button>
+          <AddToCart itemkey={cat.itemkey} title={name} perCarton={perCarton} perBundle={perBundle} price={effPrice} />
         )}
       </div>
     </div>
