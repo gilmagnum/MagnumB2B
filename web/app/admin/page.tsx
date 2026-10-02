@@ -21,6 +21,9 @@ export default async function AdminPage() {
   return (
     <>
       <h1>ניהול</h1>
+      <div style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <a href="/admin/rulers" className="btn">📏 סרגלי מידות</a>
+      </div>
       <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ display: "grid", gap: 20 }}>
           <CreateUserForm />
