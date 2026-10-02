@@ -96,7 +96,7 @@ h3 { font-size: 16px; font-weight: 700; }
 
 /* ---- header ---- */
 .app-header {
-  display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   background: var(--surface); border-bottom: 1px solid var(--border);
   padding: 10px 16px; position: sticky; top: 0; z-index: 30; box-shadow: var(--shadow-sm);
 }
@@ -111,9 +111,13 @@ h3 { font-size: 16px; font-weight: 700; }
 }
 .header-search:focus { outline: none; border-color: var(--brand); background: var(--surface); }
 @media (max-width: 640px) { .hdr-user { display: none; } }
+@media (max-width: 560px) {
+  /* search drops to its own full-width second row */
+  .hdr-spacer { display: none; }
+  .header-search { flex: 1 1 100%; width: auto; order: 9; }
+}
 @media (max-width: 460px) {
   .hdr-title { font-size: 14px; max-width: 42vw; }
-  .header-search { width: clamp(80px, 30vw, 160px); padding: 6px 10px; }
   .app-header { gap: 7px; padding: 8px 10px; }
   .icon-btn { width: 34px; height: 34px; font-size: 16px; }
 }
@@ -127,9 +131,10 @@ h3 { font-size: 16px; font-weight: 700; }
 }
 .icon-btn:hover { border-color: var(--brand); background: var(--surface); }
 .menu-pop {
-  position: absolute; inset-inline-end: 0; top: 46px; z-index: 50;
+  position: absolute; inset-inline-start: 0; top: 46px; z-index: 50;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: var(--shadow-lg); padding: 6px; min-width: 180px; display: flex; flex-direction: column;
+  box-shadow: var(--shadow-lg); padding: 6px; min-width: 180px; max-width: min(260px, calc(100vw - 20px));
+  display: flex; flex-direction: column;
 }
 .menu-item { padding: 10px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 600; }
 .menu-item:hover { background: var(--surface-muted); color: var(--brand); }

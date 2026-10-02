@@ -76,7 +76,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
         </span>
       )}
 
-      <div style={{ flex: 1 }} />
+      <div className="hdr-spacer" style={{ flex: 1 }} />
 
       {!pickerOnly && (
         <a href="/cart" className="icon-btn" title="סל" aria-label="סל" style={{ position: "relative" }}>
