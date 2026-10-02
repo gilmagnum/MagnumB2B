@@ -98,6 +98,9 @@ export const bridge = {
     return call<Document[]>(`/documents?${p.toString()}`);
   },
   document: (stockId: number) => call<DocumentDetail>(`/documents/${stockId}`),
+  // Finish picking: marks לוקט ע"י + applies shortages (partial=reduce, 0=delete) + notes.
+  finishPicking: (stockId: number, body: { picker: string; notes?: string; lines: { itemkey: string; pickedQty: number }[] }) =>
+    call<{ ok: boolean; stockId: number; shortages?: unknown[] }>(`/picking/${stockId}/finish`, { method: "POST", body: JSON.stringify(body) }),
   // Picking queue (read-only). state "waiting" = awaiting picking (ExtraText2 empty),
   // "picked" = picked but not yet produced. agentId 0 = all.
   pickingQueue: (agentId: number, opts: { q?: string; state?: "waiting" | "picked" } = {}) => {

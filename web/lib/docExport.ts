@@ -1,24 +1,46 @@
 import type { DocumentDetail } from "./bridge";
 
 const money = (n?: number) => (n != null ? n.toFixed(2) : "");
-const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""')}"`;
 
 type Images = Record<string, string>;
 
-// Excel-friendly CSV (UTF-8 BOM so Hebrew opens correctly in Excel). Includes an image-URL column.
-export function exportExcel(d: DocumentDetail, images: Images = {}) {
-  const head = [
-    [`מסמך`, `${d.docTypeName} ${d.docNumber ? "#" + d.docNumber : "(זמני " + d.stockId + ")"}`],
-    [`לקוח`, `${d.customerName} (${d.accountKey})`],
-    [`תאריך`, d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""],
-    [],
-    [`מק״ט`, `תיאור`, `כמות`, `יחידה`, `מחיר יח׳`, `סה״כ שורה`, `תמונה`],
+// Real .xlsx with the product image embedded IN the cell (not a link). exceljs is
+// loaded on demand so it doesn't weigh down the page bundle.
+export async function exportExcel(d: DocumentDetail, images: Images = {}) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("מסמך", { views: [{ rightToLeft: true }] });
+  ws.columns = [
+    { width: 9 }, { width: 16 }, { width: 34 }, { width: 8 }, { width: 8 }, { width: 11 }, { width: 12 },
   ];
-  const lines = (d.lines ?? []).map((l) => [l.itemkey, l.name ?? "", l.qty, l.unit ?? "", money(l.unitPrice), money(l.lineTotal), images[l.itemkey] ?? ""]);
-  const foot = [[], [``, ``, ``, ``, `סה״כ`, money(d.total)]];
-  const rows = [...head, ...lines, ...foot];
-  const csv = "﻿" + rows.map((r) => r.map(esc).join(",")).join("\r\n");
-  download(new Blob([csv], { type: "text/csv;charset=utf-8" }), `${docBase(d)}.csv`);
+
+  ws.addRow([`${d.docTypeName} ${d.docNumber ? "#" + d.docNumber : "(זמני " + d.stockId + ")"}`]).font = { bold: true, size: 14 };
+  ws.addRow([`לקוח`, `${d.customerName} (${d.accountKey})`]);
+  ws.addRow([`תאריך`, d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""]);
+  ws.addRow([]);
+  const header = ws.addRow(["תמונה", "מק״ט", "תיאור", "כמות", "יחידה", "מחיר יח׳", "סה״כ שורה"]);
+  header.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  header.eachCell((c) => { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E2A78" } }; });
+
+  for (const l of d.lines ?? []) {
+    const row = ws.addRow(["", l.itemkey, l.name ?? "", l.qty, l.unit ?? "", Number(money(l.unitPrice)) || "", Number(money(l.lineTotal)) || ""]);
+    row.height = 40;
+    const url = images[l.itemkey];
+    if (url) {
+      try {
+        const buf = await (await fetch(url)).arrayBuffer();
+        const ext = /\.png($|\?)/i.test(url) ? "png" : "jpeg";
+        const imgId = wb.addImage({ buffer: buf, extension: ext });
+        ws.addImage(imgId, { tl: { col: 0.1, row: row.number - 1 + 0.1 }, ext: { width: 48, height: 48 } });
+      } catch { /* skip image on CORS/fetch error */ }
+    }
+  }
+  ws.addRow([]);
+  const foot = ws.addRow(["", "", "", "", "", "סה״כ", Number(money(d.total)) || ""]);
+  foot.font = { bold: true };
+
+  const out = await wb.xlsx.writeBuffer();
+  download(new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${docBase(d)}.xlsx`);
 }
 
 // Printable HTML -> the browser's "Save as PDF". Shows a product-image thumbnail per line.

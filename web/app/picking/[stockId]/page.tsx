@@ -2,10 +2,11 @@
 import { use, useEffect, useMemo, useState } from "react";
 import { bridge, type DocumentDetail, type DocLine } from "../../../lib/bridge";
 import { fetchImages } from "../../../lib/images";
+import { supabaseBrowser } from "../../../lib/supabase/browser";
 
-// Per-order picking screen. The picker enters the picked quantity per line;
-// the screen flags shortages (whole item missing vs partial). Writing back to
-// Hashavshevet is DEFERRED until Gil examines a live pick — "finish" is disabled.
+// Per-order picking. Picker enters picked qty; shortages are flagged (full vs partial).
+// "סיום ליקוט" opens a confirmation of the shortages + a notes field, saves app
+// documentation, and (when the bridge endpoint is live) marks לוקט ע"י + applies shortages.
 export default function PickOrderPage({ params }: { params: Promise<{ stockId: string }> }) {
   const { stockId } = use(params);
   const id = Number(stockId);
@@ -13,12 +14,23 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [err, setErr] = useState("");
   const [picked, setPicked] = useState<Record<string, number>>({});
   const [images, setImages] = useState<Record<string, string>>({});
+  const [picker, setPicker] = useState("");
+  const [notes, setNotes] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState("");
 
   useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabaseBrowser().auth.getUser();
+      if (user) {
+        const { data: prof } = await supabaseBrowser().from("profiles").select("full_name").eq("id", user.id).single();
+        setPicker(prof?.full_name ?? user.email ?? "");
+      }
+    })();
     bridge.document(id)
       .then((d) => {
         setDoc(d);
-        // default picked = ordered qty (picker reduces where short)
         const init: Record<string, number> = {};
         for (const l of d.lines ?? []) if (!l.isShipping) init[l.itemkey] = l.qty;
         setPicked(init);
@@ -27,7 +39,6 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       .catch(() => setErr("הגשר עדיין לא מחובר — פרטי ההזמנה ייטענו כשהגשר יעלה."));
   }, [id]);
 
-  // Pick in SKU order (no warehouse bins in Hashavshevet).
   const lines = useMemo(
     () => (doc?.lines ?? []).filter((l) => !l.isShipping).sort((a, b) => a.itemkey.localeCompare(b.itemkey)),
     [doc],
@@ -40,36 +51,65 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   };
   const shortages = lines.filter((l) => shortageOf(l) !== "none");
 
-  if (err) return <p style={{ color: "#a60" }}>{err} <a href="/picking">← לתור</a></p>;
+  const confirmFinish = async () => {
+    if (!doc) return;
+    setSaving(true);
+    const shortageRows = shortages.map((l) => ({ itemkey: l.itemkey, name: l.name, ordered: l.qty, picked: picked[l.itemkey] ?? 0, kind: shortageOf(l) }));
+    // 1) App documentation — always saved.
+    let hashavshevetOk = false;
+    try {
+      const { data: { user } } = await supabaseBrowser().auth.getUser();
+      await supabaseBrowser().from("picking_logs").insert({
+        stock_id: doc.stockId, doc_number: doc.docNumber, account_key: doc.accountKey,
+        picker, notes: notes.trim() || null,
+        lines: lines.map((l) => ({ itemkey: l.itemkey, ordered: l.qty, picked: picked[l.itemkey] ?? 0 })),
+        shortages: shortageRows, created_by: user?.id ?? null,
+      });
+    } catch { /* log best-effort */ }
+    // 2) Hashavshevet write (marker + shortages + notes) — when the endpoint is live.
+    try {
+      await bridge.finishPicking(doc.stockId, {
+        picker, notes: notes.trim() || undefined,
+        lines: lines.map((l) => ({ itemkey: l.itemkey, pickedQty: picked[l.itemkey] ?? 0 })),
+      });
+      hashavshevetOk = true;
+    } catch { /* endpoint/permissions pending */ }
+    setSaving(false); setConfirm(false);
+    setDone(hashavshevetOk
+      ? `הליקוט הושלם ונשמר ✓ · לוקט ע״י ${picker}`
+      : `התיעוד נשמר באפליקציה ✓ · לוקט ע״י ${picker}. (העדכון בחשבשבת יבוצע כשה-endpoint וההרשאות יוקצו.)`);
+  };
+
+  if (err) return <p className="chip chip-warn">{err} <a href="/picking">← לתור</a></p>;
   if (!doc) return <p>טוען…</p>;
 
   return (
     <>
-      <p><a href="/picking" style={{ color: "#1e2a78" }}>← תור הליקוט</a></p>
+      <p><a href="/picking" style={{ color: "var(--brand)" }}>← תור הליקוט</a></p>
       <h1>ליקוט: {doc.docTypeName} {doc.docNumber ? `#${doc.docNumber}` : `(זמני ${doc.stockId})`}</h1>
-      <p style={{ color: "#555" }}>לקוח: <b>{doc.customerName}</b> ({doc.accountKey}){doc.customer?.address ? ` · ${doc.customer.address}` : ""}</p>
+      <p style={{ color: "var(--ink-muted)" }}>לקוח: <b>{doc.customerName}</b> ({doc.accountKey}){doc.customer?.address ? ` · ${doc.customer.address}` : ""}{picker ? ` · מלקט: ${picker}` : ""}</p>
+
+      {done && <p className="chip chip-ok" style={{ display: "block", padding: 12 }}>{done} <a href="/picking" style={{ color: "inherit", textDecoration: "underline" }}>לתור</a></p>}
 
       <div className="table-wrap">
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 620 }}>
+        <table className="data-table" style={{ minWidth: 640 }}>
           <thead>
-            <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
-              <th style={{ padding: 8, width: 54 }}>תמונה</th><th>מק״ט</th><th>תיאור</th><th>מלאי</th><th>הוזמן</th><th>לוקט</th><th>סטטוס</th>
-            </tr>
+            <tr><th style={{ width: 54 }}>תמונה</th><th>מק״ט</th><th>תיאור</th><th>מלאי</th><th>הוזמן</th><th>לוקט</th><th>סטטוס</th></tr>
           </thead>
           <tbody>
             {lines.map((l) => {
               const sh = shortageOf(l);
               return (
-                <tr key={l.itemkey} style={{ borderBottom: "1px solid #eee", background: sh === "full" ? "#fdecea" : sh === "partial" ? "#fff6e5" : undefined }}>
+                <tr key={l.itemkey} style={{ background: sh === "full" ? "var(--danger-soft)" : sh === "partial" ? "var(--warn-soft)" : undefined }}>
                   <td style={{ padding: 6 }}>{images[l.itemkey] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={images[l.itemkey]} alt="" style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 6, background: "var(--surface-muted)" }} />
                   ) : (
                     <div style={{ width: 44, height: 44, borderRadius: 6, background: "var(--surface-muted)" }} />
                   )}</td>
-                  <td style={{ padding: 8, fontWeight: 700 }}>{l.itemkey}</td>
+                  <td style={{ fontWeight: 700 }}>{l.itemkey}</td>
                   <td>{l.name}</td>
-                  <td style={{ color: (l.onHand ?? 0) < l.qty ? "#b00" : "#0a7" }}>{l.onHand ?? "—"}</td>
+                  <td style={{ color: (l.onHand ?? 0) < l.qty ? "var(--danger)" : "var(--ok)" }}>{l.onHand ?? "—"}</td>
                   <td>{l.qty}{l.unit ? ` ${l.unit}` : ""}</td>
                   <td>
                     <input type="number" min={0} max={l.qty} value={picked[l.itemkey] ?? 0}
@@ -77,9 +117,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                       style={{ width: 64 }} />
                   </td>
                   <td>
-                    {sh === "none" && <span style={{ color: "#0a7" }}>✓ מלא</span>}
-                    {sh === "partial" && <span style={{ color: "#a60" }}>חוסר כמותי ({l.qty - (picked[l.itemkey] ?? 0)} חסר)</span>}
-                    {sh === "full" && <span style={{ color: "#b00" }}>חסר לגמרי</span>}
+                    {sh === "none" && <span className="chip chip-ok">✓ מלא</span>}
+                    {sh === "partial" && <span className="chip chip-warn">חוסר ({l.qty - (picked[l.itemkey] ?? 0)})</span>}
+                    {sh === "full" && <span className="chip chip-danger">חסר לגמרי</span>}
                   </td>
                 </tr>
               );
@@ -88,27 +128,48 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         </table>
       </div>
 
-      <div style={{ marginTop: 16, padding: 12, borderRadius: 8, background: "#f7f7f7" }}>
+      <div className="card card-pad" style={{ marginTop: 16, background: "var(--surface-muted)" }}>
         <b>סיכום:</b> {lines.length} שורות · {shortages.length ? `${shortages.length} עם חוסר` : "ללא חוסרים"}
-        {shortages.length > 0 && (
-          <ul style={{ margin: "6px 0 0", fontSize: 13 }}>
-            {shortages.map((l) => (
-              <li key={l.itemkey}>{l.itemkey} — {shortageOf(l) === "full" ? "חסר לגמרי" : `חסרות ${l.qty - (picked[l.itemkey] ?? 0)} מתוך ${l.qty}`}</li>
-            ))}
-          </ul>
-        )}
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        <button disabled title="יופעל לאחר בדיקת ליקוט פעיל מול חשבשבת"
-          style={{ background: "#ccc", color: "#666", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "not-allowed" }}>
-          סיום ליקוט (בקרוב)
-        </button>
-        <p style={{ fontSize: 12, color: "#888", marginTop: 6 }}>
-          הסימון בחשבשבת (לוקט ע״י…) ורישום החוסרים יופעלו לאחר בדיקת ליקוט פעיל — כדי לקבוע נכון את ההתנהגות בין
-          "חסר לגמרי" ל"חוסר כמותי".
-        </p>
-      </div>
+      {!done && (
+        <div style={{ marginTop: 16 }}>
+          <button onClick={() => setConfirm(true)} className="btn btn-primary" style={{ padding: "10px 20px" }}>סיום ליקוט</button>
+        </div>
+      )}
+
+      {/* confirmation dialog */}
+      {confirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", display: "grid", placeItems: "center", zIndex: 100, padding: 16 }} onClick={() => !saving && setConfirm(false)}>
+          <div className="card card-pad" style={{ maxWidth: 480, width: "100%", maxHeight: "85vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>אישור סיום ליקוט</h2>
+            <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>מלקט: <b>{picker || "—"}</b></p>
+            {shortages.length === 0
+              ? <p className="chip chip-ok">אין חוסרים — כל השורות סופקו במלואן.</p>
+              : (
+                <>
+                  <p style={{ fontWeight: 700, marginBottom: 6 }}>חוסרים לאישור ({shortages.length}):</p>
+                  <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 14 }}>
+                    {shortages.map((l) => (
+                      <li key={l.itemkey} style={{ marginBottom: 4 }}>
+                        <b>{l.itemkey}</b> — {shortageOf(l) === "full"
+                          ? <span style={{ color: "var(--danger)" }}>חסר לגמרי (השורה תימחק)</span>
+                          : <span style={{ color: "var(--warn)" }}>לוקטו {picked[l.itemkey]} מתוך {l.qty} (השורה תעודכן)</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            <label style={{ display: "block", marginTop: 14, fontSize: 13, fontWeight: 600 }}>הערות מלקט (יוצגו באפליקציה וירשמו בחשבשבת)
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="input" style={{ marginTop: 4, resize: "vertical" }} placeholder="לא חובה…" />
+            </label>
+            <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
+              <button onClick={() => setConfirm(false)} disabled={saving} className="btn">ביטול</button>
+              <button onClick={confirmFinish} disabled={saving} className="btn btn-primary">{saving ? "שומר…" : "אשר וסיים ליקוט"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

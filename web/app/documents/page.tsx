@@ -56,7 +56,7 @@ export default function DocumentsPage() {
       const d = await ensureDetail(stockId);
       if (!d) { alert("לא ניתן לטעון את פרטי המסמך."); return; }
       const imgs = await fetchImages((d.lines ?? []).map((l) => l.itemkey));
-      if (kind === "pdf") exportPdf(d, imgs); else exportExcel(d, imgs);
+      if (kind === "pdf") exportPdf(d, imgs); else await exportExcel(d, imgs);
     } finally {
       setBusyExport(null);
     }
