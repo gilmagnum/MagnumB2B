@@ -156,6 +156,12 @@ export default function DocumentsPage() {
                           {d.producedDocs && d.producedDocs.length > 0 && (
                             <div style={{ fontSize: 13, marginBottom: 8 }}>הופק: {d.producedDocs.map((p) => `${p.docTypeName} #${p.docNumber}`).join(" · ")}</div>
                           )}
+                          {(dd.picked || dd.pickNotes) && (
+                            <div style={{ fontSize: 13, marginBottom: 8, color: "var(--ink-muted)" }}>
+                              {dd.picked && <span className="chip chip-ok" style={{ marginInlineEnd: 8 }}>לוקט{dd.picker ? ` ע״י ${dd.picker}` : ""}</span>}
+                              {dd.pickNotes && <>הערות ליקוט: {dd.pickNotes}</>}
+                            </div>
+                          )}
                           <table className="data-table" style={{ background: "var(--surface)", borderRadius: 8 }}>
                             <thead><tr><th style={{ width: 54 }}>תמונה</th><th>מק״ט</th><th>תיאור</th><th>כמות</th><th>מחיר יח׳</th><th>סה״כ</th></tr></thead>
                             <tbody>
