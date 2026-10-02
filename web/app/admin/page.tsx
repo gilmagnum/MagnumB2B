@@ -42,7 +42,7 @@ export default async function AdminPage() {
               {(profiles ?? []).map((p) => (
                 <tr key={p.id} style={{ borderBottom: "1px solid #eee" }}>
                   <td style={{ padding: 8 }}>{p.full_name}</td>
-                  <td>{p.role === "admin" ? "מנהל" : p.role === "agent" ? "סוכן" : p.role}</td>
+                  <td>{p.role === "admin" ? "מנהל" : p.role === "agent" ? "סוכן" : p.role === "picker" ? "מלקט" : p.role}</td>
                   <td>{p.agent_id ?? "-"}</td>
                 </tr>
               ))}

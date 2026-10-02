@@ -27,7 +27,7 @@ export async function createUserAction(_prev: AdminState, formData: FormData): P
 
   if (!email || !password) return { error: "אימייל וסיסמה נדרשים" };
   if (password.length < 8) return { error: "סיסמה חייבת לפחות 8 תווים" };
-  if (role !== "agent" && role !== "admin") return { error: "תפקיד לא תקין" };
+  if (!["agent", "admin", "picker"].includes(role)) return { error: "תפקיד לא תקין" };
   const agent_id = role === "agent" ? Number(agentIdRaw) : null;
   if (role === "agent" && !Number.isInteger(agent_id)) return { error: "קוד סוכן חייב להיות מספר" };
 
@@ -44,7 +44,8 @@ export async function createUserAction(_prev: AdminState, formData: FormData): P
   if (pErr) return { error: "המשתמש נוצר אך שמירת הפרופיל נכשלה: " + pErr.message };
 
   revalidatePath("/admin");
-  return { ok: `נוצר ${role === "admin" ? "מנהל" : "סוכן"}: ${email}` };
+  const roleHe = role === "admin" ? "מנהל" : role === "picker" ? "מלקט" : "סוכן";
+  return { ok: `נוצר ${roleHe}: ${email}` };
 }
 
 // Save the home-page banner (admin-controlled).
