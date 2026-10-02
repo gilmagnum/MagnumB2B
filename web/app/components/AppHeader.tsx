@@ -30,9 +30,10 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
   const pickerOnly = role === "picker";
 
   useEffect(() => {
+    // mousedown (not click) so it never races with the toggle button's own click.
     const onDoc = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("click", onDoc);
-    return () => document.removeEventListener("click", onDoc);
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
   const links = pickerOnly
