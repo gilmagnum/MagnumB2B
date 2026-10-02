@@ -1,6 +1,25 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-02 (reply 19) — bridge NOT back up yet. Gil: ONE command (PowerShell "Run as administrator"):
+```
+powershell -ExecutionPolicy Bypass -File C:\MagnumB2B\repo\deploy\fix-tasks.ps1
+```
+It re-registers both tasks (still LOCAL SERVICE), now through **self-restarting wrappers**, starts them, and prints local + public /health. It brings the bridge back now and prevents a repeat.
+
+**Cause (not the finish code):**
+- Task Scheduler log, 11:48:02: the old instance was stopped and the new one started **in the same second**. The new `cmd.exe` exited at once with **0x80070001**, without writing a single line (no startup error in `logs\bridge.log`; the last line is the old process's `^C`). That fits it failing to open `logs\bridge.log`, which the dying instance still held.
+- Task Scheduler treats an action that *exits* with an error as "completed", so its restart-on-failure never fired. Nothing was left running, hence the 502.
+- **The new code is fine:** I started it myself on a spare port (8799, dummy token, no DB): `/health` 200, `POST /picking/1/finish` → 401 (route loaded). `npm test` 6/6. Port 8787 is free (no stale process).
+- I can't start the task from this session (not elevated → *Access is denied*).
+
+**The fix that prevents a repeat:** `deploy/run-bridge.cmd` / `run-ngrok.cmd` loop forever. On **any** exit (crash, port still busy, log still locked during a restart) they start again after ~5 s, and each bridge restart is logged to `logs\bridge-restarts.log`.
+- Tested on the spare port: killed node → back up after ~5 s with exactly one restart logged.
+- Note: `timeout` can't be the delay in a console-less task (it spun 1,749×/sec in my first test); it's `ping` now.
+- Future code reloads: `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"` is now safe.
+
+**Then the finish test on 117068** (GRANT is done per reply 33), via the web app: `?dryRun=1` first, then for real. Note that the old process answered `POST /picking/117068/finish` with **404** at 08:46 only because the finish route wasn't loaded yet. Nothing was written.
+
 ## ⚡ 2026-10-02 (reply 18) — POST /picking/:stockId/finish written. Gil: 1) GRANT  2) restart the bridge task  3) (later) enable real customers
 
 **1. GRANT** (SSMS as sa, or any sysadmin):

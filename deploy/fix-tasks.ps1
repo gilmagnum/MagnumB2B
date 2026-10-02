@@ -37,11 +37,14 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit
   -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew
 $trigger = New-ScheduledTaskTrigger -AtStartup
 $tasks = [ordered]@{
+  # Wrappers loop: any exit (crash, port still busy, log still locked during a restart) -> start again
+  # after ~5 s. Task Scheduler alone does not restart an action that exits with an error code.
   'MagnumB2B Bridge' = New-ScheduledTaskAction -Execute 'cmd.exe' `
-    -Argument "/c `"`"$node`" bridge\server.js >> logs\bridge.log 2>&1`"" -WorkingDirectory $repo
-  'MagnumB2B ngrok'  = New-ScheduledTaskAction -Execute $ngrok `
-    -Argument "start --all --config `"$config`" --log `"$logs\ngrok.log`" --log-format logfmt" -WorkingDirectory $Root
+    -Argument "/c `"$repo\deploy\run-bridge.cmd`"" -WorkingDirectory $repo
+  'MagnumB2B ngrok'  = New-ScheduledTaskAction -Execute 'cmd.exe' `
+    -Argument "/c `"$repo\deploy\run-ngrok.cmd`"" -WorkingDirectory $Root
 }
+if (-not (Test-Path $node) -or -not (Test-Path $ngrok)) { throw "node or ngrok not found ($node / $ngrok)" }
 foreach ($name in $tasks.Keys) {
   Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
   Register-ScheduledTask -TaskName $name -Action $tasks[$name] -Trigger $trigger -Settings $settings `
