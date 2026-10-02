@@ -1,4 +1,5 @@
 import { query, key, sql } from './db.js';
+import { PICK_NOTES_FIELD } from './picking.js';
 import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS, SHIPPING_ITEMS } from './config.js';
 
 const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
@@ -387,6 +388,7 @@ export async function getDocument(stockId) {
   const [o] = await query(
     `SELECT s.ID, s.DocNumber, s.DocumentID, d.DocName, s.AccountKey, s.AccountName, a.FullName, a.Agent,
             s.IssueDate, s.TFtal, s.TFtalVat, s.VatPrc, s.DiscountPrc, s.Status, s.Remarks, s.ExtraText2,
+            s.${PICK_NOTES_FIELD} AS pickNotes,
             s.Address, s.City, s.Phone, a.Address AS accAddress, a.City AS accCity, a.Phone AS accPhone,
             a.EMail, a.TaxFileNum
      FROM Stock s
@@ -412,6 +414,7 @@ export async function getDocument(stockId) {
     vatPct: o.VatPrc ?? undefined,
     orderDiscountPct: o.DiscountPrc || 0,
     remarks: trim(o.Remarks) || undefined,
+    pickNotes: trim(o.pickNotes) || undefined, // picker notes written by POST /picking/:id/finish
     customer: {
       address: trim(o.Address) || trim(o.accAddress) || undefined,
       city: trim(o.City) || trim(o.accCity) || undefined,

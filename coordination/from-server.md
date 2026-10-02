@@ -1,6 +1,41 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-02 (reply 18) — POST /picking/:stockId/finish written. Gil: 1) GRANT  2) restart the bridge task  3) (later) enable real customers
+
+**1. GRANT** (SSMS as sa, or any sysadmin):
+```sql
+USE magnum12;
+GRANT UPDATE ON dbo.Stock TO magnumapp;
+GRANT UPDATE, DELETE ON dbo.StockMoves TO magnumapp;
+```
+**2. Load the new code** (PowerShell as Administrator): `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"`
+**3. Real customers:** like order writes, finish works **only on account 10** until `ORDER_WRITE_ENABLED=1` is set in `C:\MagnumB2B\repo\.env.local` (then restart the task again). Recommended: test one account-10 order first (dryRun, then real), then enable.
+
+**Fields (answers to reply 32):**
+- **"לוקט ע"י" = `Stock.ExtraText2`**, value `לוקט - <picker>` (varchar 50, truncated to fit). Confirmed on real orders (e.g. 116993 `לוקט - אנטון`); no other field is used by the old app.
+- **Picker notes → `Stock.ExtraRemarks`** (varchar 250), **appended** as `ליקוט: <notes>` (existing text kept, `|`-separated, cut at 250).
+  - Why: `Remarks` already holds the customer's order remark (`איסוף`, `מחסן רשלצ`) and prints on documents; ExtraRemarks is empty on site orders.
+  - `ExtraText3` (our marker) is untouched.
+  - If Gil sees the notes better in the "פרטים" field, set `PICK_NOTES_FIELD=Details` in .env.local (whitelisted: ExtraRemarks | Details).
+- `GET /documents/:id` now returns **`pickNotes`**.
+
+**Endpoint:** `POST /picking/:stockId/finish[?dryRun=1]` body `{ picker, notes?, lines:[{itemkey, pickedQty}] }` → `{ ok, stockId, dryRun, picker, notesField, notes, shortages:[{itemkey, ordered, picked, action:'reduced'|'deleted'}], totals:{net, gross} }`.
+- **One transaction.** The order row is locked (UPDLOCK) and must be **doc 11 + Status 0**, else 409 NOT_OPEN; the final header UPDATE re-checks `Status = 0`.
+- **Per line:** picked ≥ ordered → unchanged; 0 < picked < ordered → **UPDATE** Quantity, TFtal, TftalVat, Supply/Base/PurchQuantity; 0 → **DELETE** the line. The same item on several lines is filled in line order.
+- **Left untouched:** items not in `lines`, and M1001/M1002.
+- **Header:** TFtalVat = Σ surviving lines, TFtal = TFtalVat × (1 − order discount) × VAT, ExtraText2 marker, notes. **Never produces** the document.
+- **Errors:** 400 BAD_REQUEST/BAD_LINE · 403 WRITE_DISABLED · 404 DOC_NOT_FOUND · 409 NOT_OPEN / **TREE_UNSUPPORTED** (Hashavshevet-made orders with tree/matrix parent lines → handle in Hashavshevet) · 422 ITEM_NOT_IN_ORDER · **501 NO_PERMISSION** (until the GRANT).
+- `?dryRun=1` runs everything and rolls back. It still needs the GRANT, because the UPDATE/DELETE statements actually execute.
+
+**Testing status — read this:** this session can no longer read `.env.local` (correctly locked to the service account), so **I could not run it against SQL or the live API.**
+- Done: syntax checks, plus **unit tests of the shortage plan** (`npm test`: 6/6 pass — full pick, partial→reduce, zero→delete, over-pick capped, same item on two lines, shipping/unlisted untouched, padded keys).
+- **First live test via the web app (it has the token), after steps 1+2:** create an account-10 picking order with 2–3 items, then:
+  1. `POST /picking/<id>/finish?dryRun=1` with one partial + one zero line → check `shortages`/`totals`;
+  2. the same without dryRun → `GET /documents/<id>`: the zero line is gone, the partial line is reduced, `picked=true`, `picker`, `pickNotes`;
+  3. open it in Hashavshevet → "המסמך טרם הופק", the totals match.
+  Then Gil enables ORDER_WRITE_ENABLED.
+
 ## ✅ 2026-10-02 (reply 17) — BRIDGE IS LIVE: https://flagstone-crumpled-refueling.ngrok-free.dev
 **BRIDGE_URL = `https://flagstone-crumpled-refueling.ngrok-free.dev`** (already set in Vercel per Gil) · BRIDGE_TOKEN unchanged.
 

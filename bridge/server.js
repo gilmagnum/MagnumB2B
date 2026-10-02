@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
 import { ORDER_DOCUMENT_IDS } from './config.js';
 import { syncCatalog, lastSyncedAt } from './sync.js';
+import { finishPicking, PickingError } from './picking.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -171,6 +172,16 @@ const routes = [
       limit: query.get('limit') ?? 200,
       offset: query.get('offset') ?? 0,
     });
+  }],
+
+  // Finish picking (WRITES to Hashavshevet): marker, shortages, notes. ?dryRun=1 = rolled back.
+  ['POST', /^\/picking\/(\d+)\/finish$/, async ({ params: [stockId], query, body }) => {
+    try {
+      return await finishPicking(stockId, body, { dryRun: query.get('dryRun') === '1' });
+    } catch (err) {
+      if (err instanceof PickingError) throw new HttpError(err.status, err.code, err.message);
+      throw err;
+    }
   }],
 
   // One document + lines for export. ?agent=:id = only if the customer is that agent's (else 404).

@@ -79,6 +79,7 @@ type Document = {
 
 type DocumentDetail = Document & {
   totalBeforeVat?: number; vatPct?: number; orderDiscountPct: number; remarks?: string;
+  pickNotes?: string;         // Stock.ExtraRemarks - picker notes written by /picking/:id/finish
   customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
   lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
            discountPct: number; lineTotal: number; onHand?: number; isShipping?: true }[];  // onHand = Items.Quantity now; M1001/M1002 flagged, not removed
@@ -101,6 +102,13 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /picking/queue[?agent=][&q=][&state=waiting|picked][&limit=200][&offset=0]` → `Document[]` (read-only), **oldest first**.
   Open agent orders only (doc 11, Status 0). `waiting` (default) = no picker marker; `picked` = ExtraText2 `לוקט - <name>`
   (picked, waiting for production in Hashavshevet). Same row shape as /documents incl. `picked`, `picker`, `pickedMarker`.
+- `POST /picking/:stockId/finish[?dryRun=1]` **(WRITES to Hashavshevet)** body `{ picker, notes?, lines: [{ itemkey, pickedQty }] }`
+  → `{ ok, stockId, dryRun, picker, notesField, notes, shortages: [{ itemkey, ordered, picked, action: 'reduced'|'deleted' }], totals: { net, gross } }`.
+  One transaction, only on doc 11 with Status 0: pickedQty ≥ ordered → unchanged; 0 < pickedQty < ordered → line reduced
+  (Quantity/TFtal/TftalVat/Supply/Base/PurchQuantity); 0 → line deleted; header TFtalVat/TFtal recomputed;
+  `Stock.ExtraText2 = 'לוקט - <picker>'`; notes appended to `Stock.ExtraRemarks` as `ליקוט: <notes>`. Never produces the document.
+  Items not listed and M1001/M1002 are untouched. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
+  before `ORDER_WRITE_ENABLED=1`), 404 DOC_NOT_FOUND, 409 NOT_OPEN/TREE_UNSUPPORTED, 422 ITEM_NOT_IN_ORDER, 501 NO_PERMISSION (GRANT missing).
 - `GET /documents/:stockId[?agent=:id]` → `DocumentDetail` (404 if not a customer document, or not that agent's customer)
 - `GET /documents?agent=&status=all|open|produced&q=&limit=50&offset=0` → `Document[]`, newest first (limit max 200).
   `agent=0`/missing = all (admin). `q` = customer name/accountKey, or a number = order Stock.ID / its DocNumber /

@@ -8,7 +8,16 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 // (dotenv cuts unquoted values at '#', which breaks the SQL passwords.)
 function loadEnvFile(file) {
   if (!fs.existsSync(file)) return;
-  for (const line of fs.readFileSync(file, 'utf8').replace(/^﻿/, '').split(/\r?\n/)) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    // .env.local is readable only by the service account; tools/tests run without it.
+    if (err.code !== 'EPERM' && err.code !== 'EACCES') throw err;
+    console.warn(`config: cannot read ${file} (${err.code}) - running without it`);
+    return;
+  }
+  for (const line of text.replace(/^﻿/, '').split(/\r?\n/)) {
     const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
     if (match && !(match[1] in process.env)) process.env[match[1]] = match[2];
   }

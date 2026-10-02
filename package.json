@@ -8,7 +8,8 @@
     "inspect": "node scripts/inspect-schema.js",
     "check-pricing": "node scripts/check-pricing.js",
     "test-order": "node scripts/test-order.js",
-    "sync": "node scripts/sync-catalog.js"
+    "sync": "node scripts/sync-catalog.js",
+    "test": "node --test test/picking.test.js"
   },
   "keywords": [],
   "author": "",
