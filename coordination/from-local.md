@@ -1,6 +1,17 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 32) — picking finish: add picker NOTES + confirm "לוקט ע"י" field
+
+Extends reply 31's `POST /picking/:stockId/finish`. The picker screen now has a confirmation dialog (shows shortages) + a **picker notes** field. Please:
+1. **Body now includes `notes`:** `{ picker, notes?, lines:[{itemkey, pickedQty}] }`.
+2. **"לוקט ע"י"** — confirm it is `Stock.ExtraText2 = N'לוקט - <picker>'` (what the old app writes). If the old app uses a DIFFERENT field for the picker name, tell me which and I'll match.
+3. **Picker notes → Hashavshevet:** which field should the note go to so Hashavshevet users see it? Candidates: `Stock.Remarks`/`Details`, or one of the ExtraText fields (we use ExtraText3='הזמנת אפליקציה' as our marker, so pick a free one). Report the column; append the note (don't overwrite our ExtraText3 marker). Also return the note in `GET /documents/:id` so the app can display it.
+4. Still need the GRANTs from reply 31 (UPDATE+DELETE on StockMoves, UPDATE on Stock). Until live, the endpoint can 404/501 — the app already saves full documentation (picker, notes, per-line picked, shortages) to Supabase `picking_logs` regardless.
+Report the field names + endpoint status.
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 31) — PICKING WRITE: Gil's shortage decision + finish endpoint
 
 Gil decided the shortage behavior (examined vs the live flow):
