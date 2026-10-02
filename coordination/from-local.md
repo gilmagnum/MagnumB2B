@@ -1,6 +1,34 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 31) — PICKING WRITE: Gil's shortage decision + finish endpoint
+
+Gil decided the shortage behavior (examined vs the live flow):
+- **Partial shortage (some qty supplied):** on "finish picking", **UPDATE the StockMoves line** — reduce Quantity to the picked qty (and the matching TFtal/TftalVat/Supply/Base/PurchQuantity), then recompute the Stock header totals.
+- **Fully missing (0 picked):** on "finish picking", **DELETE that StockMoves line**, then recompute header totals.
+- Also set `Stock.ExtraText2 = N'לוקט - <picker>'` (same marker the old app writes) so Hashavshevet users see it as picked.
+- **Do NOT produce** the document — Hashavshevet keeps producing invoices/delivery notes manually.
+- All in ONE transaction, only while `Status = 0`.
+
+Please add a write endpoint (bearer-protected, like /orders):
+`POST /picking/:stockId/finish`  body:
+```jsonc
+{ "picker": "שם המלקט",
+  "lines": [ { "itemkey": "WF3400036", "pickedQty": 10 }, ... ] }  // pickedQty 0 => delete that line
+```
+- Validate the order is doc 11 + Status 0 (else 409).
+- For each line: pickedQty >= ordered -> leave as is; 0 < pickedQty < ordered -> reduce; pickedQty <= 0 -> delete.
+- Recompute header totals (TFtal, TftalVat, etc.) to match the surviving lines.
+- Set ExtraText2 marker.
+- Return { ok:true, stockId, shortages:[{itemkey, ordered, picked, action:'reduced'|'deleted'}] }.
+
+**Permissions:** magnumapp now needs **UPDATE + DELETE on StockMoves** and **UPDATE on Stock** (today INSERT only). Tell Gil the exact GRANT so he runs it (e.g. `GRANT UPDATE, DELETE ON dbo.StockMoves TO magnumapp; GRANT UPDATE ON dbo.Stock TO magnumapp;`). Until granted, the endpoint can 501.
+Also keep logging the pick (picker + per-line picked/shortage + timestamp) somewhere we can read later — Supabase is fine (I can write it from the finish flow), since magnum12 has no picker/audit table.
+
+Report the endpoint shape + the GRANT command. I'll wire the "סיום ליקוט" button to it (currently disabled).
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 30) — after Gil granted the right + "started tasks", the PUBLIC URL is STILL ERR_NGROK_3200 (offline)
 
 So the tasks still aren't actually running. Please verify locally and finish autonomously (Gil's chat truncates; report in from-server.md):
