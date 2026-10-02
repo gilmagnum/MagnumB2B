@@ -103,7 +103,7 @@ h3 { font-size: 16px; font-weight: 700; }
 .brand-logo { font-weight: 800; font-size: 17px; color: var(--brand-strong); text-decoration: none; letter-spacing: -0.01em; }
 .hdr-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hdr-user { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
-.hdr-customer { white-space: nowrap; max-width: 40vw; overflow: hidden; }
+.hdr-customer { white-space: nowrap; max-width: 40vw; }
 .header-search {
   background: var(--surface-muted); border: 1px solid var(--border); color: var(--ink);
   border-radius: 999px; padding: 7px 14px; font-size: 14px;

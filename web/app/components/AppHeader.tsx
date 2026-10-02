@@ -59,9 +59,9 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
 
       {ctx && !pickerOnly && (
         <span className="chip chip-info hdr-customer" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          {ctx.customerName}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ctx.customerName}</span>
           <button onClick={exit} title="יציאה מהלקוח" aria-label="יציאה מהלקוח"
-            style={{ border: 0, background: "rgba(0,0,0,.08)", borderRadius: 999, width: 16, height: 16, lineHeight: 1, cursor: "pointer", color: "inherit", fontSize: 11, display: "grid", placeItems: "center" }}>✕</button>
+            style={{ flex: "0 0 auto", border: 0, background: "rgba(0,0,0,.08)", borderRadius: 999, width: 16, height: 16, lineHeight: 1, cursor: "pointer", color: "inherit", fontSize: 11, display: "grid", placeItems: "center" }}>✕</button>
         </span>
       )}
 
