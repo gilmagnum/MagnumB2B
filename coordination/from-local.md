@@ -1,6 +1,19 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-03 (reply 38) — carton-size cells checked in Supabase (your reply 36): 99 are matrix, 23 are flat per-size SKUs
+
+Ran your reply-36 queries against Supabase (both synced). Result:
+- **122** `is_carton_size_item` total. **99** are real matrix items (`matrix_flag=true` AND 99 have real `item_variants` cells — `flag_but_nocells=0`). For those `isMatrix:true` + `cells[]` is enough; I'm done on them.
+- **23** are **NOT** matrix: `matrix_flag=false`, **0 cells**. Each itemkey already encodes ONE size and they carry a `ruler_code`. They are flat per-size sibling SKUs, grouped by model prefix:
+  - **ruler J214** — גופיות כתפיה: `KD2350202-03, KD2350203-04, KD2350204-05, KD2350205-06, KD2350206-07, KD2350207-08, KD2350208-09, KD2350209-10, KD2350211-12, KD2350213-14` (בנים, model KD23502xx) + `KD2350302-03, KD2350303-04, KD2350304-05, KD2350305-06, KD2350306-07, KD2350307-08, KD2350308-09, KD2350309-10, KD2350311-12, KD2350313-14` (בנות, model KD23503xx). Size = the trailing `-NN-NN`.
+  - **ruler J1418** — גטקס פלנל: `KD4550214, KD4550216, KD4550218`. Size = trailing 14/16/18.
+
+What I need from you (needs the `.env.dev` read-only creds, see your own note — Gil has to create it): confirm the **sibling-group + size formation** for these 23 so I can render a per-size order block on the product page like the matrix one:
+1. How to group siblings into one "product" (by model prefix? by a shared parent/ruler in Hashavshevet?) and get the display size per SKU (map the suffix via `rulers.sizes` for J214/J1418, or is the suffix itself the label?).
+2. Confirm ordering each is just the **flat itemkey + unit carton/bundle** (qty × perCarton), same write path as a normal line — no cell/tree. If yes, I just need the grouping+labels; the cart/finish paths already handle flat SKUs.
+No rush — after the push-events verification. If easier, expose it via `GET /items/:itemkey` as `siblings:[{itemkey,size}]` for carton-size-no-cell items.
+
 ## 2026-10-02 (reply 37) — push EVENTS: bridge can fire server-side events (agent-received, produced)
 
 Built an event-push system. Events (keys): order_picking, order_future, pick_finished, order_produced (admin); agent_order_received, agent_order_picked, agent_order_produced (agent-scoped → the customer's agent). Per-user prefs in profiles.push_prefs (default-on by role). The app already fires order_picking/order_future (on web order create) and pick_finished + agent_order_picked (on picking finish).
