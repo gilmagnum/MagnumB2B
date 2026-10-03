@@ -49,6 +49,7 @@ const toItem = (i) => ({
   shownOnSite: i.shownOnSite,
   ignoreStock: i.ignoreStock,
   isMatrix: i.isMatrix,
+  isCartonSizeItem: Boolean(i.cartonSizeItem), // NoteID 26 'פריט קרטון מידה': each carton is one size
   stock: i.stock ?? 0,
 });
 
@@ -113,17 +114,34 @@ const routes = [
   }],
 
   ['GET', /^\/customers$/, async ({ query }) => {
-    // agent=0 or missing = all customers (admin); q = name/account key contains
+    // agent=0 or missing = all customers (admin); q = name/account key contains.
+    // Order: (numeric q) exact key > key starts with > key contains > rest, then active
+    // (activity in the last 365 days) before dormant, then name.
     const agent = Number(query.get('agent') || 0);
-    const rows = await read.getAccounts({ agent, q: query.get('q')?.trim() || undefined });
-    return rows.map((a) => ({
-      accountKey: a.AccountKey.trim(),
-      fullName: a.FullName?.trim(),
-      agent: a.Agent || undefined,
-      discountCode: a.DiscountCode ? String(a.DiscountCode) : undefined,
-      totalDiscountPct: a.TFtalDiscount || 0,
-      forPicking: !/לא לליקוט/.test(a.FullName ?? ''),
-    }));
+    const q = query.get('q')?.trim() || undefined;
+    const [rows, activity] = await Promise.all([read.getAccounts({ agent, q }), read.getLastActivity()]);
+    const cutoff = Date.now() - 365 * 86_400_000;
+    const numeric = Boolean(q && /^\d+$/.test(q));
+    const keyRank = (k) => (!numeric ? 3 : k === q ? 0 : k.startsWith(q) ? 1 : k.includes(q) ? 2 : 3);
+    return rows
+      .map((a) => {
+        const accountKey = a.AccountKey.trim();
+        const last = activity.get(accountKey);
+        return {
+          accountKey,
+          fullName: a.FullName?.trim(),
+          agent: a.Agent || undefined,
+          discountCode: a.DiscountCode ? String(a.DiscountCode) : undefined,
+          totalDiscountPct: a.TFtalDiscount || 0,
+          forPicking: !/לא לליקוט/.test(a.FullName ?? ''),
+          lastActivity: last instanceof Date ? last.toISOString().slice(0, 10) : undefined,
+          active: Boolean(last instanceof Date && last.getTime() >= cutoff),
+          rank: keyRank(accountKey),
+        };
+      })
+      .sort((x, y) => x.rank - y.rank || Number(y.active) - Number(x.active)
+        || (x.fullName ?? '').localeCompare(y.fullName ?? '', 'he'))
+      .map(({ rank, ...customer }) => customer);
   }],
 
   ['GET', /^\/stock\/([^/]+)$/, async ({ params: [itemKey] }) => {
@@ -154,6 +172,7 @@ const routes = [
     if (!['all', 'open', 'produced'].includes(status)) throw new HttpError(400, 'BAD_REQUEST', 'סטטוס לא תקין');
     return read.getDocuments({
       agent: Number(query.get('agent') || 0),
+      account: query.get('account')?.trim() || undefined, // exact customer, wins over q
       status,
       q: query.get('q')?.trim() || undefined,
       limit: query.get('limit') ?? 50,
@@ -167,6 +186,7 @@ const routes = [
     if (!['waiting', 'picked'].includes(state)) throw new HttpError(400, 'BAD_REQUEST', 'מצב לא תקין');
     return read.getPickingQueue({
       agent: Number(query.get('agent') || 0),
+      account: query.get('account')?.trim() || undefined,
       q: query.get('q')?.trim() || undefined,
       state,
       limit: query.get('limit') ?? 200,

@@ -280,7 +280,7 @@ async function ordersProducing(docNumber, orderDocIds) {
 // levels are followed (order -> delivery note -> invoice). Receipts (31) pay invoices through
 // payment matching, not order lines, so they never appear here.
 export async function getDocuments({
-  agent, status = 'all', q, limit = 50, offset = 0, orderDocIds = [6, 11], picked, oldestFirst = false,
+  agent, account, status = 'all', q, limit = 50, offset = 0, orderDocIds = [6, 11], picked, oldestFirst = false,
 } = {}) {
   const params = {
     limit: Math.min(Math.max(Number(limit) || 50, 1), 200),
@@ -290,6 +290,12 @@ export async function getDocuments({
   if (agent) {
     where += ' AND a.Agent = @agent';
     params.agent = Number(agent);
+  }
+  // account = exact customer (wins over q). With agent, another agent's customer simply yields [].
+  if (account) {
+    where += ' AND s.AccountKey = @account';
+    params.account = key(account);
+    q = undefined;
   }
   if (status === 'open') where += ' AND s.Status = 0';
   // picked = the warehouse app's marker ExtraText2 = 'לוקט - <picker>'
@@ -440,8 +446,23 @@ export async function getDocument(stockId) {
 
 // Picking queue (read-only): open agent orders (doc 11, Status 0), oldest first.
 // state 'waiting' = no picker marker yet; 'picked' = marked by the warehouse app, waiting for production.
-export function getPickingQueue({ agent, q, state = 'waiting', limit = 200, offset = 0 } = {}) {
+export function getPickingQueue({ agent, account, q, state = 'waiting', limit = 200, offset = 0 } = {}) {
   return getDocuments({
-    agent, q, limit, offset, status: 'open', orderDocIds: [11], picked: state === 'picked', oldestFirst: true,
+    agent, account, q, limit, offset, status: 'open', orderDocIds: [11], picked: state === 'picked', oldestFirst: true,
   });
+}
+
+// Last activity per customer = newest order/delivery/invoice date (doc 1, 2, 4, 6, 11).
+// One grouped read over the DocumentID index, cached for 15 minutes.
+let activityCache;
+export async function getLastActivity() {
+  if (!activityCache || Date.now() - activityCache.at > 15 * 60_000) {
+    const rows = query(
+      `SELECT AccountKey, MAX(IssueDate) AS lastDate FROM Stock
+       WHERE DocumentID IN (1, 2, 4, 6, 11) GROUP BY AccountKey`,
+    ).then((list) => new Map(list.map((x) => [trim(x.AccountKey), x.lastDate])));
+    activityCache = { at: Date.now(), rows };
+    rows.catch(() => (activityCache = undefined));
+  }
+  return activityCache.rows;
 }

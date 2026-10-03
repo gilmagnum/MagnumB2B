@@ -1,6 +1,48 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-03 (reply 20) — bridge back up ✅ · replies 34/35/36 done. Gil: restart the bridge task to load them
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator. Safe now: the wrapper retries if the restart races.)
+
+**Bridge back up:**
+- `http://127.0.0.1:8787/health` and `https://flagstone-crumpled-refueling.ngrok-free.dev/health` → 200.
+- Both run inside the self-restarting wrappers since 10/2 11:59 (fix-tasks.ps1 was run): node and ngrok are children of `cmd.exe`.
+- The finish endpoint answered **200 twice on 117068** (09:00 and 09:02, presumably dryRun then real). **I can't verify the result in magnum12** (no DB access here). Please confirm from the app / `GET /documents/117068`: MG1501100 deleted, MG11129 reduced, `picked=true`, `pickNotes`.
+
+**Reply 34 — exact account filter ✅**
+- `GET /documents?account=<accountKey>` → only `Stock.AccountKey = accountKey` (exact, varchar param), newest first, same shape.
+- `account` **wins over `q`** (q ignored when both are sent).
+- With `agent=:id`, an account that isn't that agent's returns **`[]`**, because the agent join filters it out.
+- `GET /picking/queue?account=` works the same.
+
+**Reply 35 — /customers order ✅**
+- **Activity signal** = newest **IssueDate** of the account's orders/deliveries/invoices (DocumentID 1, 2, 4, 6, 11).
+  - One grouped query (`GROUP BY AccountKey` over the DocumentID index), cached 15 min.
+  - New fields: `lastActivity` (YYYY-MM-DD) and `active` (within 365 days).
+- **Order:**
+  1. all-digit `q`: exact accountKey → key starts with → key contains → the rest (name matches);
+  2. then `active` before dormant;
+  3. then name (Hebrew collation).
+- Ranking unit-checked: q=11728 → 11728 > 117281 > 511728 > a name containing 11728.
+
+**Reply 36 — carton-by-size items: partial answer + one check for you**
+- `GET /items` / `/items/:itemkey` now return **`isCartonSizeItem`** (NoteID 26 '1').
+- **Cells:** I can't query magnum12 from this session anymore, so I can't tell whether these items have IMatrixItems cells. **You can, in Supabase** (both are synced):
+  ```sql
+  select count(*) total, count(*) filter (where matrix_flag) with_cells
+  from items where is_carton_size_item;
+  select i.itemkey, count(v.*) cells from items i left join item_variants v on v.parent_itemkey = i.itemkey
+  where i.is_carton_size_item group by i.itemkey order by cells limit 20;
+  ```
+  - If `with_cells = total`: they are real matrix items. `isMatrix:true` + `cells[]` (size SKUs) is all you need.
+  - If not: tell me which items. I'll then check how their size SKUs are formed (ruler_code → rulers.sizes + model code), once I have read access (see below).
+- **Write path (confirmed in code):** a carton-size line is a normal flat line: **cell SKU + `unit:'carton'`** (or `'bundle'`) → Quantity = qty × perCarton. A cell without its own pack sizes inherits perCarton/perBundle (and shownOnSite/ignoreStock) from its parent model (IMatrixItems.FItemKey).
+
+**Optional, so I can test SQL again (Gil):** create `C:\MagnumB2B\repo\.env.dev` (gitignored) containing **only** the 7 `HASH_DB_*` lines **without** `HASH_DB_PASSWORD_RW` (i.e. server/port/name + magnum_ro user/password). That's read-only credentials, no token, no write login, readable by giladmin. The bridge loads it only for variables `.env.local` didn't set (service unaffected). Until then, changes like these ship tested for load/routing/logic but **not against live SQL**.
+
 ## ⚡ 2026-10-02 (reply 19) — bridge NOT back up yet. Gil: ONE command (PowerShell "Run as administrator"):
 ```
 powershell -ExecutionPolicy Bypass -File C:\MagnumB2B\repo\deploy\fix-tasks.ps1

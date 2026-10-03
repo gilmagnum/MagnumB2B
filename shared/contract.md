@@ -28,6 +28,7 @@ type Item = {
   shownOnSite: boolean;       // NoteID 28
   ignoreStock: boolean;       // NoteID 31
   isMatrix: boolean;          // detected via IMatrixItems
+  isCartonSizeItem: boolean;  // NoteID 26 'פריט קרטון מידה' - each carton is one size; order per size inside the product
   stock: number;              // Items.Quantity (for a matrix parent: usually 0, see cells)
   imageUrl?: string;          // app layer (not from Hashavshevet)
   cells?: MatrixCell[];       // GET /items/:itemkey only, when isMatrix
@@ -48,6 +49,8 @@ type Customer = {             // from Accounts (active)
   discountCode?: string;
   totalDiscountPct: number;   // Accounts.TFtalDiscount
   forPicking: boolean;        // false for "לא לליקוט" customers
+  lastActivity?: string;      // newest order/delivery/invoice date (doc 1,2,4,6,11), YYYY-MM-DD
+  active: boolean;            // lastActivity within the last 365 days
 };
 
 type PriceResult = {
@@ -93,7 +96,8 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /health` → `{ ok: true }` (no auth)
 - `GET /items?shownOnSite=1[&category=<main or sub>][&search=<key/name/barcode>]` → `Item[]` (cached 60s)
 - `GET /items/:itemkey` → `Item` (with `cells` + stock per cell if matrix) · 404 if unknown
-- `GET /customers[?agent=:agentId][&q=]` → `Customer[]`. `agent=0` or missing = **all** customers (admin); `agent=:id` = that agent's
+- `GET /customers[?agent=:agentId][&q=]` → `Customer[]`, ordered: for an all-digit `q` exact accountKey → starts with → contains
+  → others; then `active` before dormant; then name (he). `agent=0` or missing = **all** customers (admin); `agent=:id` = that agent's
   customers. `q` = name or accountKey contains (works with both). Customers = Accounts.SortGroup 10/11/12, Dumi≠1, named,
   and not marked "לא פעיל" in the name.
 - `GET /stock/:itemkey` → `{ itemkey, qty }` · matrix: `{ itemkey, qty: <sum>, cells: [{ itemkey, qty }] }`
@@ -110,6 +114,8 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   Items not listed and M1001/M1002 are untouched. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
   before `ORDER_WRITE_ENABLED=1`), 404 DOC_NOT_FOUND, 409 NOT_OPEN/TREE_UNSUPPORTED, 422 ITEM_NOT_IN_ORDER, 501 NO_PERMISSION (GRANT missing).
 - `GET /documents/:stockId[?agent=:id]` → `DocumentDetail` (404 if not a customer document, or not that agent's customer)
+- `GET /documents?account=<exact accountKey>` filters to one customer exactly (wins over `q`; with `agent`, another agent's
+  customer returns []). `GET /picking/queue?account=` works the same.
 - `GET /documents?agent=&status=all|open|produced&q=&limit=50&offset=0` → `Document[]`, newest first (limit max 200).
   `agent=0`/missing = all (admin). `q` = customer name/accountKey, or a number = order Stock.ID / its DocNumber /
   the DocNumber of a document produced from it. `status`: open = Stock.Status 0, produced = anything else.

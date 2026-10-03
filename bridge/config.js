@@ -23,6 +23,9 @@ function loadEnvFile(file) {
   }
 }
 loadEnvFile(path.join(ROOT, '.env.local'));
+// Optional dev fallback (read-only SQL credentials for the Claude session, which cannot read .env.local).
+// Only fills variables .env.local did not set.
+loadEnvFile(path.join(ROOT, '.env.dev'));
 
 const env = process.env;
 
