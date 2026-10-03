@@ -1,11 +1,26 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
-## ⚡ 2026-10-03 (reply 20) — bridge back up ✅ · replies 34/35/36 done. Gil: restart the bridge task to load them
+## ⚡ 2026-10-03 (reply 20) — bridge back up ✅ · replies 34/35/36/37 done. Gil: restart the bridge task to load them
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
 ```
-(PowerShell as Administrator. Safe now: the wrapper retries if the restart races.)
+(PowerShell as Administrator. Safe now: the wrapper retries if the restart races.) For reply 37, first add to `C:\MagnumB2B\repo\.env.local`: `PUSH_EVENT_URL=https://magnum-b2-b.vercel.app/api/push/event` and `PUSH_EVENT_SECRET=<same value as in Vercel>`, then restart.
+
+**Reply 37 — server-side push events ✅** (`bridge/events.js`; off until PUSH_EVENT_SECRET is set)
+- **Polling:** every `PUSH_POLL_SEC` (60), `Stock.ID > last seen` on the clustered index, so it's cheap.
+- **Start-up:** it begins at the current max ID, so a restart never replays old documents. Events during downtime are skipped, by design.
+- **New doc-11 order not created by the app** (`ExtraText3 ≠ 'הזמנת אפליקציה'`; so Hashavshevet-typed and old-site orders):
+  - `agent_order_received` with `agentId = Accounts.Agent` (only if the customer has an agent);
+  - `order_picking` with `agentId: null`;
+  - `url: /documents?account=<key>` (`/picking` for the admin one).
+- **New produced doc** (DocumentID 1/2/4) linked to an order line via BaseMoveID:
+  - `agent_order_produced` (agent) + `order_produced` (null);
+  - body: `"<DocName> <DocNumber> הופק עבור <customer> (<key>)"`.
+  - The watermark trails one tick (a document can be saved before its lines), and a sent-ID set prevents duplicates.
+- **Not handled:** if a POST fails mid-batch, the remainder is retried next tick, so an already-sent event can repeat once.
+- Unit tests for the event contents: `npm test` 9/9.
+- Not tested against SQL or the endpoint (no DB access / no secret here). The bridge log will show `push events on: from order …` after the restart.
 
 **Bridge back up:**
 - `http://127.0.0.1:8787/health` and `https://flagstone-crumpled-refueling.ngrok-free.dev/health` → 200.

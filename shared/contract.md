@@ -146,6 +146,11 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
     BAD_SHIPPING, BAD_DISCOUNT, ITEM_NOT_FOUND, ITEM_INACTIVE, ITEM_HIDDEN, NO_PACKING, NO_STOCK, NO_PRICE, WRITE_DISABLED`;
     400 `BAD_JSON/BAD_REQUEST`; 401 `UNAUTHORIZED`; 500 `INTERNAL/SCHEMA`.
 
+## Push events fired by the bridge (POST PUSH_EVENT_URL, header x-push-secret)
+- new doc-11 order not made by the app → `agent_order_received` (agentId = Accounts.Agent) + `order_picking` (agentId null)
+- new חשבונית/ח.מ-קבלה/ת.משלוח produced from an order → `agent_order_produced` (agentId) + `order_produced` (null)
+- body `{ key, agentId, title, body, url }`, Hebrew texts; polled every 60 s; no replay after a restart.
+
 ## Rules the bridge enforces (server owns)
 - Write only temp orders (Status=0, DocNumber=0, flat Tree=0 lines, LineNum 0, StockID=Stock.ID). Never delete docs.
 - Header like the app: ExtraText3 'הזמנת אפליקציה'; PrintStyle = customer card (AccDocRpt) for the doc type, else DocumentsDef default.

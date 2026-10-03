@@ -8,6 +8,7 @@ import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.j
 import { ORDER_DOCUMENT_IDS } from './config.js';
 import { syncCatalog, lastSyncedAt } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
+import { startEventPoller } from './events.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -337,6 +338,7 @@ server.listen(PORT, HOST, () => {
   } else {
     console.log('catalog sync schedule off (SYNC_INTERVAL_MIN=0 or Supabase env missing)');
   }
+  startEventPoller();
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
 });
 
