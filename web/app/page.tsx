@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import EnableNotifications from "./components/EnableNotifications";
+import NotificationPrefs from "./components/NotificationPrefs";
 import Icon from "./components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +42,10 @@ export default async function Home() {
         )}
       </section>
 
-      <div style={{ margin: "0 0 16px" }}><EnableNotifications /></div>
+      <div style={{ margin: "0 0 16px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <EnableNotifications />
+        <NotificationPrefs />
+      </div>
 
       {/* menu tiles */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 16 }}>

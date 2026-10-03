@@ -2,10 +2,13 @@
 import { Fragment, useState } from "react";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import { setActiveAction, resetPasswordAction, changeRoleAction } from "./actions";
+import { saveUserPrefs } from "../notif-actions";
+import { eventsForRole, effectivePref, type Role } from "../../lib/pushEvents";
 
 export type ManagedUser = {
   id: string; fullName: string | null; role: string; agentId: number | null;
   email: string | null; lastSignIn: string | null; createdAt: string | null; active: boolean;
+  pushPrefs?: Record<string, boolean> | null;
 };
 type LogRow = { at: string; user_agent: string | null };
 
@@ -18,6 +21,14 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [log, setLog] = useState<LogRow[]>([]);
   const [logLoading, setLogLoading] = useState(false);
+  const [openPrefs, setOpenPrefs] = useState<string | null>(null);
+
+  const togglePref = async (u: ManagedUser, key: string, on: boolean) => {
+    const next = { ...(u.pushPrefs ?? {}), [key]: on };
+    setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, pushPrefs: next } : x)));
+    const res = await saveUserPrefs(u.id, next);
+    flash(u.id, res.ok ? "העדפות נשמרו" : (res.error ?? "שגיאה"), !!res.ok);
+  };
 
   const flash = (id: string, text: string, ok: boolean) => { setMsg({ id, text, ok }); setTimeout(() => setMsg((m) => (m?.id === id ? null : m)), 3000); };
 
@@ -92,6 +103,7 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
                   </button>
                   <button onClick={() => resetPw(u)} disabled={busy === u.id} className="btn btn-sm" style={{ marginInlineStart: 6 }}>איפוס סיסמה</button>
                   <button onClick={() => showLog(u)} className="btn btn-sm" style={{ marginInlineStart: 6 }}>{openLog === u.id ? "סגור לוג" : "לוג כניסות"}</button>
+                  <button onClick={() => setOpenPrefs(openPrefs === u.id ? null : u.id)} className="btn btn-sm" style={{ marginInlineStart: 6 }}>{openPrefs === u.id ? "סגור התראות" : "התראות"}</button>
                 </td>
               </tr>
               {msg?.id === u.id && (
@@ -105,6 +117,21 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
                         <li key={i}>{new Date(l.at).toLocaleString("he-IL")}{l.user_agent ? ` · ${l.user_agent.slice(0, 60)}` : ""}</li>
                       ))}
                     </ul>
+                  )}
+                </td></tr>
+              )}
+              {openPrefs === u.id && (
+                <tr><td colSpan={7} style={{ background: "var(--surface-muted)" }}>
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>התראות עבור {u.fullName || u.email} ({u.role === "admin" ? "מנהל" : u.role === "agent" ? "סוכן" : u.role === "picker" ? "מלקט" : u.role}):</div>
+                  {eventsForRole(u.role as Role).length === 0 ? <span style={{ color: "var(--ink-muted)", fontSize: 13 }}>אין אירועים מוצעים לתפקיד זה.</span> : (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {eventsForRole(u.role as Role).map((e) => (
+                        <label key={e.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                          <input type="checkbox" checked={effectivePref(u.role as Role, u.pushPrefs ?? null, e.key)} onChange={(ev) => togglePref(u, e.key, ev.target.checked)} />
+                          {e.label}
+                        </label>
+                      ))}
+                    </div>
                   )}
                 </td></tr>
               )}

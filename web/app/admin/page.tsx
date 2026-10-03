@@ -16,7 +16,7 @@ export default async function AdminPage() {
 
   const admin = supabaseAdmin();
   const { data: profiles } = await admin
-    .from("profiles").select("id, role, agent_id, full_name, created_at").order("created_at", { ascending: true });
+    .from("profiles").select("id, role, agent_id, full_name, created_at, push_prefs").order("created_at", { ascending: true });
   const { data: bannerRow } = await admin.from("app_settings").select("value").eq("key", "home_banner").single();
   const { data: authList } = await admin.auth.admin.listUsers({ perPage: 200 });
   const authById = new Map((authList?.users ?? []).map((u) => [u.id, u]));
@@ -27,6 +27,7 @@ export default async function AdminPage() {
     return {
       id: p.id, fullName: p.full_name, role: p.role, agentId: p.agent_id,
       email: au?.email ?? null, lastSignIn: au?.last_sign_in_at ?? null, createdAt: p.created_at, active: !banned,
+      pushPrefs: (p.push_prefs as Record<string, boolean> | null) ?? null,
     };
   });
 

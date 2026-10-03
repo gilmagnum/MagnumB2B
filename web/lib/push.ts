@@ -1,6 +1,7 @@
 import "server-only";
 import webpush from "web-push";
 import { supabaseAdmin } from "./supabase/admin";
+import { PUSH_EVENTS, effectivePref, type Role } from "./pushEvents";
 
 let configured = false;
 function configure() {
@@ -40,4 +41,20 @@ export async function sendPush(profileIds: string[] | null, payload: Payload) {
   }));
   if (dead.length) await admin.from("push_subscriptions").delete().in("endpoint", dead);
   return { sent, failed };
+}
+
+// Fire an event: push to users whose role+prefs opt in (agent-scoped events go only
+// to the matching customer's agent).
+export async function sendEvent(key: string, ctx: { agentId?: number | null; payload: Payload }) {
+  const ev = PUSH_EVENTS.find((e) => e.key === key);
+  if (!ev) return { sent: 0, failed: 0 };
+  const admin = supabaseAdmin();
+  let qb = admin.from("profiles").select("id, role, agent_id, push_prefs").in("role", ev.roles);
+  if (ev.agentScoped && ctx.agentId != null) qb = qb.eq("agent_id", ctx.agentId);
+  const { data: profiles } = await qb;
+  const ids = (profiles ?? [])
+    .filter((p) => effectivePref(p.role as Role, p.push_prefs as Record<string, boolean> | null, key))
+    .map((p) => p.id);
+  if (!ids.length) return { sent: 0, failed: 0 };
+  return sendPush(ids, ctx.payload);
 }
