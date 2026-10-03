@@ -71,6 +71,14 @@ export default function CartPage() {
         lines: lines.map((l) => ({ itemkey: l.itemkey, qty: l.qty, unit: l.unit, price: priceOf(l.itemkey, l.unit, l.unitPrice) })),
       });
       setMsg(`ההזמנה נשלחה ✓ מספר הזמנה: ${res.stockId}`);
+      // Fire a push event (new order) — best-effort.
+      fetch("/api/push/event", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: ctx.orderKind === "picking" ? "order_picking" : "order_future",
+          body: `${ctx.customerName} · הזמנה ${res.stockId}`, url: "/picking",
+        }),
+      }).catch(() => {});
       clear();
     } catch (e) {
       setMsg("שגיאה בשליחה (ייתכן שהגשר עדיין לא מחובר): " + (e as Error).message);

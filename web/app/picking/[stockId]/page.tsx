@@ -74,6 +74,11 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         lines: lines.map((l) => ({ itemkey: l.itemkey, pickedQty: picked[l.itemkey] ?? 0 })),
       });
       hashavshevetOk = true;
+      // Fire push events: pick finished (admins) + the customer's agent — best-effort.
+      fetch("/api/push/event", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "pick_finished", body: `${doc.customerName} · ${doc.docNumber ? "#" + doc.docNumber : doc.stockId}`, url: "/documents" }) }).catch(() => {});
+      if (doc.agent != null) fetch("/api/push/event", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "agent_order_picked", agentId: doc.agent, body: `הזמנת ${doc.customerName} לוקטה`, url: "/documents" }) }).catch(() => {});
     } catch (e) {
       const m = (e as Error).message || "";
       note = /NO_PERMISSION|501/.test(m) ? "חסרות הרשאות בשרת (GRANT ל-magnumapp) — יוחל לאחר ההרשאה."

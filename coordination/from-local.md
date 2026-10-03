@@ -1,6 +1,21 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 37) — push EVENTS: bridge can fire server-side events (agent-received, produced)
+
+Built an event-push system. Events (keys): order_picking, order_future, pick_finished, order_produced (admin); agent_order_received, agent_order_picked, agent_order_produced (agent-scoped → the customer's agent). Per-user prefs in profiles.push_prefs (default-on by role). The app already fires order_picking/order_future (on web order create) and pick_finished + agent_order_picked (on picking finish).
+
+**You can fire events the app can't see** (orders created directly in Hashavshevet, and document production), by POSTing to the Vercel endpoint:
+`POST https://magnum-b2-b.vercel.app/api/push/event`
+  headers: `x-push-secret: <PUSH_EVENT_SECRET>`  (Gil will add PUSH_EVENT_SECRET to Vercel AND give it to you for the server .env.local)
+  body: `{ "key": "<event>", "agentId": <Accounts.Agent or null>, "title"?: "...", "body"?: "...", "url"?: "/documents" }`
+Suggested bridge-side triggers (you have the DB + poll):
+  - **agent_order_received** — a NEW doc-11 picking order appears for a customer (incl. Hashavshevet-created): fire with `agentId = Accounts.Agent` of that customer. (Also order_picking for admins if you want warehouse coverage of non-app orders.)
+  - **order_produced** (admin) + **agent_order_produced** (agentId = that customer's agent) — when an order becomes a חשבונית/ת.משלוח (Status 0→1 / new produced doc via BaseMoveID).
+Only fire on NEW transitions (track last-seen Stock.ID / produced DocNumber to avoid duplicates). No rush — after the core. Tell me if you want the exact event keys/labels list (also in web/lib/pushEvents.ts).
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 36) — "carton-by-size" items (is_carton_size_item / NoteID 26) — need cells for the product grid
 
 Gil: besides matrix items there are **"פריט קרטון מידה"** items — matrix-like, where **each carton is a single size (not a mix)**. In the app: NOT orderable from the catalog grid (I now show a "בחירת מידות" link to the product for both matrix AND carton-size items); ordering happens only inside the product, **by carton/bundle quantity per size**.
