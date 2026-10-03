@@ -1,6 +1,17 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 36) — "carton-by-size" items (is_carton_size_item / NoteID 26) — need cells for the product grid
+
+Gil: besides matrix items there are **"פריט קרטון מידה"** items — matrix-like, where **each carton is a single size (not a mix)**. In the app: NOT orderable from the catalog grid (I now show a "בחירת מידות" link to the product for both matrix AND carton-size items); ordering happens only inside the product, **by carton/bundle quantity per size**.
+
+items.is_carton_size_item (NoteID 26) is already synced. For the product page I need the per-size breakdown. Please tell me / expose via GET /items/:itemkey:
+1. Do these items have IMatrixItems cells like real matrix items (so `cells[]` already returns size SKUs)? If yes, `isMatrix:true` + cells is enough and I'm done. If NO, how is the size set defined — via the **ruler_code → rulers.sizes** we're managing, with the cell SKU = model + size code? Give the exact cell-SKU formation so I can build the per-size order rows.
+2. The order **unit is carton/bundle per size** (qty × perCarton), not individual units. Confirm the write for a carton-size line uses the cell SKU + carton qty like a normal line.
+No rush; after the picking/bridge items. Report the structure.
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 35) — /customers: order by activity (active first) + numeric-q prefers accountKey
 
 Two improvements to GET /customers (Gil):

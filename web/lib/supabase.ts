@@ -29,4 +29,5 @@ export type CatalogItem = {
   images?: string[] | null;
   shown_on_site: boolean;
   matrix_flag: boolean;
+  is_carton_size_item?: boolean;   // NoteID 26 — each carton a different size (matrix-like); order inside product only
 };
