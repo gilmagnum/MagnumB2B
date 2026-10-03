@@ -1,7 +1,7 @@
 "use client";
 import { Fragment, useState } from "react";
 import { supabaseBrowser } from "../../lib/supabase/browser";
-import { setActiveAction, resetPasswordAction } from "./actions";
+import { setActiveAction, resetPasswordAction, changeRoleAction } from "./actions";
 
 export type ManagedUser = {
   id: string; fullName: string | null; role: string; agentId: number | null;
@@ -9,7 +9,6 @@ export type ManagedUser = {
 };
 type LogRow = { at: string; user_agent: string | null };
 
-const roleHe = (r: string) => (r === "admin" ? "מנהל" : r === "agent" ? "סוכן" : r === "picker" ? "מלקט" : r);
 const dt = (s: string | null) => (s ? new Date(s).toLocaleString("he-IL") : "—");
 
 export default function UserManager({ users: initial, meId }: { users: ManagedUser[]; meId: string }) {
@@ -41,6 +40,22 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
     flash(u.id, res.ok ?? res.error ?? "שגיאה", !!res.ok);
   };
 
+  const changeRole = async (u: ManagedUser, role: string) => {
+    if (role === u.role) return;
+    let agentId = "";
+    if (role === "agent") {
+      const v = window.prompt(`קוד סוכן (Accounts.Agent) ל-${u.fullName || u.email}:`, u.agentId != null ? String(u.agentId) : "");
+      if (v == null) return;
+      agentId = v;
+    }
+    setBusy(u.id);
+    const fd = new FormData(); fd.set("id", u.id); fd.set("role", role); if (agentId) fd.set("agentId", agentId);
+    const res = await changeRoleAction({}, fd);
+    setBusy(null);
+    if (res.ok) { setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, role, agentId: role === "agent" ? Number(agentId) : null } : x))); flash(u.id, res.ok, true); }
+    else flash(u.id, res.error ?? "שגיאה", false);
+  };
+
   const showLog = async (u: ManagedUser) => {
     if (openLog === u.id) { setOpenLog(null); return; }
     setOpenLog(u.id); setLogLoading(true); setLog([]);
@@ -60,7 +75,14 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
               <tr>
                 <td style={{ fontWeight: 600 }}>{u.fullName || "—"}</td>
                 <td style={{ color: "var(--ink-muted)" }}>{u.email || "—"}</td>
-                <td>{roleHe(u.role)}</td>
+                <td>
+                  <select value={u.role} onChange={(e) => changeRole(u, e.target.value)} disabled={busy === u.id || u.id === meId}
+                    className="select" style={{ padding: "4px 8px", minWidth: 90 }}>
+                    <option value="agent">סוכן</option>
+                    <option value="picker">מלקט</option>
+                    <option value="admin">מנהל</option>
+                  </select>
+                </td>
                 <td>{u.agentId ?? "—"}</td>
                 <td style={{ whiteSpace: "nowrap" }}>{dt(u.lastSignIn)}</td>
                 <td>{u.active ? <span className="chip chip-ok">פעיל</span> : <span className="chip chip-danger">מושבת</span>}</td>

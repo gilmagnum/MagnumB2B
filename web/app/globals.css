@@ -136,7 +136,9 @@ h3 { font-size: 16px; font-weight: 700; }
   box-shadow: var(--shadow-lg); padding: 6px; min-width: 180px; max-width: min(260px, calc(100vw - 20px));
   display: flex; flex-direction: column;
 }
-.menu-item { padding: 10px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 600; }
+.menu-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 600; }
+.menu-item svg { color: var(--ink-muted); flex: 0 0 auto; }
+.menu-item:hover svg { color: var(--brand); }
 .menu-item:hover { background: var(--surface-muted); color: var(--brand); }
 @media (max-width: 480px) { .header-search { min-width: 120px; } }
 

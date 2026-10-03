@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getProfile } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import EnableNotifications from "./components/EnableNotifications";
+import Icon from "./components/Icon";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +17,11 @@ export default async function Home() {
   const b: Banner = (data?.value as Banner) ?? {};
 
   const tiles = [
-    { href: "/catalog", icon: "🛍️", label: "קטלוג" },
-    { href: "/customer", icon: "👤", label: "בחירת לקוח" },
-    { href: "/cart", icon: "🛒", label: "סל הזמנה" },
-    { href: "/documents", icon: "📄", label: "מסמכים" },
-    ...(me.role === "admin" ? [{ href: "/picking", icon: "📦", label: "ליקוט" }, { href: "/admin", icon: "⚙️", label: "ניהול" }] : []),
+    { href: "/catalog", icon: "catalog", label: "קטלוג" },
+    { href: "/customer", icon: "customers", label: "בחירת לקוח" },
+    { href: "/cart", icon: "cart", label: "סל הזמנה" },
+    { href: "/documents", icon: "docs", label: "מסמכים" },
+    ...(me.role === "admin" ? [{ href: "/picking", icon: "picking", label: "ליקוט" }, { href: "/admin", icon: "admin", label: "ניהול" }] : []),
   ];
 
   return (
@@ -45,9 +46,9 @@ export default async function Home() {
       {/* menu tiles */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 16 }}>
         {tiles.map((t) => (
-          <a key={t.href} href={t.href} className="product-card" style={{ textDecoration: "none", color: "inherit", textAlign: "center", padding: "28px 12px" }}>
-            <div style={{ fontSize: 40, lineHeight: 1 }}>{t.icon}</div>
-            <div style={{ marginTop: 12, fontWeight: 700, color: "var(--brand-strong)" }}>{t.label}</div>
+          <a key={t.href} href={t.href} className="product-card" style={{ textDecoration: "none", color: "inherit", textAlign: "center", padding: "28px 12px", display: "grid", justifyItems: "center", gap: 12 }}>
+            <span style={{ color: "var(--brand)" }}><Icon name={t.icon} size={40} /></span>
+            <div style={{ fontWeight: 700, color: "var(--brand-strong)" }}>{t.label}</div>
           </a>
         ))}
       </div>

@@ -90,6 +90,22 @@ export async function resetPasswordAction(_prev: AdminState, formData: FormData)
   return { ok: "הסיסמה עודכנה" };
 }
 
+// Change a user's role (and agent_id for agents).
+export async function changeRoleAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const me = await getProfile().catch(() => null);
+  if (!me || me.role !== "admin") return { error: "אין הרשאה" };
+  const id = String(formData.get("id") ?? "");
+  const role = String(formData.get("role") ?? "");
+  if (!id || !["agent", "admin", "picker"].includes(role)) return { error: "תפקיד לא תקין" };
+  if (id === me.id && role !== "admin") return { error: "אי אפשר לשנות את התפקיד של עצמך" };
+  const agent_id = role === "agent" ? Number(formData.get("agentId")) : null;
+  if (role === "agent" && !Number.isInteger(agent_id)) return { error: "קוד סוכן נדרש לסוכן" };
+  const { error } = await supabaseAdmin().from("profiles").update({ role, agent_id }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/admin");
+  return { ok: "התפקיד עודכן" };
+}
+
 // Activate / deactivate a user (ban blocks login; "none" re-enables).
 export async function setActiveAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
   const me = await getProfile().catch(() => null);

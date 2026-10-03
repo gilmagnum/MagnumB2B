@@ -5,67 +5,67 @@ import { logout } from "../login/actions";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { useCart } from "../../lib/useCart";
 import HeaderSearch from "./HeaderSearch";
+import Icon from "./Icon";
 
 type Role = "agent" | "customer" | "picker" | "admin" | "";
 
-// Top bar, RTL order (right → left): ☰ hamburger · title · user · customer(X) · 🛒 cart · search.
-// Home + logout live inside the hamburger.
+// Top bar, RTL (right→left): ☰ menu · home · user · customer(✕) · cart · search.
 export default function AppHeader({ role, name }: { role: Role; name: string }) {
   const { ctx, exit } = useOrderContext();
   const { count, clear } = useCart();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  // Exiting a customer is like signing back out to the agent: confirm, empty the
-  // cart, reset pricing (clearing ctx), and return home.
-  const exitCustomer = () => {
-    if (count > 0 && !window.confirm(`יציאה מהלקוח תרוקן את סל ההזמנה (${count} פריטים) ותחזור למחירון הכללי. להמשיך?`)) return;
-    clear();
-    exit();
-    router.push("/");
-  };
   const isAdmin = role === "admin";
   const canPick = role === "picker" || role === "admin";
   const pickerOnly = role === "picker";
 
   useEffect(() => {
-    // mousedown (not click) so it never races with the toggle button's own click.
     const onDoc = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  const exitCustomer = () => {
+    if (count > 0 && !window.confirm(`יציאה מהלקוח תרוקן את סל ההזמנה (${count} פריטים) ותחזור למחירון הכללי. להמשיך?`)) return;
+    clear(); exit(); router.push("/");
+  };
+
   const links = pickerOnly
-    ? [{ href: "/picking", label: "ליקוט" }]
+    ? [{ href: "/picking", label: "ליקוט", icon: "picking" }]
     : [
-        { href: "/", label: "בית" },
-        { href: "/customer", label: "בחירת לקוח" },
-        { href: "/catalog", label: "קטלוג" },
-        { href: "/cart", label: "סל הזמנה" },
-        { href: "/documents", label: "מסמכים" },
-        ...(canPick ? [{ href: "/picking", label: "ליקוט" }] : []),
-        ...(isAdmin ? [{ href: "/admin", label: "ניהול" }] : []),
+        { href: "/", label: "בית", icon: "home" },
+        { href: "/customer", label: "בחירת לקוח", icon: "customers" },
+        { href: "/catalog", label: "קטלוג", icon: "catalog" },
+        { href: "/cart", label: "סל הזמנה", icon: "cart" },
+        { href: "/documents", label: "מסמכים", icon: "docs" },
+        ...(canPick ? [{ href: "/picking", label: "ליקוט", icon: "picking" }] : []),
+        ...(isAdmin ? [{ href: "/admin", label: "ניהול", icon: "admin" }] : []),
       ];
+  const home = pickerOnly ? "/picking" : "/";
 
   return (
     <header className="app-header">
-      {/* hamburger (rightmost in RTL) */}
+      {/* hamburger (rightmost) */}
       <div ref={menuRef} style={{ position: "relative" }}>
-        <button onClick={() => setOpen((o) => !o)} className="icon-btn" title="תפריט" aria-label="תפריט" aria-expanded={open}>☰</button>
+        <button onClick={() => setOpen((o) => !o)} className="icon-btn" title="תפריט" aria-label="תפריט" aria-expanded={open}><Icon name="menu" /></button>
         {open && (
           <div className="menu-pop">
             {links.map((l) => (
-              <a key={l.href} href={l.href} className="menu-item" onClick={() => setOpen(false)}>{l.label}</a>
+              <a key={l.href} href={l.href} className="menu-item" onClick={() => setOpen(false)}>
+                <Icon name={l.icon} size={18} /> <span>{l.label}</span>
+              </a>
             ))}
             <form action={logout} style={{ display: "block", borderTop: "1px solid var(--border)", marginTop: 4, paddingTop: 4 }}>
-              <button type="submit" className="menu-item" style={{ width: "100%", textAlign: "start", background: "none", border: 0, cursor: "pointer" }}>יציאה 🚪</button>
+              <button type="submit" className="menu-item" style={{ width: "100%", textAlign: "start", background: "none", border: 0, cursor: "pointer" }}>
+                <Icon name="logout" size={18} /> <span>יציאה</span>
+              </button>
             </form>
           </div>
         )}
       </div>
 
-      <a href={pickerOnly ? "/picking" : "/"} className="brand-logo hdr-title">מגנום · סיטונאות</a>
+      <a href={home} className="icon-btn" title="בית" aria-label="בית"><Icon name="home" /></a>
 
       {name && <span className="hdr-user" style={{ color: "var(--ink-muted)", fontSize: 13 }}>{name}</span>}
 
@@ -81,7 +81,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
 
       {!pickerOnly && (
         <a href="/cart" className="icon-btn" title="סל" aria-label="סל" style={{ position: "relative" }}>
-          🛒
+          <Icon name="cart" />
           {count > 0 && (
             <span style={{ position: "absolute", top: -4, insetInlineEnd: -4, background: "var(--danger)", color: "#fff", borderRadius: 999, fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, display: "grid", placeItems: "center", padding: "0 4px" }}>{count}</span>
           )}

@@ -9,7 +9,6 @@ export type LoginState = { error?: string };
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "/") || "/";
   if (!email || !password) return { error: "נא למלא אימייל וסיסמה" };
 
   const supabase = await supabaseServer();
@@ -22,7 +21,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
     await supabaseAdmin().from("login_events").insert({ profile_id: data.user?.id, email, user_agent: ua });
   } catch { /* ignore */ }
 
-  redirect(next.startsWith("/") ? next : "/");
+  // Always land on home after login (picker is routed to /picking by middleware).
+  redirect("/");
 }
 
 export async function logout() {
