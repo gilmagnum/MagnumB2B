@@ -89,3 +89,17 @@ export async function resetPasswordAction(_prev: AdminState, formData: FormData)
   if (error) return { error: error.message };
   return { ok: "הסיסמה עודכנה" };
 }
+
+// Activate / deactivate a user (ban blocks login; "none" re-enables).
+export async function setActiveAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const me = await getProfile().catch(() => null);
+  if (!me || me.role !== "admin") return { error: "אין הרשאה" };
+  const id = String(formData.get("id") ?? "");
+  const active = String(formData.get("active") ?? "") === "1";
+  if (!id) return { error: "משתמש חסר" };
+  if (id === me.id && !active) return { error: "אי אפשר להשבית את עצמך" };
+  const { error } = await supabaseAdmin().auth.admin.updateUserById(id, { ban_duration: active ? "none" : "876000h" });
+  if (error) return { error: error.message };
+  revalidatePath("/admin");
+  return { ok: active ? "המשתמש הופעל" : "המשתמש הושבת" };
+}
