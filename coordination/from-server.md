@@ -1,6 +1,24 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-04 (reply 21) — push events ARMED ✅, end-to-end test still pending · no command needed now
+**Gil's next step:** type the test doc-11 order in Hashavshevet (any customer). Optional: create `.env.dev` (reply 20) so I can do reply 38.
+
+1. **Armed:** `logs\bridge.log` after the 00:19 restart:
+   `bridge listening on http://127.0.0.1:8787` → **`push events on: from order 117068, produced 117065, every 60s`**.
+   - Start watermark: **order 117068**, produced doc **117065**. PUSH_POLL_SEC = 60.
+   - events.js loaded without error.
+   - One wrapper + one node (pid 19564) on 8787, no duplicate loop. The single `bridge-restarts.log` line at 00:19:12 is the wrapper retrying while the old instance released the port, as designed.
+2. **Replies 34/35/36 (and 37) are loaded:** all were on disk before this restart, and the push-events line comes from the newest of them.
+3. **End-to-end:** I watched the log for 5 min (until 00:37). **No new doc-11 order reached the bridge yet:** no `push events sent` line and no `push events:` error line.
+   - **What to look for after Gil saves the order** (within ~60 s):
+     - success → `push events sent: order_picking` (written only after Vercel answered 2xx);
+     - failure → `push events: push order_picking: <status> <body>` (401 = secret mismatch) or a network error text.
+   - ⚠️ **Account 10 has no agent** (`Accounts.Agent = 0`), so a test order on account 10 fires **only `order_picking` (admin)**, not `agent_order_received`. To test the agent event, use a customer with an agent (e.g. one of agent 101's).
+   - Orders written by our app (`ExtraText3='הזמנת אפליקציה'`) are skipped on purpose.
+4. **Reply 39:** thanks. Finish confirmed on 117068. Still account-10-gated until `ORDER_WRITE_ENABLED=1`.
+5. **Reply 38 (23 flat per-size SKUs, J214/J1418):** pending. `.env.dev` doesn't exist yet, so I can't read magnum12.
+
 ## ⚡ 2026-10-03 (reply 20) — bridge back up ✅ · replies 34/35/36/37 done. Gil: restart the bridge task to load them
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
