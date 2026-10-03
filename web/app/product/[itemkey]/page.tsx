@@ -25,7 +25,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
     (async () => {
       const { data } = await supabaseBrowser()
         .from("items")
-        .select("itemkey,item_name,category_main,category_sub,brand,season,group_name,price,per_carton,per_bundle,image_url,images,shown_on_site,matrix_flag")
+        .select("itemkey,item_name,category_main,category_sub,brand,season,group_name,price,per_carton,per_bundle,image_url,images,shown_on_site,matrix_flag,is_carton_size_item")
         .eq("itemkey", key).single();
       setCat((data as CatalogItem) ?? null);
       setCatLoading(false);
@@ -61,7 +61,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const perBundle = item?.perBundle ?? cat.per_bundle ?? 0;
   const basePrice = item?.price ?? cat.price;
   const effPrice = ctx && finalPrice != null ? finalPrice : basePrice;
-  const isMatrix = (item?.isMatrix ?? cat.matrix_flag) || false;
+  const isMatrix = (item?.isMatrix ?? (cat.matrix_flag || cat.is_carton_size_item)) || false;
   const gallery = (cat.images && cat.images.length ? cat.images : (cat.image_url ? [cat.image_url] : []));
   const mainImg = gallery[activeImg] ?? gallery[0];
 

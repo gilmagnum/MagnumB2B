@@ -21,7 +21,14 @@ export default function ProductGrid({ items }: { items: CatalogItem[] }) {
           <div style={{ marginTop: 6, fontWeight: 800 }}>
             {it.price != null ? `${it.price} ₪` : ""} {it.per_carton ? <span style={{ fontWeight: 400, color: "var(--ink-muted)", fontSize: 12 }}>· {it.per_carton} בקרטון</span> : ""}
           </div>
-          <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={it.price} />
+          {(it.matrix_flag || it.is_carton_size_item) ? (
+            <div style={{ marginTop: 10 }}>
+              <span className="chip chip-info">{it.is_carton_size_item ? "קרטון לפי מידה" : "מטריצה"}</span>
+              <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-primary btn-sm" style={{ display: "block", marginTop: 8, textAlign: "center" }}>בחירת מידות ←</a>
+            </div>
+          ) : (
+            <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={it.price} />
+          )}
         </article>
       ))}
     </div>

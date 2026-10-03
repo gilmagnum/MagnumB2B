@@ -96,19 +96,31 @@ h3 { font-size: 16px; font-weight: 700; }
 
 /* ---- header ---- */
 .app-header {
-  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 12px 24px; position: sticky; top: 0; z-index: 30; box-shadow: var(--shadow-sm);
+  padding: 10px 16px; position: sticky; top: 0; z-index: 30; box-shadow: var(--shadow-sm);
 }
 .brand-logo { font-weight: 800; font-size: 17px; color: var(--brand-strong); text-decoration: none; letter-spacing: -0.01em; }
-.header-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; }
-.header-nav a { color: var(--ink-muted); text-decoration: none; padding: 6px 10px; border-radius: var(--radius-sm); font-weight: 600; }
-.header-nav a:hover { background: var(--surface-muted); color: var(--brand); }
+.hdr-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hdr-user { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+.hdr-customer { white-space: nowrap; max-width: 40vw; }
 .header-search {
   background: var(--surface-muted); border: 1px solid var(--border); color: var(--ink);
-  border-radius: 999px; padding: 7px 14px; min-width: 190px; font-size: 14px;
+  border-radius: 999px; padding: 7px 14px; font-size: 14px;
+  width: clamp(110px, 22vw, 220px);
 }
 .header-search:focus { outline: none; border-color: var(--brand); background: var(--surface); }
+@media (max-width: 640px) { .hdr-user { display: none; } }
+@media (max-width: 560px) {
+  /* search drops to its own full-width second row */
+  .hdr-spacer { display: none; }
+  .header-search { flex: 1 1 100%; width: auto; order: 9; }
+}
+@media (max-width: 460px) {
+  .hdr-title { font-size: 14px; max-width: 42vw; }
+  .app-header { gap: 7px; padding: 8px 10px; }
+  .icon-btn { width: 34px; height: 34px; font-size: 16px; }
+}
 
 /* header icon buttons + hamburger menu */
 .icon-btn {
@@ -119,11 +131,14 @@ h3 { font-size: 16px; font-weight: 700; }
 }
 .icon-btn:hover { border-color: var(--brand); background: var(--surface); }
 .menu-pop {
-  position: absolute; inset-inline-end: 0; top: 46px; z-index: 50;
+  position: absolute; inset-inline-start: 0; top: 46px; z-index: 50;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: var(--shadow-lg); padding: 6px; min-width: 180px; display: flex; flex-direction: column;
+  box-shadow: var(--shadow-lg); padding: 6px; min-width: 180px; max-width: min(260px, calc(100vw - 20px));
+  display: flex; flex-direction: column;
 }
-.menu-item { padding: 10px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 600; }
+.menu-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 600; }
+.menu-item svg { color: var(--ink-muted); flex: 0 0 auto; }
+.menu-item:hover svg { color: var(--brand); }
 .menu-item:hover { background: var(--surface-muted); color: var(--brand); }
 @media (max-width: 480px) { .header-search { min-width: 120px; } }
 

@@ -1,6 +1,38 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-02 (reply 36) — "carton-by-size" items (is_carton_size_item / NoteID 26) — need cells for the product grid
+
+Gil: besides matrix items there are **"פריט קרטון מידה"** items — matrix-like, where **each carton is a single size (not a mix)**. In the app: NOT orderable from the catalog grid (I now show a "בחירת מידות" link to the product for both matrix AND carton-size items); ordering happens only inside the product, **by carton/bundle quantity per size**.
+
+items.is_carton_size_item (NoteID 26) is already synced. For the product page I need the per-size breakdown. Please tell me / expose via GET /items/:itemkey:
+1. Do these items have IMatrixItems cells like real matrix items (so `cells[]` already returns size SKUs)? If yes, `isMatrix:true` + cells is enough and I'm done. If NO, how is the size set defined — via the **ruler_code → rulers.sizes** we're managing, with the cell SKU = model + size code? Give the exact cell-SKU formation so I can build the per-size order rows.
+2. The order **unit is carton/bundle per size** (qty × perCarton), not individual units. Confirm the write for a carton-size line uses the cell SKU + carton qty like a normal line.
+No rush; after the picking/bridge items. Report the structure.
+# From LOCAL session -> SERVER session
+(newest on top)
+
+## 2026-10-02 (reply 35) — /customers: order by activity (active first) + numeric-q prefers accountKey
+
+Two improvements to GET /customers (Gil):
+1. **Active customers first.** Order results so active customers come before inactive/dormant ones — e.g. by most-recent order date (max Stock.IssueDate for the account), or an activity/last-transaction field if one exists. Within the same activity bucket keep name order. Tell me which signal you used.
+2. **Numeric query prefers the customer NUMBER.** When `q` is all digits, rank accountKey matches above name matches (exact accountKey → starts-with → contains), so typing "11728" surfaces account 11728 first, not customers whose NAME contains "11728". (I added client-side ranking as a stopgap, but server-side is better since results are paged/limited.)
+
+Also FYI: when you add the exact `account=` param (reply 34) these still apply. Low-medium priority; the picking write + bridge stability come first. Report the activity signal + confirm.
+# From LOCAL session -> SERVER session
+(newest on top)
+
+## 2026-10-02 (reply 34) — /documents needs an EXACT account filter (q is LIKE, leaks other customers)
+
+Bug: inside a customer, the Documents screen showed OTHER customers' docs. Reason: I pass the customer's accountKey as `q`, but `q` is a LIKE/contains match (name/accountKey/produced-doc-number), so e.g. account `10` matches 10xxx keys, numbers containing "10", etc. I added a client-side exact filter as a stopgap, but with `limit` the right customer's docs can also be pushed out of the page.
+
+Please add an **exact** account filter:
+- `GET /documents?account=<accountKey>` → only rows where Stock.AccountKey = accountKey (exact), newest first, with the same shape. Keep `q` for free text; `account` wins when both are sent. Honor `agent` too (admin: any; agent: only if that account is theirs, else 403/empty).
+- Same for **`GET /picking/queue?account=`** if easy (for a per-customer picking view later).
+Report when added; I'll switch the in-customer Documents view from `q` to `account`.
+# From LOCAL session -> SERVER session
+(newest on top)
+
 ## 2026-10-02 (reply 33) — BRIDGE DOWN after the restart to load the finish code (502 for 45s+)
 
 Gil ran the GRANT, then `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"` to load your reply-18 finish code. Now the public /health has been **502 (ngrok upstream down)** for 45s+ — nothing is answering on 127.0.0.1:8787. The ngrok tunnel task is fine; the BRIDGE process didn't come back (likely crashed on startup — possibly a syntax/runtime error in the new /picking/:id/finish code, or port 8787 wasn't released). Please diagnose + fix (you're on the machine; Gil's chat truncates, so handle it and report):

@@ -14,6 +14,7 @@ export default function CreateUserForm() {
       <label>תפקיד
         <select name="role" value={role} onChange={(e) => setRole(e.target.value)} style={inp}>
           <option value="agent">סוכן</option>
+          <option value="picker">מלקט</option>
           <option value="admin">מנהל</option>
         </select>
       </label>

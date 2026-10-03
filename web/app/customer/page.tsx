@@ -1,13 +1,21 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { bridge, type Customer, type OrderKind } from "../../lib/bridge";
 import { useOrderContext } from "../../lib/useOrderContext";
+import { useCart } from "../../lib/useCart";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 
 // Agent selects a customer to order for. Agent sees ONLY their own customers;
 // admin searches ALL. Search is dynamic (updates as you type).
 export default function CustomerPage() {
   const { ctx, select, exit } = useOrderContext();
+  const { count, clear } = useCart();
+  const router = useRouter();
+  const exitCustomer = () => {
+    if (count > 0 && !window.confirm(`יציאה מהלקוח תרוקן את סל ההזמנה (${count} פריטים) ותחזור למחירון הכללי. להמשיך?`)) return;
+    clear(); exit(); router.push("/");
+  };
   const [role, setRole] = useState<string>("");
   const [all, setAll] = useState<Customer[]>([]);       // agent's full list (client-filtered)
   const [results, setResults] = useState<Customer[]>([]); // admin search results
@@ -49,10 +57,19 @@ export default function CustomerPage() {
 
   // Agent: filter their own list client-side as you type.
   const shown = useMemo(() => {
-    if (role === "admin") return results;
     const term = q.trim().toLowerCase();
-    if (!term) return all;
-    return all.filter((c) => c.fullName?.toLowerCase().includes(term) || String(c.accountKey).includes(term));
+    let list = role === "admin"
+      ? results
+      : (!term ? all : all.filter((c) => c.fullName?.toLowerCase().includes(term) || String(c.accountKey).includes(term)));
+    // If the query is a number, prefer customer-number matches (exact → starts-with → contains → rest).
+    if (/^\d+$/.test(term)) {
+      const rank = (c: Customer) => {
+        const k = String(c.accountKey);
+        return k === term ? 0 : k.startsWith(term) ? 1 : k.includes(term) ? 2 : 3;
+      };
+      list = [...list].sort((a, b) => rank(a) - rank(b));
+    }
+    return list;
   }, [role, results, all, q]);
 
   const choose = (accountKey: string, customerName: string) => select({ accountKey, customerName, orderKind: kind });
@@ -63,7 +80,7 @@ export default function CustomerPage() {
       {ctx && (
         <p className="card card-pad" style={{ background: "var(--brand-soft)", borderColor: "var(--brand-soft)", padding: "10px 14px" }}>
           לקוח נבחר: <b>{ctx.customerName}</b> ({ctx.accountKey}) · {ctx.orderKind === "picking" ? "לליקוט" : "עתידי"}{" "}
-          <button onClick={exit} className="btn btn-sm" style={{ marginInlineStart: 8 }}>יציאה מהלקוח</button>
+          <button onClick={exitCustomer} className="btn btn-sm" style={{ marginInlineStart: 8 }}>יציאה מהלקוח</button>
         </p>
       )}
 
