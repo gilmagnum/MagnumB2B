@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { bridge, type Document } from "../../lib/bridge";
 import { supabaseBrowser } from "../../lib/supabase/browser";
+import { managerOrAbove } from "../../lib/roles";
 
 // Picking queue. Warehouse screen (role picker/admin). Read-only for now —
 // "finish picking" (marking Hashavshevet) is deferred until Gil examines a live pick.
@@ -20,7 +21,7 @@ export default function PickingPage() {
       if (!user) { setAllowed(false); return; }
       const { data: prof } = await supabaseBrowser().from("profiles").select("role").eq("id", user.id).single();
       setRole(prof?.role ?? "");
-      setAllowed(prof?.role === "picker" || prof?.role === "admin");
+      setAllowed(prof?.role === "picker" || managerOrAbove(prof?.role));
     })();
   }, []);
 
@@ -73,7 +74,7 @@ export default function PickingPage() {
                   <td>
                     {state === "waiting"
                       ? <a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>ליקוט ←</a>
-                      : role === "admin"
+                      : managerOrAbove(role)
                         ? <a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>פתח מחדש ←</a>
                         : <span style={{ color: "#888" }}>לוקט</span>}
                   </td>

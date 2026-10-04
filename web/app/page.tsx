@@ -3,6 +3,7 @@ import { getProfile } from "../lib/auth";
 import { supabase } from "../lib/supabase";
 import HomeNotifyPrompt from "./components/HomeNotifyPrompt";
 import Icon from "./components/Icon";
+import { managerOrAbove, canSeeAdminPanel } from "../lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,8 @@ export default async function Home() {
     { href: "/customer", icon: "customers", label: "בחירת לקוח" },
     { href: "/cart", icon: "cart", label: "סל הזמנה" },
     { href: "/documents", icon: "docs", label: "מסמכים" },
-    ...(me.role === "admin" ? [{ href: "/picking", icon: "picking", label: "ליקוט" }, { href: "/admin", icon: "admin", label: "ניהול" }] : []),
+    ...(managerOrAbove(me.role) ? [{ href: "/picking", icon: "picking", label: "ליקוט" }] : []),
+    ...(canSeeAdminPanel(me.role) ? [{ href: "/admin", icon: "admin", label: "ניהול" }] : []),
     { href: "/settings", icon: "user", label: "הגדרות" },
   ];
 

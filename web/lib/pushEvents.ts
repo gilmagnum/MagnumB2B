@@ -1,5 +1,8 @@
 // Catalog of push event types, with the roles each is SUGGESTED for (default-on).
-export type Role = "agent" | "customer" | "picker" | "admin" | "";
+export type Role = "agent" | "customer" | "picker" | "admin" | "superadmin" | "";
+
+// superadmin inherits admin's event set.
+const norm = (role: Role): Role => (role === "superadmin" ? "admin" : role);
 
 export type PushEvent = { key: string; label: string; roles: Role[]; agentScoped?: boolean };
 
@@ -14,13 +17,13 @@ export const PUSH_EVENTS: PushEvent[] = [
   { key: "agent_order_produced", label: "הזמנת לקוח הופקה", roles: ["agent"], agentScoped: true },
 ];
 
-export const eventsForRole = (role: Role) => PUSH_EVENTS.filter((e) => e.roles.includes(role));
+export const eventsForRole = (role: Role) => PUSH_EVENTS.filter((e) => e.roles.includes(norm(role)));
 
 // Whether a user effectively gets an event by PUSH: explicit pref wins; else default-on if suggested for their role.
 export function effectivePref(role: Role, prefs: Record<string, boolean> | null | undefined, key: string): boolean {
   if (prefs && key in prefs) return !!prefs[key];
   const ev = PUSH_EVENTS.find((e) => e.key === key);
-  return ev ? ev.roles.includes(role) : false;
+  return ev ? ev.roles.includes(norm(role)) : false;
 }
 
 // Email is opt-in (default OFF), to avoid inboxing people by surprise: only an explicit true counts.

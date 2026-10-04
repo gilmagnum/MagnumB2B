@@ -5,6 +5,7 @@ import { supabaseBrowser } from "../../lib/supabase/browser";
 import { exportExcel, exportPdf } from "../../lib/docExport";
 import { fetchImages } from "../../lib/images";
 import { useOrderContext } from "../../lib/useOrderContext";
+import { managerOrAbove } from "../../lib/roles";
 
 // Documents screen. Admin sees ALL; an agent sees only their customers'. A "+" per
 // row expands the document's lines (with product images) inline. When a customer is
@@ -69,12 +70,12 @@ export default function DocumentsPage() {
       if (!user) { setErr("יש להתחבר מחדש"); setLoading(false); return; }
       const { data: prof } = await supabase.from("profiles").select("role, agent_id").eq("id", user.id).single();
       setRole(prof?.role ?? "");
-      setAgentId(prof?.role === "admin" ? 0 : (prof?.agent_id ?? null));
+      setAgentId(managerOrAbove(prof?.role) ? 0 : (prof?.agent_id ?? null));
     })();
   }, []);
 
   const load = useCallback(async () => {
-    if (agentId == null) { setLoading(false); if (role && role !== "admin") setErr("למשתמש לא משויך קוד סוכן"); return; }
+    if (agentId == null) { setLoading(false); if (role && !managerOrAbove(role)) setErr("למשתמש לא משויך קוד סוכן"); return; }
     setLoading(true); setErr(""); setExpanded(new Set());
     const effectiveQ = (ctx && onlyCustomer) ? ctx.accountKey : (q.trim() || undefined);
     try {
@@ -99,7 +100,7 @@ export default function DocumentsPage() {
       {ctx && onlyCustomer
         ? <p style={{ color: "var(--brand-strong)", fontSize: 14 }}>מסמכי <b>{ctx.customerName}</b> ({ctx.accountKey}) · <button onClick={() => setOnlyCustomer(false)} style={linkBtn}>הצג את כל המסמכים</button></p>
         : <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>
-            {role === "admin" ? "מציג את כל המסמכים" : "מציג את המסמכים של הלקוחות שלך"}
+            {managerOrAbove(role) ? "מציג את כל המסמכים" : "מציג את המסמכים של הלקוחות שלך"}
             {ctx && <> · <button onClick={() => setOnlyCustomer(true)} style={linkBtn}>רק {ctx.customerName}</button></>}
           </p>}
 

@@ -5,6 +5,7 @@ import { bridge, type Customer, type OrderKind } from "../../lib/bridge";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { useCart } from "../../lib/useCart";
 import { supabaseBrowser } from "../../lib/supabase/browser";
+import { managerOrAbove } from "../../lib/roles";
 
 // Agent selects a customer to order for. Agent sees ONLY their own customers;
 // admin searches ALL. Search is dynamic (updates as you type).
@@ -33,7 +34,7 @@ export default function CustomerPage() {
       if (!user) { setBridgeErr("יש להתחבר מחדש"); return; }
       const { data: prof } = await supabase.from("profiles").select("role, agent_id").eq("id", user.id).single();
       setRole(prof?.role ?? "");
-      if (prof?.role === "admin") return; // admin searches on type
+      if (managerOrAbove(prof?.role)) return; // admin/superadmin searches on type
       const agentId = prof?.agent_id;
       if (agentId == null) { setBridgeErr("למשתמש לא משויך קוד סוכן"); return; }
       bridge.customers(agentId).then(setAll).catch(() => setBridgeErr("הגשר עדיין לא מחובר — הזנה ידנית זמנית"));
@@ -42,7 +43,7 @@ export default function CustomerPage() {
 
   // Admin: debounced live search as you type.
   useEffect(() => {
-    if (role !== "admin") return;
+    if (!managerOrAbove(role)) return;
     if (timer.current) clearTimeout(timer.current);
     const term = q.trim();
     if (term.length < 2) { setResults([]); return; }
@@ -58,7 +59,7 @@ export default function CustomerPage() {
   // Agent: filter their own list client-side as you type.
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase();
-    let list = role === "admin"
+    let list = managerOrAbove(role)
       ? results
       : (!term ? all : all.filter((c) => c.fullName?.toLowerCase().includes(term) || String(c.accountKey).includes(term)));
     // If the query is a number, prefer customer-number matches (exact → starts-with → contains → rest).
@@ -107,8 +108,8 @@ export default function CustomerPage() {
         </ul>
       ) : (
         <div style={{ border: "1px dashed var(--border)", padding: 12, borderRadius: 10 }}>
-          {role === "admin" && !bridgeErr && q.trim().length < 2 && <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>הקלד לפחות 2 תווים לחיפוש לקוח.</p>}
-          {role === "admin" && !bridgeErr && q.trim().length >= 2 && !searching && <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>לא נמצאו לקוחות.</p>}
+          {managerOrAbove(role) && !bridgeErr && q.trim().length < 2 && <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>הקלד לפחות 2 תווים לחיפוש לקוח.</p>}
+          {managerOrAbove(role) && !bridgeErr && q.trim().length >= 2 && !searching && <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>לא נמצאו לקוחות.</p>}
           {bridgeErr && (
             <>
               <p className="chip chip-warn" style={{ marginBottom: 8 }}>{bridgeErr}. הזנה ידנית זמנית:</p>

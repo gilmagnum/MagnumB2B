@@ -1,6 +1,7 @@
 "use client";
 import { useActionState, useState } from "react";
 import { createUserAction, type AdminState } from "./actions";
+import { ASSIGNABLE_ROLES } from "../../lib/roles";
 
 export default function CreateUserForm() {
   const [state, action, pending] = useActionState<AdminState, FormData>(createUserAction, {});
@@ -13,9 +14,7 @@ export default function CreateUserForm() {
       <label>שם מלא<input name="full_name" type="text" style={inp} /></label>
       <label>תפקיד
         <select name="role" value={role} onChange={(e) => setRole(e.target.value)} style={inp}>
-          <option value="agent">סוכן</option>
-          <option value="picker">מלקט</option>
-          <option value="admin">מנהל</option>
+          {ASSIGNABLE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
       </label>
       {role === "agent" && (

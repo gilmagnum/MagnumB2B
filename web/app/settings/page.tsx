@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "../../lib/auth";
+import { canEditRulers, canManageUsers } from "../../lib/roles";
 import EnableNotifications from "../components/EnableNotifications";
 import NotificationPrefs from "../components/NotificationPrefs";
 import EmailTestButton from "../components/EmailTestButton";
+import Icon from "../components/Icon";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +35,20 @@ export default async function SettingsPage() {
         </p>
         <div style={{ marginTop: 12, maxWidth: 440 }}>
           <NotificationPrefs channel="email" defaultOpen />
-          {me.role === "admin" && <EmailTestButton />}
+          {canManageUsers(me.role) && <EmailTestButton />}
         </div>
       </section>
+
+      {canEditRulers(me.role) && (
+        <section style={{ marginTop: 28 }}>
+          <h3 style={{ color: "var(--brand-strong)" }}>ניהול מערכת</h3>
+          <div style={{ marginTop: 12 }}>
+            <a href="/settings/rulers" className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <Icon name="ruler" size={18} /> סרגלי מידות ←
+            </a>
+          </div>
+        </section>
+      )}
     </>
   );
 }

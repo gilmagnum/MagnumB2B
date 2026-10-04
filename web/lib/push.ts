@@ -50,7 +50,9 @@ export async function sendEvent(key: string, ctx: { agentId?: number | null; pay
   const ev = PUSH_EVENTS.find((e) => e.key === key);
   if (!ev) return { sent: 0, failed: 0, emailed: 0 };
   const admin = supabaseAdmin();
-  let qb = admin.from("profiles").select("id, role, push_prefs, email_prefs").in("role", ev.roles);
+  // superadmin inherits admin events, so include it whenever admin is targeted.
+  const roles = ev.roles.includes("admin") ? [...ev.roles, "superadmin"] : ev.roles;
+  let qb = admin.from("profiles").select("id, role, push_prefs, email_prefs").in("role", roles);
   if (ev.agentScoped && ctx.agentId != null) qb = qb.eq("agent_id", ctx.agentId);
   const { data: profiles } = await qb;
   const rows = profiles ?? [];

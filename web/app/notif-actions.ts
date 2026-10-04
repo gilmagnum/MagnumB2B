@@ -2,6 +2,7 @@
 import { supabaseServer } from "../lib/supabase/server";
 import { supabaseAdmin } from "../lib/supabase/admin";
 import { getProfile } from "../lib/auth";
+import { canManageUsers } from "../lib/roles";
 
 // A user saves their OWN notification preferences.
 export async function saveMyPrefs(prefs: Record<string, boolean>): Promise<{ ok?: boolean; error?: string }> {
@@ -14,7 +15,7 @@ export async function saveMyPrefs(prefs: Record<string, boolean>): Promise<{ ok?
 // Admin saves notification preferences for ANY user.
 export async function saveUserPrefs(id: string, prefs: Record<string, boolean>): Promise<{ ok?: boolean; error?: string }> {
   const me = await getProfile().catch(() => null);
-  if (!me || me.role !== "admin") return { error: "forbidden" };
+  if (!me || !canManageUsers(me.role)) return { error: "forbidden" };
   const { error } = await supabaseAdmin().from("profiles").update({ push_prefs: prefs }).eq("id", id);
   return error ? { error: error.message } : { ok: true };
 }
@@ -30,7 +31,7 @@ export async function saveMyEmailPrefs(prefs: Record<string, boolean>): Promise<
 // Admin saves email preferences for ANY user.
 export async function saveUserEmailPrefs(id: string, prefs: Record<string, boolean>): Promise<{ ok?: boolean; error?: string }> {
   const me = await getProfile().catch(() => null);
-  if (!me || me.role !== "admin") return { error: "forbidden" };
+  if (!me || !canManageUsers(me.role)) return { error: "forbidden" };
   const { error } = await supabaseAdmin().from("profiles").update({ email_prefs: prefs }).eq("id", id);
   return error ? { error: error.message } : { ok: true };
 }

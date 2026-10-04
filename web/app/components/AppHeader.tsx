@@ -6,8 +6,9 @@ import { useOrderContext } from "../../lib/useOrderContext";
 import { useCart } from "../../lib/useCart";
 import HeaderSearch from "./HeaderSearch";
 import Icon from "./Icon";
+import { canSeeAdminPanel } from "../../lib/roles";
 
-type Role = "agent" | "customer" | "picker" | "admin" | "";
+type Role = "agent" | "customer" | "picker" | "admin" | "superadmin" | "";
 
 // Top bar, RTL (right→left): ☰ menu · home · user · customer(✕) · cart · search.
 export default function AppHeader({ role, name }: { role: Role; name: string }) {
@@ -16,8 +17,8 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const isAdmin = role === "admin";
-  const canPick = role === "picker" || role === "admin";
+  const isSuper = canSeeAdminPanel(role);
+  const canPick = role === "picker" || role === "admin" || role === "superadmin";
   const pickerOnly = role === "picker";
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
         { href: "/cart", label: "סל הזמנה", icon: "cart" },
         { href: "/documents", label: "מסמכים", icon: "docs" },
         ...(canPick ? [{ href: "/picking", label: "ליקוט", icon: "picking" }] : []),
-        ...(isAdmin ? [{ href: "/admin", label: "ניהול", icon: "admin" }] : []),
+        ...(isSuper ? [{ href: "/admin", label: "ניהול", icon: "admin" }] : []),
         { href: "/settings", label: "הגדרות", icon: "user" },
       ];
   const home = pickerOnly ? "/picking" : "/";
