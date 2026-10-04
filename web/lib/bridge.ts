@@ -121,6 +121,7 @@ export const bridge = {
     if (opts.scope) p.set("scope", opts.scope);
     p.set("from", opts.from); p.set("to", opts.to);
     if (opts.compare) p.set("compare", "1");
+    if (opts.central) p.set("central", "1"); // roll top customers up to their central account
     return call<Stats>(`/stats?${p.toString()}`);
   },
 };
@@ -132,6 +133,7 @@ export type StatsQuery = {
   from: string;
   to: string;
   compare?: boolean;
+  central?: boolean;
 };
 export type StatMetrics = { sales: number; ordersCount: number; payments: number; returns?: number; activeCustomers?: number };
 export type TopItem = { itemkey: string; name: string; qty: number; value: number };

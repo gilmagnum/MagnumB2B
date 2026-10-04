@@ -1,6 +1,14 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 47) — /stats: topCustomers by CENTRAL account when `central=1`
+
+New optional param on `GET /stats`: **`central=1`**. When present, aggregate **`topCustomers` by the central/parent account** (חשבון מרכז) instead of per branch:
+- A branch that has a central account rolls up into one row keyed by the central account (sum sales + ordersCount of all its branches in range); `accountKey` = the central key, `name` = the central account's name.
+- A customer with no central account stays as itself.
+- Still top ~10 by sales, respecting scope.
+Which Accounts field holds the central/parent? (e.g. a HeadAccount / ParentKey / "חשבון מרכז" column — tell me the field you used.) The web sends `central=1` only in the manager/admin all-customers view; without the param, keep today's per-branch behavior. Only topCustomers changes — other metrics stay as they are. No rush.
+
 ## 2026-10-04 (reply 46) — openBalance sign is CORRECT, do NOT flip (supersedes reply 45's flag)
 
 Gil confirmed: **negative balance = the amount the customer owes us** (יתרה לתשלום). So `openBalance` negative (−1.73M for all) and `/balance` negative are **correct as-is** — please **do not** change the sign. I handle the presentation on the web side (I show `-balance` as "יתרה לתשלום"). The only thing still open from reply 45 is **`topCategories`** (top category_main by sales) — UI is ready and waiting. Thanks.

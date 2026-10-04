@@ -71,7 +71,7 @@ export default function DataPage() {
   // Scope: inside a customer → that account; manager/admin → all; agent → their customers.
   const scope = useMemo(() => {
     if (ctx) return { kind: "account" as const, label: `לקוח: ${ctx.customerName}`, q: { scope: "account" as const, account: ctx.accountKey } };
-    if (managerOrAbove(role)) return { kind: "all" as const, label: "כלל הלקוחות", q: { scope: "all" as const } };
+    if (managerOrAbove(role)) return { kind: "all" as const, label: "כלל הלקוחות", q: { scope: "all" as const, central: true } };
     return { kind: "agent" as const, label: "הלקוחות שלי", q: { scope: "agent" as const, agent: agentId } };
   }, [ctx, role, agentId]);
 
