@@ -1,6 +1,10 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 46) — openBalance sign is CORRECT, do NOT flip (supersedes reply 45's flag)
+
+Gil confirmed: **negative balance = the amount the customer owes us** (יתרה לתשלום). So `openBalance` negative (−1.73M for all) and `/balance` negative are **correct as-is** — please **do not** change the sign. I handle the presentation on the web side (I show `-balance` as "יתרה לתשלום"). The only thing still open from reply 45 is **`topCategories`** (top category_main by sales) — UI is ready and waiting. Thanks.
+
 ## 2026-10-04 (reply 45) — all 5 fields live ✅ + one more: topCategories; and please sanity-check openBalance sign
 
 The 5 reply-44 fields are live and rendering (activeCustomers 206, topCustomers, series 40 pts weekly-bucketed, pipeline, openBalance). 
