@@ -35,20 +35,23 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       .then((d) => {
         setDoc(d);
         const init: Record<string, number> = {};
-        for (const l of d.lines ?? []) if (!l.isShipping) init[l.itemkey] = l.qty;
+        for (const l of d.lines ?? []) if (!l.isShipping) init[lineKey(l)] = l.qty;
         setPicked(init);
         fetchImages((d.lines ?? []).map((l) => l.itemkey)).then(setImages).catch(() => {});
       })
       .catch(() => setErr("הגשר עדיין לא מחובר — פרטי ההזמנה ייטענו כשהגשר יעלה."));
   }, [id]);
 
+  // A line key must distinguish same-SKU lines that differ only by size (ruler products).
+  const lineKey = (l: DocLine) => String(l.lineId ?? `${l.itemkey}|${l.size ?? ""}`);
+
   const lines = useMemo(
-    () => (doc?.lines ?? []).filter((l) => !l.isShipping).sort((a, b) => a.itemkey.localeCompare(b.itemkey)),
+    () => (doc?.lines ?? []).filter((l) => !l.isShipping).sort((a, b) => (a.itemkey.localeCompare(b.itemkey) || (a.size ?? "").localeCompare(b.size ?? ""))),
     [doc],
   );
 
   const shortageOf = (l: DocLine): "none" | "full" | "partial" => {
-    const p = picked[l.itemkey] ?? 0;
+    const p = picked[lineKey(l)] ?? 0;
     if (p >= l.qty) return "none";
     return p <= 0 ? "full" : "partial";
   };
@@ -57,7 +60,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const confirmFinish = async () => {
     if (!doc) return;
     setSaving(true);
-    const shortageRows = shortages.map((l) => ({ itemkey: l.itemkey, name: l.name, ordered: l.qty, picked: picked[l.itemkey] ?? 0, kind: shortageOf(l) }));
+    const shortageRows = shortages.map((l) => ({ itemkey: l.itemkey, size: l.size, name: l.name, ordered: l.qty, picked: picked[lineKey(l)] ?? 0, kind: shortageOf(l) }));
     // 1) App documentation — always saved.
     let hashavshevetOk = false;
     try {
@@ -65,7 +68,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       await supabaseBrowser().from("picking_logs").insert({
         stock_id: doc.stockId, doc_number: doc.docNumber, account_key: doc.accountKey,
         picker, notes: notes.trim() || null,
-        lines: lines.map((l) => ({ itemkey: l.itemkey, ordered: l.qty, picked: picked[l.itemkey] ?? 0 })),
+        lines: lines.map((l) => ({ itemkey: l.itemkey, size: l.size, ordered: l.qty, picked: picked[lineKey(l)] ?? 0 })),
         shortages: shortageRows, created_by: user?.id ?? null,
       });
     } catch { /* log best-effort */ }
@@ -74,7 +77,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     try {
       await bridge.finishPicking(doc.stockId, {
         picker, notes: notes.trim() || undefined,
-        lines: lines.map((l) => ({ itemkey: l.itemkey, pickedQty: picked[l.itemkey] ?? 0 })),
+        lines: lines.map((l) => ({ itemkey: l.itemkey, size: l.size, pickedQty: picked[lineKey(l)] ?? 0 })),
       });
       hashavshevetOk = true;
       // Fire push events: pick finished (admins) + the customer's agent — best-effort.
@@ -134,25 +137,25 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
             {lines.map((l) => {
               const sh = shortageOf(l);
               return (
-                <tr key={l.itemkey} style={{ background: sh === "full" ? "var(--danger-soft)" : sh === "partial" ? "var(--warn-soft)" : undefined }}>
+                <tr key={lineKey(l)} style={{ background: sh === "full" ? "var(--danger-soft)" : sh === "partial" ? "var(--warn-soft)" : undefined }}>
                   <td style={{ padding: 6 }}>{images[l.itemkey] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={images[l.itemkey]} alt="" style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 6, background: "var(--surface-muted)" }} />
                   ) : (
                     <div style={{ width: 44, height: 44, borderRadius: 6, background: "var(--surface-muted)" }} />
                   )}</td>
-                  <td style={{ fontWeight: 700 }}>{l.itemkey}</td>
+                  <td style={{ fontWeight: 700 }}>{l.itemkey}{l.size ? <div><span className="chip chip-info" style={{ marginTop: 2 }}>מידה {l.size}</span></div> : null}</td>
                   <td>{l.name}</td>
                   <td style={{ color: (l.onHand ?? 0) < l.qty ? "var(--danger)" : "var(--ok)" }}>{l.onHand ?? "—"}</td>
                   <td>{l.qty}{l.unit ? ` ${l.unit}` : ""}</td>
                   <td>
-                    <input type="number" min={0} max={l.qty} value={picked[l.itemkey] ?? 0} disabled={readOnly}
-                      onChange={(e) => setPicked({ ...picked, [l.itemkey]: Math.max(0, Math.min(l.qty, Number(e.target.value))) })}
+                    <input type="number" min={0} max={l.qty} value={picked[lineKey(l)] ?? 0} disabled={readOnly}
+                      onChange={(e) => setPicked({ ...picked, [lineKey(l)]: Math.max(0, Math.min(l.qty, Number(e.target.value))) })}
                       style={{ width: 64 }} />
                   </td>
                   <td>
                     {sh === "none" && <span className="chip chip-ok">✓ מלא</span>}
-                    {sh === "partial" && <span className="chip chip-warn">חוסר ({l.qty - (picked[l.itemkey] ?? 0)})</span>}
+                    {sh === "partial" && <span className="chip chip-warn">חוסר ({l.qty - (picked[lineKey(l)] ?? 0)})</span>}
                     {sh === "full" && <span className="chip chip-danger">חסר לגמרי</span>}
                   </td>
                 </tr>
@@ -185,10 +188,10 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                   <p style={{ fontWeight: 700, marginBottom: 6 }}>חוסרים לאישור ({shortages.length}):</p>
                   <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 14 }}>
                     {shortages.map((l) => (
-                      <li key={l.itemkey} style={{ marginBottom: 4 }}>
-                        <b>{l.itemkey}</b> — {shortageOf(l) === "full"
+                      <li key={lineKey(l)} style={{ marginBottom: 4 }}>
+                        <b>{l.itemkey}</b>{l.size ? ` (מידה ${l.size})` : ""} — {shortageOf(l) === "full"
                           ? <span style={{ color: "var(--danger)" }}>חסר לגמרי (השורה תימחק)</span>
-                          : <span style={{ color: "var(--warn)" }}>לוקטו {picked[l.itemkey]} מתוך {l.qty} (השורה תעודכן)</span>}
+                          : <span style={{ color: "var(--warn)" }}>לוקטו {picked[lineKey(l)]} מתוך {l.qty} (השורה תעודכן)</span>}
                       </li>
                     ))}
                   </ul>

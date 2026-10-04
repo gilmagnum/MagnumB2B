@@ -193,7 +193,7 @@ export default function DocumentsPage() {
                                   ) : (
                                     <div style={{ width: 44, height: 44, background: "var(--surface-muted)", borderRadius: 6 }} />
                                   )}</td>
-                                  <td style={{ fontWeight: 600 }}>{l.itemkey}</td>
+                                  <td style={{ fontWeight: 600 }}>{l.itemkey}{l.size ? <span className="chip chip-info" style={{ marginInlineStart: 6 }}>מידה {l.size}</span> : null}</td>
                                   <td>{l.name}</td>
                                   <td>{l.qty}{l.unit ? ` ${l.unit}` : ""}</td>
                                   <td>{l.unitPrice != null ? `${l.unitPrice.toFixed(2)} ₪` : ""}</td>

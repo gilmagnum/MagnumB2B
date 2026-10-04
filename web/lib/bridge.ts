@@ -43,6 +43,7 @@ export type DocLine = {
   itemkey: string; name?: string; qty: number; unit?: string;
   unitPrice?: number; discountPct?: number; lineTotal?: number;
   onHand?: number; isShipping?: boolean;
+  size?: string; lineId?: number; // ruler products: per-size line (StockMoves.Details / .ID)
 };
 export type DocumentDetail = Document & {
   lines: DocLine[];
@@ -100,7 +101,7 @@ export const bridge = {
   },
   document: (stockId: number) => call<DocumentDetail>(`/documents/${stockId}`),
   // Finish picking: marks לוקט ע"י + applies shortages (partial=reduce, 0=delete) + notes.
-  finishPicking: (stockId: number, body: { picker: string; notes?: string; lines: { itemkey: string; pickedQty: number }[] }) =>
+  finishPicking: (stockId: number, body: { picker: string; notes?: string; lines: { itemkey: string; size?: string; pickedQty: number }[] }) =>
     call<{ ok: boolean; stockId: number; shortages?: unknown[] }>(`/picking/${stockId}/finish`, { method: "POST", body: JSON.stringify(body) }),
   // Picking queue (read-only). state "waiting" = awaiting picking (ExtraText2 empty),
   // "picked" = picked but not yet produced. agentId 0 = all.
