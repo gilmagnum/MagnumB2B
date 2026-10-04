@@ -21,6 +21,27 @@ function rangeFor(preset: Preset, custom: { from: string; to: string }): { from:
   return custom;
 }
 
+const parse = (s: string) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+function addMonthsClamp(d: Date, delta: number) {
+  const t = new Date(d.getFullYear(), d.getMonth() + delta, 1);
+  const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  t.setDate(Math.min(d.getDate(), last));
+  return t;
+}
+// The PARALLEL previous period: shifted by one unit of the preset and ending at the
+// equivalent date (e.g. year = last year up to the same day, not the full last year).
+function prevRangeFor(preset: Preset, range: { from: string; to: string }): { from: string; to: string } {
+  const f = parse(range.from), t = parse(range.to);
+  if (preset === "today") return { from: iso(addDays(f, -1)), to: iso(addDays(t, -1)) };
+  if (preset === "month") return { from: iso(addMonthsClamp(f, -1)), to: iso(addMonthsClamp(t, -1)) };
+  if (preset === "quarter") return { from: iso(addMonthsClamp(f, -3)), to: iso(addMonthsClamp(t, -3)) };
+  if (preset === "year") return { from: iso(addMonthsClamp(f, -12)), to: iso(addMonthsClamp(t, -12)) };
+  const len = Math.round((t.getTime() - f.getTime()) / 864e5); // custom: same length right before
+  const pt = addDays(f, -1); const pf = addDays(pt, -len);
+  return { from: iso(pf), to: iso(pt) };
+}
+
 export default function DataPage() {
   const { ctx } = useOrderContext();
   const [role, setRole] = useState("");
@@ -58,13 +79,20 @@ export default function DataPage() {
   const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      setData(await bridge.stats({ ...scope.q, from: range.from, to: range.to, compare }));
+      const primary = await bridge.stats({ ...scope.q, from: range.from, to: range.to });
+      let previous;
+      if (compare) {
+        const pr = prevRangeFor(preset, range);
+        const p = await bridge.stats({ ...scope.q, from: pr.from, to: pr.to });
+        previous = { sales: p.sales, returns: p.returns, ordersCount: p.ordersCount, payments: p.payments, activeCustomers: p.activeCustomers };
+      }
+      setData({ ...primary, previous });
     } catch (e) {
       const m = (e as Error).message || "";
       setErr(/404|not found/i.test(m) ? "נקודת הנתונים בגשר עדיין לא פעילה — תוצג כשתעלה." : "שגיאה בטעינת נתונים — ייתכן שהגשר לא מחובר.");
       setData(null);
     } finally { setLoading(false); }
-  }, [scope.q, range.from, range.to, compare]);
+  }, [scope.q, range.from, range.to, compare, preset]);
 
   useEffect(() => { if (ready) void load(); }, [ready, preset, custom, compare, scope.kind, scope.q.account, scope.q.agent]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -102,96 +130,72 @@ export default function DataPage() {
 
       {data && !loading && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 14 }}>
+          {/* dense metric tiles */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 10 }}>
             <Metric label="מכירות" value={ils(data.sales)} prev={compare ? data.previous?.sales : undefined} cur={data.sales} money />
             <Metric label="הזמנות" value={num(data.ordersCount)} prev={compare ? data.previous?.ordersCount : undefined} cur={data.ordersCount} />
             <Metric label="תשלומים" value={ils(data.payments)} prev={compare ? data.previous?.payments : undefined} cur={data.payments} money />
             <Metric label="ממוצע הזמנה" value={ils(avg)} prev={compare ? prevAvg : undefined} cur={avg} money />
             {data.returns != null && <Metric label="זיכויים" value={ils(data.returns)} prev={compare ? data.previous?.returns : undefined} cur={data.returns} money />}
             {data.activeCustomers != null && <Metric label="לקוחות פעילים" value={num(data.activeCustomers)} prev={compare ? data.previous?.activeCustomers : undefined} cur={data.activeCustomers} />}
-            {data.openBalance != null && <Metric label="יתרות פתוחות" value={ils(data.openBalance)} cur={data.openBalance} />}
+            {data.openBalance != null && <Metric label="יתרות לתשלום" value={ils(-data.openBalance)} cur={-data.openBalance} />}
+            {data.pipeline?.awaitingPicking && <Metric label="ממתינות לליקוט" value={num(data.pipeline.awaitingPicking.count)} hint={ils(data.pipeline.awaitingPicking.value)} />}
+            {data.pipeline?.awaitingProduction && <Metric label="ממתינות להפקה" value={num(data.pipeline.awaitingProduction.count)} hint={ils(data.pipeline.awaitingProduction.value)} />}
           </div>
 
-          {data.pipeline && (data.pipeline.awaitingPicking || data.pipeline.awaitingProduction) && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 14, marginTop: 14 }}>
-              {data.pipeline.awaitingPicking && <Metric label="ממתינות לליקוט" value={`${num(data.pipeline.awaitingPicking.count)} · ${ils(data.pipeline.awaitingPicking.value)}`} />}
-              {data.pipeline.awaitingProduction && <Metric label="ממתינות להפקה" value={`${num(data.pipeline.awaitingProduction.count)} · ${ils(data.pipeline.awaitingProduction.value)}`} />}
+          {/* trend chart — full width */}
+          {data.series && data.series.length > 1 && (
+            <div className="card card-pad" style={{ marginTop: 14 }}>
+              <h3 style={{ color: "var(--brand-strong)", margin: "0 0 8px" }}>מגמת מכירות</h3>
+              <TrendChart series={data.series} />
             </div>
           )}
 
-          {data.series && data.series.length > 1 && (
-            <section style={{ marginTop: 24 }}>
-              <h3 style={{ color: "var(--brand-strong)" }}>מגמת מכירות</h3>
-              <TrendChart series={data.series} />
-            </section>
-          )}
-
-          {data.topItems?.length > 0 && (
-            <section style={{ marginTop: 24 }}>
-              <h3 style={{ color: "var(--brand-strong)" }}>פריטים מובילים</h3>
-              <div className="table-wrap">
-                <table className="data-table" style={{ minWidth: 420 }}>
-                  <thead><tr><th>מק״ט</th><th>תיאור</th><th>כמות</th><th>שווי</th></tr></thead>
-                  <tbody>
-                    {data.topItems.map((t) => (
-                      <tr key={t.itemkey}><td style={{ fontWeight: 700 }}>{t.itemkey}</td><td>{t.name}</td><td>{num(t.qty)}</td><td>{ils(t.value)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {data.topCategories && data.topCategories.length > 0 && (
-            <section style={{ marginTop: 24 }}>
-              <h3 style={{ color: "var(--brand-strong)" }}>קטגוריות מובילות</h3>
-              <div className="table-wrap">
-                <table className="data-table" style={{ minWidth: 340 }}>
-                  <thead><tr><th>קטגוריה</th><th>מכירות</th>{data.topCategories.some((c) => c.qty != null) && <th>כמות</th>}</tr></thead>
-                  <tbody>
-                    {data.topCategories.map((c) => (
-                      <tr key={c.name}><td style={{ fontWeight: 600 }}>{c.name}</td><td>{ils(c.sales)}</td>{c.qty != null && <td>{num(c.qty)}</td>}</tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {data.topCustomers && data.topCustomers.length > 0 && (
-            <section style={{ marginTop: 24 }}>
-              <h3 style={{ color: "var(--brand-strong)" }}>לקוחות מובילים</h3>
-              <div className="table-wrap">
-                <table className="data-table" style={{ minWidth: 380 }}>
-                  <thead><tr><th>לקוח</th><th>מכירות</th>{data.topCustomers.some((c) => c.ordersCount != null) && <th>הזמנות</th>}</tr></thead>
-                  <tbody>
-                    {data.topCustomers.map((c) => (
-                      <tr key={c.accountKey}><td>{c.name} <span style={{ color: "var(--ink-muted)" }}>({c.accountKey})</span></td><td>{ils(c.sales)}</td>{c.ordersCount != null && <td>{num(c.ordersCount)}</td>}</tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {data.byAgent && data.byAgent.length > 0 && (
-            <section style={{ marginTop: 24 }}>
-              <h3 style={{ color: "var(--brand-strong)" }}>לפי סוכן</h3>
-              <div className="table-wrap">
-                <table className="data-table" style={{ minWidth: 480 }}>
-                  <thead><tr><th>סוכן</th><th>מכירות</th><th>הזמנות</th><th>תשלומים</th></tr></thead>
-                  <tbody>
-                    {data.byAgent.map((a) => (
-                      <tr key={a.agentId}><td>{a.agentName} <span style={{ color: "var(--ink-muted)" }}>({a.agentId})</span></td><td>{ils(a.sales)}</td><td>{num(a.ordersCount)}</td><td>{ils(a.payments)}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
+          {/* graphical top-lists — tiled across the screen */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 14, marginTop: 14, alignItems: "start" }}>
+            {data.topItems?.length > 0 && (
+              <BarList title="פריטים מובילים" money items={data.topItems.map((t) => ({ label: t.name, sub: t.itemkey, value: t.value }))} />
+            )}
+            {data.topCategories && data.topCategories.length > 0 && (
+              <BarList title="קטגוריות מובילות" money items={data.topCategories.map((c) => ({ label: c.name, value: c.sales }))} />
+            )}
+            {data.topCustomers && data.topCustomers.length > 0 && (
+              <BarList title="לקוחות מובילים" money items={data.topCustomers.map((c) => ({ label: c.name, sub: `(${c.accountKey})`, value: c.sales }))} />
+            )}
+            {data.byAgent && data.byAgent.length > 0 && (
+              <BarList title="מכירות לפי סוכן" money items={data.byAgent.map((a) => ({ label: a.agentName, sub: `${num(a.ordersCount)} הזמנות`, value: a.sales }))} />
+            )}
+          </div>
         </>
       )}
     </>
+  );
+}
+
+// Horizontal bar list — a compact graphical "top N".
+function BarList({ title, items, money }: { title: string; items: { label: string; sub?: string; value: number }[]; money?: boolean }) {
+  const max = Math.max(1, ...items.map((i) => i.value));
+  const ils = (n: number) => `${Math.round(n).toLocaleString("he-IL")} ₪`;
+  const num = (n: number) => n.toLocaleString("he-IL");
+  return (
+    <div className="card card-pad">
+      <h3 style={{ color: "var(--brand-strong)", margin: "0 0 10px" }}>{title}</h3>
+      <div style={{ display: "grid", gap: 9 }}>
+        {items.map((it, i) => (
+          <div key={i}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, marginBottom: 3 }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {it.label}{it.sub ? <span style={{ color: "var(--ink-muted)" }}> {it.sub}</span> : null}
+              </span>
+              <b style={{ whiteSpace: "nowrap" }}>{money ? ils(it.value) : num(it.value)}</b>
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: "var(--surface-muted)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.max(2, Math.round((it.value / max) * 100))}%`, background: "var(--brand)", borderRadius: 999 }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -225,13 +229,13 @@ function TrendChart({ series }: { series: SeriesPoint[] }) {
   );
 }
 
-function Metric({ label, value, prev, cur, money }: { label: string; value: string; prev?: number; cur?: number; money?: boolean }) {
+function Metric({ label, value, prev, cur, money, hint }: { label: string; value: string; prev?: number; cur?: number; money?: boolean; hint?: string }) {
   let delta: { pct: number; up: boolean } | null = null;
   if (prev != null && cur != null && prev !== 0) delta = { pct: Math.round(((cur - prev) / Math.abs(prev)) * 100), up: cur >= prev };
   return (
-    <div className="card card-pad">
+    <div className="card card-pad" style={{ padding: 14 }}>
       <div style={{ color: "var(--ink-muted)", fontSize: 13 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 800, color: "var(--brand-strong)", marginTop: 4 }}>{value}</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: "var(--brand-strong)", marginTop: 4 }}>{value}{hint && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-muted)", marginInlineStart: 6 }}>{hint}</span>}</div>
       {delta && (
         <div style={{ fontSize: 13, marginTop: 4, color: delta.up ? "var(--ok)" : "var(--danger)" }}>
           {delta.up ? "▲" : "▼"} {Math.abs(delta.pct)}% <span style={{ color: "var(--ink-muted)" }}>מהתקופה הקודמת {money && prev != null ? `(${ils(prev)})` : prev != null ? `(${num(prev)})` : ""}</span>

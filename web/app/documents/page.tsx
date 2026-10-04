@@ -108,7 +108,13 @@ export default function DocumentsPage() {
       <h1>היסטוריית מסמכים</h1>
       {ctx && onlyCustomer
         ? <p style={{ color: "var(--brand-strong)", fontSize: 14 }}>מסמכי <b>{ctx.customerName}</b> ({ctx.accountKey})
-            {balance != null && <span className="chip" style={{ marginInlineStart: 8, background: balance > 0 ? "var(--danger-soft)" : "var(--surface-muted)", color: balance > 0 ? "var(--danger)" : "var(--ink)" }}>יתרה לתשלום: {Math.round(balance).toLocaleString("he-IL")} ₪</span>}
+            {balance != null && (() => {
+              const debt = -balance; // negative balance = the customer owes us
+              if (Math.abs(balance) < 0.5) return <span className="chip" style={{ marginInlineStart: 8, background: "var(--surface-muted)" }}>אין יתרה</span>;
+              return debt > 0
+                ? <span className="chip" style={{ marginInlineStart: 8, background: "var(--danger-soft)", color: "var(--danger)" }}>יתרה לתשלום: {Math.round(debt).toLocaleString("he-IL")} ₪</span>
+                : <span className="chip" style={{ marginInlineStart: 8, background: "var(--surface-muted)", color: "var(--ok)" }}>יתרת זכות: {Math.round(-debt).toLocaleString("he-IL")} ₪</span>;
+            })()}
             {" "}· <button onClick={() => setOnlyCustomer(false)} style={linkBtn}>הצג את כל המסמכים</button></p>
         : <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>
             {managerOrAbove(role) ? "מציג את כל המסמכים" : "מציג את המסמכים של הלקוחות שלך"}
