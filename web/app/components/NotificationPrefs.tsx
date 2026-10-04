@@ -4,10 +4,10 @@ import { supabaseBrowser } from "../../lib/supabase/browser";
 import { eventsForRole, effectivePref, type Role } from "../../lib/pushEvents";
 import { saveMyPrefs } from "../notif-actions";
 
-export default function NotificationPrefs() {
+export default function NotificationPrefs({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const [role, setRole] = useState<Role>("");
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {

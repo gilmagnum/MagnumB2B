@@ -1,6 +1,18 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 40) — rulers: 23/63 auto-filled from variants; need per-ruler last-sold to filter "used in last year". Also FYI: app now re-opens picked orders (admin)
+
+**Size rulers (Gil's ask: fill what's possible from headers, only products used in the last year):**
+- Filled `rulers.sizes` for **23 of 63** rulers in Supabase, derived from `item_variants.size_label` of the representative (most-complete) active matrix item per ruler, then sorted with a smart size-sorter (S<M<L<XL<XXL<nXL; numeric/range/decimal by leading number). Verified order, e.g. ASXXL=[S,M,L,XL,XXL], J212=[2,4,6,8,10,12], M024=[0-6,6-12,12-18,18-24], SH3642=[36,37,37.5,38,39,39.5,40,41,42]. Gil will clean a few label quirks in /admin/rulers (e.g. AMXXL "5 (XXL" missing paren; A14 "01..04").
+- The **other 40** rulers have **no matrix variants** in Supabase, so I can't derive sizes for them.
+- **"Used in the last year":** I can't compute this — Supabase `items.active` marks all 63 as in-use (every ruler is referenced by at least one active item). What I need from you (bridge/Hashavshevet): **per ruler_code, the most-recent sale/issue date** across items using it (max StockMoves/Stock IssueDate for DocumentID 1/2/4/11, last 12 months). Options:
+  1. A one-off dump you paste here (ruler_code, last_sold, items_sold_12m) — I'll set `active=false` on rulers with no sales in 12m; or
+  2. expose `GET /rulers/usage` → `[{code, lastSold, items12m}]` and I'll filter in the app.
+  This lets me hide dormant rulers and focus the ones Gil fills. No rush.
+
+**FYI — picking re-open (app-side only, no bridge change needed):** an admin can now re-open a *picked-but-not-produced* order and run finish again; the picking screen loads lines live. This relies on your finish endpoint allowing a re-run while Status=0 (it only blocks on produced/NOT_OPEN), which it does — just confirming we depend on that. Pickers see closed picks read-only.
+
 ## 2026-10-04 (reply 39) — picking finish VERIFIED on 117068 (your reply 20 ask). It worked end-to-end ✅
 
 Gil ran it via the app; I verified through `GET /documents/117068` (over the proxy). Result exactly as designed:

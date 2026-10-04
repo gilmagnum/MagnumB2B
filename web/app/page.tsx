@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "../lib/auth";
 import { supabase } from "../lib/supabase";
-import EnableNotifications from "./components/EnableNotifications";
-import NotificationPrefs from "./components/NotificationPrefs";
+import HomeNotifyPrompt from "./components/HomeNotifyPrompt";
 import Icon from "./components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +22,7 @@ export default async function Home() {
     { href: "/cart", icon: "cart", label: "סל הזמנה" },
     { href: "/documents", icon: "docs", label: "מסמכים" },
     ...(me.role === "admin" ? [{ href: "/picking", icon: "picking", label: "ליקוט" }, { href: "/admin", icon: "admin", label: "ניהול" }] : []),
+    { href: "/settings", icon: "user", label: "הגדרות" },
   ];
 
   return (
@@ -42,9 +42,8 @@ export default async function Home() {
         )}
       </section>
 
-      <div style={{ margin: "0 0 16px", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <EnableNotifications />
-        <NotificationPrefs />
+      <div style={{ margin: "0 0 16px" }}>
+        <HomeNotifyPrompt />
       </div>
 
       {/* menu tiles */}
