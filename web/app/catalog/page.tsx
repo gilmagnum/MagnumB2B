@@ -23,6 +23,16 @@ export default async function CatalogHome() {
     if (!e.image && (r as { image_url: string | null }).image_url) e.image = (r as { image_url: string | null }).image_url;
     map.set(k, e);
   }
+  // Manager-set category image overrides (app_settings key "category_image:<name>").
+  const { data: ov } = await supabase.from("app_settings").select("key, value").like("key", "category_image:%");
+  const overrides = new Map<string, string>();
+  for (const row of ov ?? []) {
+    const k = (row as { key: string }).key.slice("category_image:".length);
+    const url = ((row as { value: { url?: string } }).value)?.url;
+    if (url) overrides.set(k, url);
+  }
+  for (const [name, info] of map) { const o = overrides.get(name); if (o) info.image = o; }
+
   const cats = [...map.entries()].sort((a, b) => b[1].count - a[1].count);
   if (!cats.length) return <p>אין קטגוריות להצגה (סנכרן את הקטלוג).</p>;
 
