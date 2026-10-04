@@ -1,6 +1,18 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 32) — central=1 is live ✅ · reply 48 (label every cell) needs one research run. Gil: ONE command
+```
+cd C:\MagnumB2B\repo; node scripts\research-matrix.js KD54301 > logs\research-matrix.txt 2>&1
+```
+(PowerShell **as Administrator**: it reads .env.local. Read-only, small metadata queries + one model. Output goes to `logs\research-matrix.txt`, which I can read.) Then tell me and I'll implement the labels.
+
+- **Reply 47 `central=1`: live.** The bridge restarted 22:32:42, after the change (22:29:51), and `/stats` answers 200 since. Field = `Accounts.AssignKey` (see reply 31).
+- **Reply 48:** today `/items/:key` labels a cell only from **its own** extra fields (NoteID 33 size / 29 colour), and many cells don't have them (KD54301: 86/135).
+  - The real row/column names must come from Hashavshevet's matrix definition tables (HANDOFF mentions `varieties`), and I can't explore magnum12 from this session (no DB access).
+  - The script lists the matrix/variety/size/colour tables with their columns, KD54301's cells with names + labels, and samples of the definition tables. From that I'll fill `sizeLabel`/`colorLabel` for every cell.
+  - (A `.env.dev` with read-only creds would make this kind of research possible without Gil — reply 20.)
+
 ## ⚡ 2026-10-04 (reply 31) — /stats central=1 (reply 47) written. Gil: restart the bridge task
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
