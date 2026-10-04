@@ -20,7 +20,6 @@ export default async function Home() {
   const tiles = [
     { href: "/catalog", icon: "catalog", label: "קטלוג" },
     { href: "/customer", icon: "customers", label: "בחירת לקוח" },
-    { href: "/cart", icon: "cart", label: "סל הזמנה" },
     { href: "/documents", icon: "docs", label: "מסמכים" },
     ...(managerOrAbove(me.role) ? [{ href: "/picking", icon: "picking", label: "ליקוט" }] : []),
     ...(canSeeAdminPanel(me.role) ? [{ href: "/admin", icon: "admin", label: "ניהול" }] : []),

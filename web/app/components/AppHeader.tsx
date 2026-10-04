@@ -6,6 +6,7 @@ import { useOrderContext } from "../../lib/useOrderContext";
 import { useCart } from "../../lib/useCart";
 import HeaderSearch from "./HeaderSearch";
 import Icon from "./Icon";
+import NotifBell from "./NotifBell";
 import { canSeeAdminPanel } from "../../lib/roles";
 
 type Role = "agent" | "customer" | "picker" | "admin" | "superadmin" | "";
@@ -38,7 +39,6 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
         { href: "/", label: "בית", icon: "home" },
         { href: "/customer", label: "בחירת לקוח", icon: "customers" },
         { href: "/catalog", label: "קטלוג", icon: "catalog" },
-        { href: "/cart", label: "סל הזמנה", icon: "cart" },
         { href: "/documents", label: "מסמכים", icon: "docs" },
         ...(canPick ? [{ href: "/picking", label: "ליקוט", icon: "picking" }] : []),
         ...(isSuper ? [{ href: "/admin", label: "ניהול", icon: "admin" }] : []),
@@ -80,6 +80,8 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
       )}
 
       <div className="hdr-spacer" style={{ flex: 1 }} />
+
+      <NotifBell />
 
       {!pickerOnly && (
         <a href="/cart" className="icon-btn hdr-cart" title="סל" aria-label="סל" style={{ position: "relative" }}>

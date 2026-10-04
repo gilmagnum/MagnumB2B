@@ -47,8 +47,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Pickers are restricted to the picking screens only.
-  if (user && !path.startsWith("/picking")) {
+  // Pickers are restricted to the picking screens (plus their notifications).
+  if (user && !path.startsWith("/picking") && !path.startsWith("/notifications")) {
     const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).single();
     if (prof?.role === "picker") {
       const url = request.nextUrl.clone();

@@ -64,6 +64,15 @@ export async function sendEvent(key: string, ctx: { agentId?: number | null; pay
     .filter((p) => effectiveEmailPref(p.email_prefs as Record<string, boolean> | null, key))
     .map((p) => p.id);
 
+  // In-app notification center: persist for the same recipients as push (same prefs).
+  if (pushIds.length) {
+    const rows = pushIds.map((id) => ({
+      profile_id: id, event_key: key,
+      title: ctx.payload.title, body: ctx.payload.body ?? null, url: ctx.payload.url ?? null,
+    }));
+    await admin.from("notifications").insert(rows);
+  }
+
   const push = pushIds.length ? await sendPush(pushIds, ctx.payload) : { sent: 0, failed: 0 };
   const emailed = await sendEventEmails(emailIds, ctx.payload);
   return { ...push, emailed };
