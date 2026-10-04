@@ -142,6 +142,22 @@ export default function DataPage() {
             </section>
           )}
 
+          {data.topCategories && data.topCategories.length > 0 && (
+            <section style={{ marginTop: 24 }}>
+              <h3 style={{ color: "var(--brand-strong)" }}>קטגוריות מובילות</h3>
+              <div className="table-wrap">
+                <table className="data-table" style={{ minWidth: 340 }}>
+                  <thead><tr><th>קטגוריה</th><th>מכירות</th>{data.topCategories.some((c) => c.qty != null) && <th>כמות</th>}</tr></thead>
+                  <tbody>
+                    {data.topCategories.map((c) => (
+                      <tr key={c.name}><td style={{ fontWeight: 600 }}>{c.name}</td><td>{ils(c.sales)}</td>{c.qty != null && <td>{num(c.qty)}</td>}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
           {data.topCustomers && data.topCustomers.length > 0 && (
             <section style={{ marginTop: 24 }}>
               <h3 style={{ color: "var(--brand-strong)" }}>לקוחות מובילים</h3>

@@ -136,6 +136,7 @@ export type StatsQuery = {
 export type StatMetrics = { sales: number; ordersCount: number; payments: number; returns?: number; activeCustomers?: number };
 export type TopItem = { itemkey: string; name: string; qty: number; value: number };
 export type TopCustomer = { accountKey: string; name: string; sales: number; ordersCount?: number };
+export type TopCategory = { name: string; sales: number; qty?: number };
 export type AgentStat = { agentId: number; agentName: string; sales: number; ordersCount: number; payments: number };
 export type SeriesPoint = { date: string; sales: number; payments?: number };
 export type Pipeline = { awaitingPicking?: { count: number; value: number }; awaitingProduction?: { count: number; value: number } };
@@ -144,6 +145,7 @@ export type Stats = StatMetrics & {
   topItems: TopItem[];
   byAgent?: AgentStat[];
   topCustomers?: TopCustomer[];
+  topCategories?: TopCategory[];
   series?: SeriesPoint[];
   pipeline?: Pipeline;
   openBalance?: number;
