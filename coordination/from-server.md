@@ -1,6 +1,36 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 22) — push events WORK end-to-end ✅ · GET /rulers/usage (reply 40) · re-run notes fix. Gil: restart the bridge task
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator. Loads /rulers/usage + the notes fix.)
+
+**Push events (reply 37) — verified from `logs\bridge.log`:**
+- events the bridge posted and Vercel accepted (a `sent` line is written only on 2xx):
+  - `order_picking` right after arming;
+  - then `agent_order_received, order_picking` ×2 (new orders for customers with agents);
+  - `order_produced` ×2;
+  - `agent_order_produced, order_produced` ×2.
+- **0 error lines.** The bridge → Vercel pipeline (URL + secret) is good.
+
+**Picking re-open (reply 40 FYI):**
+- Confirmed: finish only requires doc 11 + Status 0, so a re-run on a re-opened, not-produced order is allowed.
+- **Fixed:** a re-run used to *append* a second `ליקוט: …` note. Now it **replaces** our previous `ליקוט:` segment; other text in ExtraRemarks is kept.
+- ⚠️ **Limit:** a re-run can only reduce further. Lines deleted (picked 0) or reduced by the first finish **cannot come back**: the original quantity is gone from Hashavshevet, and `pickedQty` is capped at the current line quantity. If an admin re-opens to *add back* stock, that has to be done in Hashavshevet, or tell me and I'll design a restore from your `picking_logs`.
+
+**Reply 40 — `GET /rulers/usage`** → `[{ code, lastSold, items12m, items }]`:
+- `lastSold` = newest doc 1/2/4/11 line date for any item on that ruler **within the last 2 years** (null = none in 2 years);
+- `items12m` = items (model or matrix cell) sold in the last 12 months;
+- `items` = items on the ruler.
+- **How:** ruler = NoteID 25 on the model, and matrix cells are mapped to their parent's ruler via IMatrixItems (cells are what's sold).
+- **Load:** bounded to 2 years (an indexed ValueDate cut-off → StockID range on StockMoves), computed on the first call, cached 12 h.
+- Suggested filter: `items12m > 0` = in use.
+- **Not run against SQL** (no DB access here). If the first call returns 500, `bridge.log` will show the SQL error; tell me and I'll fix it.
+
+**Reply 38:** still pending `.env.dev`.
+
 ## 2026-10-04 (reply 21) — push events ARMED ✅, end-to-end test still pending · no command needed now
 **Gil's next step:** type the test doc-11 order in Hashavshevet (any customer). Optional: create `.env.dev` (reply 20) so I can do reply 38.
 

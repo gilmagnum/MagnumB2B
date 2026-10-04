@@ -205,6 +205,9 @@ const routes = [
     }
   }],
 
+  // Size-ruler usage for the admin rulers screen (reply 40). Cached 12 h on the bridge.
+  ['GET', /^\/rulers\/usage$/, async () => read.getRulerUsage()],
+
   // One document + lines for export. ?agent=:id = only if the customer is that agent's (else 404).
   ['GET', /^\/documents\/(\d+)$/, async ({ params: [stockId], query }) => {
     const doc = await read.getDocument(stockId);

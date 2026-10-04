@@ -43,6 +43,13 @@ function validate(body) {
   return { picker, notes: trim(body.notes) || '', picked };
 }
 
+// Notes field after a finish: keep whatever else is there, but a re-run (admin re-opened the pick)
+// REPLACES our previous 'ליקוט: …' segment instead of adding another one.
+export function mergePickNotes(existing, notes) {
+  const others = (trim(existing) || '').split(' | ').map((s) => s.trim()).filter((s) => s && !s.startsWith('ליקוט:'));
+  return [...others, `ליקוט: ${notes}`].join(' | ').slice(0, NOTES_MAX);
+}
+
 // Pure plan: which lines to reduce/delete. pickedQty per item is spread over that item's lines in
 // line order; items not in `picked` and shipping lines are left untouched.
 export function planShortages(lines, picked, shipping = new Set()) {
@@ -131,7 +138,7 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
     const net = round2(sum.net);
     const gross = round2(sum.net * (1 - (order.DiscountPrc ?? 0) / 100) * vat);
     const marker = `לוקט - ${picker}`.slice(0, MARKER_MAX);
-    const noteText = notes ? [trim(order.notes), `ליקוט: ${notes}`].filter(Boolean).join(' | ').slice(0, NOTES_MAX) : null;
+    const noteText = notes ? mergePickNotes(order.notes, notes) : null;
     const upd = req()
       .input('net', sql.Float, net)
       .input('gross', sql.Float, gross)

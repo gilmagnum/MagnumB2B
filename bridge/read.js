@@ -466,3 +466,43 @@ export async function getLastActivity() {
   }
   return activityCache.rows;
 }
+
+// Size-ruler usage (reply 40): per ruler code (ExtraNotes NoteID 25 on the model), the newest sale
+// date and how many of its items (model or matrix cell) sold in the last 12 months. Sales = lines of
+// doc 1/2/4/11 in the last 2 years only (StockID range from an indexed ValueDate cut-off), so it stays
+// a bounded read. Rulers with no sale in 2 years get lastSold null. Cached 12 h.
+let rulerUsageCache;
+export async function getRulerUsage() {
+  if (!rulerUsageCache || Date.now() - rulerUsageCache.at > 12 * 3600_000) {
+    const rows = query(
+      `WITH cut AS (SELECT ISNULL(MIN(ID), 0) AS id FROM Stock WHERE ValueDate >= DATEADD(year, -2, GETDATE())),
+       sold AS (
+         SELECT m.ItemKey, MAX(m.StockID) AS lastStockId
+         FROM StockMoves m CROSS JOIN cut
+         WHERE m.StockID >= cut.id AND m.DocumentID IN (1, 2, 4, 11)
+         GROUP BY m.ItemKey),
+       rulerItems AS (
+         SELECT n.KeF AS itemKey, LTRIM(RTRIM(n.Note)) AS ruler
+         FROM ExtraNotes n WHERE n.NoteID = 25 AND LTRIM(RTRIM(ISNULL(n.Note, ''))) <> ''
+         UNION
+         SELECT c.ItemKey, LTRIM(RTRIM(n.Note))
+         FROM ExtraNotes n JOIN IMatrixItems c ON c.FItemKey = n.KeF
+         WHERE n.NoteID = 25 AND LTRIM(RTRIM(ISNULL(n.Note, ''))) <> '')
+       SELECT r.ruler AS code, MAX(s.IssueDate) AS lastSold,
+              COUNT(DISTINCT CASE WHEN s.IssueDate >= DATEADD(year, -1, GETDATE()) THEN r.itemKey END) AS items12m,
+              COUNT(DISTINCT r.itemKey) AS items
+       FROM rulerItems r
+       LEFT JOIN sold x ON x.ItemKey = r.itemKey
+       LEFT JOIN Stock s ON s.ID = x.lastStockId
+       GROUP BY r.ruler ORDER BY r.ruler`,
+    ).then((list) => list.map((r) => ({
+      code: r.code,
+      lastSold: r.lastSold instanceof Date ? r.lastSold.toISOString().slice(0, 10) : null,
+      items12m: r.items12m,
+      items: r.items,
+    })));
+    rulerUsageCache = { at: Date.now(), rows };
+    rows.catch(() => (rulerUsageCache = undefined));
+  }
+  return rulerUsageCache.rows;
+}

@@ -113,6 +113,8 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   `Stock.ExtraText2 = 'לוקט - <picker>'`; notes appended to `Stock.ExtraRemarks` as `ליקוט: <notes>`. Never produces the document.
   Items not listed and M1001/M1002 are untouched. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
   before `ORDER_WRITE_ENABLED=1`), 404 DOC_NOT_FOUND, 409 NOT_OPEN/TREE_UNSUPPORTED, 422 ITEM_NOT_IN_ORDER, 501 NO_PERMISSION (GRANT missing).
+- `GET /rulers/usage` → `[{ code, lastSold: 'YYYY-MM-DD'|null, items12m, items }]` per size-ruler code (NoteID 25): newest sale
+  (doc 1/2/4/11 line, model or matrix cell) within the last 2 years (null = none), items sold in the last 12 months, items using it. Cached 12 h.
 - `GET /documents/:stockId[?agent=:id]` → `DocumentDetail` (404 if not a customer document, or not that agent's customer)
 - `GET /documents?account=<exact accountKey>` filters to one customer exactly (wins over `q`; with `agent`, another agent's
   customer returns []). `GET /picking/queue?account=` works the same.

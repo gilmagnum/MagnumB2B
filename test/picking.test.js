@@ -39,3 +39,11 @@ test('item keys are trimmed (Hashavshevet pads varchar)', () => {
   const r = planShortages([line(1, 'A   ', 5)], new Map([['A', 0]]), ship);
   assert.equal(r.changes[0].action, 'deleted');
 });
+
+test('notes: appended to other text, a re-run replaces the previous pick note', async () => {
+  const { mergePickNotes } = await import('../bridge/picking.js');
+  assert.equal(mergePickNotes(null, 'חסר X'), 'ליקוט: חסר X');
+  assert.equal(mergePickNotes('הערת משרד', 'חסר X'), 'הערת משרד | ליקוט: חסר X');
+  assert.equal(mergePickNotes('הערת משרד | ליקוט: חסר X', 'הכל סופק'), 'הערת משרד | ליקוט: הכל סופק');
+  assert.equal(mergePickNotes('ליקוט: ישן', 'חדש'), 'ליקוט: חדש');
+});
