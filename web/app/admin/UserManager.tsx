@@ -2,13 +2,14 @@
 import { Fragment, useState } from "react";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import { setActiveAction, resetPasswordAction, changeRoleAction } from "./actions";
-import { saveUserPrefs } from "../notif-actions";
-import { eventsForRole, effectivePref, type Role } from "../../lib/pushEvents";
+import { saveUserPrefs, saveUserEmailPrefs } from "../notif-actions";
+import { eventsForRole, effectivePref, effectiveEmailPref, type Role } from "../../lib/pushEvents";
 
 export type ManagedUser = {
   id: string; fullName: string | null; role: string; agentId: number | null;
   email: string | null; lastSignIn: string | null; createdAt: string | null; active: boolean;
   pushPrefs?: Record<string, boolean> | null;
+  emailPrefs?: Record<string, boolean> | null;
 };
 type LogRow = { at: string; user_agent: string | null };
 
@@ -27,7 +28,14 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
     const next = { ...(u.pushPrefs ?? {}), [key]: on };
     setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, pushPrefs: next } : x)));
     const res = await saveUserPrefs(u.id, next);
-    flash(u.id, res.ok ? "העדפות נשמרו" : (res.error ?? "שגיאה"), !!res.ok);
+    flash(u.id, res.ok ? "העדפות פוש נשמרו" : (res.error ?? "שגיאה"), !!res.ok);
+  };
+
+  const toggleEmailPref = async (u: ManagedUser, key: string, on: boolean) => {
+    const next = { ...(u.emailPrefs ?? {}), [key]: on };
+    setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, emailPrefs: next } : x)));
+    const res = await saveUserEmailPrefs(u.id, next);
+    flash(u.id, res.ok ? "העדפות מייל נשמרו" : (res.error ?? "שגיאה"), !!res.ok);
   };
 
   const flash = (id: string, text: string, ok: boolean) => { setMsg({ id, text, ok }); setTimeout(() => setMsg((m) => (m?.id === id ? null : m)), 3000); };
@@ -124,13 +132,29 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
                 <tr><td colSpan={7} style={{ background: "var(--surface-muted)" }}>
                   <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>התראות עבור {u.fullName || u.email} ({u.role === "admin" ? "מנהל" : u.role === "agent" ? "סוכן" : u.role === "picker" ? "מלקט" : u.role}):</div>
                   {eventsForRole(u.role as Role).length === 0 ? <span style={{ color: "var(--ink-muted)", fontSize: 13 }}>אין אירועים מוצעים לתפקיד זה.</span> : (
-                    <div style={{ display: "grid", gap: 6 }}>
-                      {eventsForRole(u.role as Role).map((e) => (
-                        <label key={e.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-                          <input type="checkbox" checked={effectivePref(u.role as Role, u.pushPrefs ?? null, e.key)} onChange={(ev) => togglePref(u, e.key, ev.target.checked)} />
-                          {e.label}
-                        </label>
-                      ))}
+                    <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--brand-strong)", marginBottom: 4 }}>🔔 פוש</div>
+                        <div style={{ display: "grid", gap: 6 }}>
+                          {eventsForRole(u.role as Role).map((e) => (
+                            <label key={e.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                              <input type="checkbox" checked={effectivePref(u.role as Role, u.pushPrefs ?? null, e.key)} onChange={(ev) => togglePref(u, e.key, ev.target.checked)} />
+                              {e.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--brand-strong)", marginBottom: 4 }}>✉️ מייל</div>
+                        <div style={{ display: "grid", gap: 6 }}>
+                          {eventsForRole(u.role as Role).map((e) => (
+                            <label key={e.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+                              <input type="checkbox" checked={effectiveEmailPref(u.emailPrefs ?? null, e.key)} onChange={(ev) => toggleEmailPref(u, e.key, ev.target.checked)} />
+                              {e.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </td></tr>
