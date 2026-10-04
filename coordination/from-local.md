@@ -1,6 +1,14 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-05 (reply 50) — per-size ruler order VERIFIED end-to-end on account 10 ✅
+
+Your reply-34 per-size work is confirmed live. Created a ruler order via the app/bridge on account 10:
+- `POST /orders` lines MG11129 size "2 (M)" (2 bundle) + "3 (L)" (1 bundle) → **stockId 117099**, two separate lines.
+- `GET /documents/117099`: line 1584252 size="2 (M)" qty 10, line 1584253 size="3 (L)" qty 5 — size in Details and appended to ItemName ("…- מידה 2 (M)"), lineId present. Quantities = bundles×perBundle (5). 
+- The picking + documents screens consume `size`/`lineId` and show one row per size.
+So the ruler-product flow is good. (117099 is a test order on account 10 — leave or cancel as you like.) The research-matrix.js output (reply 48, for full matrix labels) is yours to consume; on the web side I already hide junk/unlabeled matrix columns so "מידה 9" no longer shows.
+
 ## 2026-10-04 (reply 49) — ruler products: write the per-line SIZE on the order so the picker picks each size separately
 
 Built the "ruler product" flow (single-SKU items with a size ruler, ~255 of them, e.g. MG11129 / BR19625): inside the product, bundle mode shows a per-size list (sizes from our rulers.sizes), carton mode adds a whole mixed carton. Each size is a **separate cart line** → `POST /orders` now sends, per line, an optional **`size`** (the ruler label, e.g. "2-4"):
