@@ -51,6 +51,7 @@ export default function DataPage() {
   const [preset, setPreset] = useState<Preset>("month");
   const [custom, setCustom] = useState({ from: iso(new Date(Date.now() - 30 * 864e5)), to: iso(new Date()) });
   const [compare, setCompare] = useState(false);
+  const [metric, setMetric] = useState<"value" | "qty">("value");
 
   const [data, setData] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -151,19 +152,30 @@ export default function DataPage() {
             </div>
           )}
 
-          {/* graphical top-lists — tiled across the screen */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 14, marginTop: 14, alignItems: "start" }}>
+          {/* graphical top-lists — tiled across the screen; toggle sum vs quantity */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 20, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0, fontSize: 18 }}>מובילים</h2>
+            <div style={{ display: "inline-flex", border: "1px solid var(--brand)", borderRadius: 999, overflow: "hidden", marginInlineStart: 4 }}>
+              {([["value", "סכום ₪"], ["qty", "כמות"]] as const).map(([m, label]) => (
+                <button key={m} onClick={() => setMetric(m)}
+                  style={{ border: 0, padding: "5px 14px", cursor: "pointer", fontSize: 13, background: metric === m ? "var(--brand)" : "var(--surface)", color: metric === m ? "#fff" : "var(--brand)" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 14, marginTop: 12, alignItems: "start" }}>
             {data.topItems?.length > 0 && (
-              <BarList title="פריטים מובילים" money items={data.topItems.map((t) => ({ label: t.name, sub: t.itemkey, value: t.value }))} />
+              <BarList title="פריטים מובילים" metric={metric} qtyLabel="יחידות" items={data.topItems.map((t) => ({ label: t.name, sub: t.itemkey, value: t.value, qty: t.qty }))} />
             )}
             {data.topCategories && data.topCategories.length > 0 && (
-              <BarList title="קטגוריות מובילות" money items={data.topCategories.map((c) => ({ label: c.name, value: c.sales }))} />
+              <BarList title="קטגוריות מובילות" metric={metric} qtyLabel="יחידות" items={data.topCategories.map((c) => ({ label: c.name, value: c.sales, qty: c.qty }))} />
             )}
             {data.topCustomers && data.topCustomers.length > 0 && (
-              <BarList title="לקוחות מובילים" money items={data.topCustomers.map((c) => ({ label: c.name, sub: `(${c.accountKey})`, value: c.sales }))} />
+              <BarList title="לקוחות מובילים" metric={metric} qtyLabel="הזמנות" items={data.topCustomers.map((c) => ({ label: c.name, sub: `(${c.accountKey})`, value: c.sales, qty: c.ordersCount }))} />
             )}
             {data.byAgent && data.byAgent.length > 0 && (
-              <BarList title="מכירות לפי סוכן" money items={data.byAgent.map((a) => ({ label: a.agentName, sub: `${num(a.ordersCount)} הזמנות`, value: a.sales }))} />
+              <BarList title="לפי סוכן" metric={metric} qtyLabel="הזמנות" items={data.byAgent.map((a) => ({ label: a.agentName, sub: `(${a.agentId})`, value: a.sales, qty: a.ordersCount }))} />
             )}
           </div>
         </>
@@ -172,25 +184,30 @@ export default function DataPage() {
   );
 }
 
-// Horizontal bar list — a compact graphical "top N".
-function BarList({ title, items, money }: { title: string; items: { label: string; sub?: string; value: number }[]; money?: boolean }) {
-  const max = Math.max(1, ...items.map((i) => i.value));
-  const ils = (n: number) => `${Math.round(n).toLocaleString("he-IL")} ₪`;
-  const num = (n: number) => n.toLocaleString("he-IL");
+type BarItem = { label: string; sub?: string; value: number; qty?: number };
+// Horizontal bar list — a compact graphical "top N". `metric` picks sum (₪) or quantity;
+// bars re-sort by the chosen metric. `qtyLabel` names the quantity (e.g. "הזמנות").
+function BarList({ title, items, metric, qtyLabel }: { title: string; items: BarItem[]; metric: "value" | "qty"; qtyLabel?: string }) {
+  const hasQty = items.some((i) => i.qty != null);
+  const useQty = metric === "qty" && hasQty;
+  const pick = (it: BarItem) => (useQty ? (it.qty ?? 0) : it.value);
+  const rows = [...items].sort((a, b) => pick(b) - pick(a));
+  const max = Math.max(1, ...rows.map(pick));
+  const fmt = (n: number) => (useQty ? n.toLocaleString("he-IL") : `${Math.round(n).toLocaleString("he-IL")} ₪`);
   return (
     <div className="card card-pad">
-      <h3 style={{ color: "var(--brand-strong)", margin: "0 0 10px" }}>{title}</h3>
+      <h3 style={{ color: "var(--brand-strong)", margin: "0 0 10px" }}>{title}{useQty && qtyLabel ? <span style={{ fontSize: 12, fontWeight: 400, color: "var(--ink-muted)" }}> · {qtyLabel}</span> : null}</h3>
       <div style={{ display: "grid", gap: 9 }}>
-        {items.map((it, i) => (
+        {rows.map((it, i) => (
           <div key={i}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, marginBottom: 3 }}>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {it.label}{it.sub ? <span style={{ color: "var(--ink-muted)" }}> {it.sub}</span> : null}
               </span>
-              <b style={{ whiteSpace: "nowrap" }}>{money ? ils(it.value) : num(it.value)}</b>
+              <b style={{ whiteSpace: "nowrap" }}>{fmt(pick(it))}</b>
             </div>
             <div style={{ height: 8, borderRadius: 999, background: "var(--surface-muted)", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${Math.max(2, Math.round((it.value / max) * 100))}%`, background: "var(--brand)", borderRadius: 999 }} />
+              <div style={{ height: "100%", width: `${Math.max(2, Math.round((pick(it) / max) * 100))}%`, background: "var(--brand)", borderRadius: 999 }} />
             </div>
           </div>
         ))}
