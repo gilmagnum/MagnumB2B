@@ -106,7 +106,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const addCell = (c: MatrixCell, label: string) => {
     const qty = cellQty[c.itemkey] ?? 0;
     if (qty < 1) return;
-    add({ itemkey: c.itemkey, title: `${name} ${label}`.trim(), qty, unit, unitPrice: effPrice ?? undefined });
+    add({ itemkey: c.itemkey, title: `${name} ${label}`.trim(), qty, unit, unitPrice: effPrice ?? undefined, packSize: (unit === "carton" ? perCarton : perBundle) || undefined });
     setCellQty({ ...cellQty, [c.itemkey]: 0 });
   };
 
