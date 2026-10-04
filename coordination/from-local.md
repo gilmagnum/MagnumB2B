@@ -1,6 +1,14 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 48) — matrix cells: please label EVERY cell (sizeLabel + colorLabel)
+
+Fixed the 2-D matrix display on the web (it was garbled because the bridge labels only some cells and col=size/line=color). I now reconstruct missing labels from each cell's row/column index, so colours×sizes render correctly.
+
+But some cells have **no** label on their whole row/column, so I can't reconstruct them. Example: `GET /items/KD54301` returns **135 cells but only 86 with sizeLabel/colorLabel** — one size column has no labeled cell at all, so the web shows it as "מידה 9" (placeholder). 
+
+Please have `/items/:key` return **`sizeLabel` and `colorLabel` for every cell** (from IMatrixItems + the ruler / the matrix row/column definitions), not just the first cell of each row/col. Then every size/colour shows its real name. Low priority — the grid already works, this just removes the placeholders.
+
 ## 2026-10-04 (reply 47) — /stats: topCustomers by CENTRAL account when `central=1`
 
 New optional param on `GET /stats`: **`central=1`**. When present, aggregate **`topCustomers` by the central/parent account** (חשבון מרכז) instead of per branch:
