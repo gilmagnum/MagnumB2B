@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { logout } from "../login/actions";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { useCart } from "../../lib/useCart";
@@ -16,6 +16,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
   const { ctx, exit } = useOrderContext();
   const { count, clear } = useCart();
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isSuper = canSeeAdminPanel(role);
@@ -67,6 +68,10 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
           </div>
         )}
       </div>
+
+      {pathname !== home && (
+        <button onClick={() => router.back()} className="icon-btn" title="חזרה" aria-label="חזרה"><Icon name="back" /></button>
+      )}
 
       <a href={home} className="icon-btn" title="בית" aria-label="בית"><Icon name="home" /></a>
 

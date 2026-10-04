@@ -18,6 +18,7 @@ const P: Record<string, string> = {
   close: "M6 6l12 12M18 6 6 18",
   plus: "M12 5v14M5 12h14",
   chart: "M3 3v18h18M8 17v-5M13 17V8M18 17v-9",
+  back: "M19 12H5M11 6l-6 6 6 6",
 };
 
 export default function Icon({ name, size = 22, style }: { name: keyof typeof P | string; size?: number; style?: CSSProperties }) {
