@@ -24,7 +24,8 @@ export default function AddToCart({
   }
 
   const label = (u: Unit) => (u === "carton" ? "קרטון" : "חבילה");
-  const inc = (u: Unit) => add({ itemkey, title, qty: 1, unit: u, unitPrice: price ?? undefined });
+  const packOf = (u: Unit) => (u === "carton" ? (perCarton ?? undefined) : (perBundle ?? undefined)) ?? undefined;
+  const inc = (u: Unit) => add({ itemkey, title, qty: 1, unit: u, unitPrice: price ?? undefined, packSize: packOf(u) });
   const dec = (u: Unit) => {
     const cur = qtyOf(itemkey, u);
     if (cur <= 1) remove(itemkey, u);

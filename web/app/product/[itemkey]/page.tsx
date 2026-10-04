@@ -46,12 +46,37 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
     return () => { cancelled = true; };
   }, [ctx, key]);
 
-  const colorGroups = useMemo(() => {
+  // Build the matrix label-driven: rows = colors, columns = sizes. Hashavshevet gives
+  // a regular grid where one axis (col/line) is the size and the other the color, but it
+  // labels only some cells — so we detect the size axis and reconstruct the missing labels
+  // from each cell's row/column index. Works for 1-D (single-colour) items too.
+  const matrix = useMemo(() => {
     const cells = item?.cells ?? [];
-    const by = new Map<number, MatrixCell[]>();
-    for (const c of cells) { const g = by.get(c.col) ?? []; g.push(c); by.set(c.col, g); }
-    for (const g of by.values()) g.sort((a, b) => a.line - b.line);
-    return [...by.entries()].sort((a, b) => a[0] - b[0]);
+    if (!cells.length) return null;
+    const distinctSizesPer = (axis: "col" | "line") => {
+      const m = new Map<number, Set<string>>();
+      for (const c of cells) if (c.sizeLabel) { const s = m.get(c[axis]) ?? new Set(); s.add(c.sizeLabel); m.set(c[axis], s); }
+      return Math.max(0, ...[...m.values()].map((s) => s.size));
+    };
+    // The size axis is the one where each index maps to a single size label.
+    const sizeAxis: "col" | "line" = distinctSizesPer("col") <= 1 ? "col" : "line";
+    const colorAxis: "col" | "line" = sizeAxis === "col" ? "line" : "col";
+    const sizeByIdx = new Map<number, string>(), colorByIdx = new Map<number, string>();
+    for (const c of cells) {
+      if (c.sizeLabel) sizeByIdx.set(c[sizeAxis], c.sizeLabel);
+      if (c.colorLabel) colorByIdx.set(c[colorAxis], c.colorLabel);
+    }
+    const sizeIdx = [...new Set(cells.map((c) => c[sizeAxis]))].sort((a, b) => a - b);
+    const colorIdx = [...new Set(cells.map((c) => c[colorAxis]))].sort((a, b) => a - b);
+    const grid = new Map<string, MatrixCell>();
+    for (const c of cells) grid.set(`${c[colorAxis]}|${c[sizeAxis]}`, c);
+    const multiColor = colorIdx.length > 1;
+    return {
+      grid,
+      sizes: sizeIdx.map((i) => ({ i, label: sizeByIdx.get(i) ?? `מידה ${i + 1}` })),
+      colors: colorIdx.map((i) => ({ i, label: colorByIdx.get(i) ?? (multiColor ? `צבע ${i + 1}` : "") })),
+      colorAxis, sizeAxis, multiColor,
+    };
   }, [item]);
 
   if (catLoading) return <p>טוען…</p>;
@@ -78,10 +103,10 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
     ["כמות בחבילה", perBundle || null],
   ];
 
-  const addCell = (c: MatrixCell) => {
+  const addCell = (c: MatrixCell, label: string) => {
     const qty = cellQty[c.itemkey] ?? 0;
     if (qty < 1) return;
-    add({ itemkey: c.itemkey, title: `${name} ${c.colorLabel ?? ""} ${c.sizeLabel ?? ""}`.trim(), qty, unit, unitPrice: effPrice ?? undefined });
+    add({ itemkey: c.itemkey, title: `${name} ${label}`.trim(), qty, unit, unitPrice: effPrice ?? undefined, packSize: (unit === "carton" ? perCarton : perBundle) || undefined });
     setCellQty({ ...cellQty, [c.itemkey]: 0 });
   };
 
@@ -143,27 +168,40 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
         )}
 
         {isMatrix ? (
-          item?.cells?.length ? (
+          item?.cells?.length && matrix ? (
             <div className="table-wrap">
-              {colorGroups.map(([col, cells]) => (
-                <div key={col} style={{ marginBottom: 16 }}>
-                  {cells[0]?.colorLabel && <h3 style={{ margin: "8px 0", color: "var(--brand-strong)" }}>{cells[0].colorLabel}</h3>}
-                  <table style={{ borderCollapse: "collapse" }}>
-                    <tbody>
-                      <tr>{cells.map((c) => <td key={c.itemkey} style={th}>{c.sizeLabel ?? c.itemkey}</td>)}</tr>
-                      <tr>{cells.map((c) => <td key={c.itemkey} style={td}>מלאי: {c.stock ?? "-"}</td>)}</tr>
-                      <tr>{cells.map((c) => (
-                        <td key={c.itemkey} style={td}>
-                          <input type="number" min={0} value={cellQty[c.itemkey] ?? 0}
-                            onChange={(e) => setCellQty({ ...cellQty, [c.itemkey]: Number(e.target.value) })}
-                            style={{ width: 48 }} />
-                          <button onClick={() => addCell(c)} disabled={!ctx} style={addBtn}>+</button>
-                        </td>
-                      ))}</tr>
-                    </tbody>
-                  </table>
-                </div>
-              ))}
+              <table style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    {matrix.multiColor && <th style={th}>צבע \ מידה</th>}
+                    {matrix.sizes.map((s) => <th key={s.i} style={th}>{s.label}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrix.colors.map((color) => (
+                    <tr key={color.i}>
+                      {matrix.multiColor && <td style={{ ...td, fontWeight: 700, textAlign: "start", whiteSpace: "nowrap", background: "var(--surface-muted)" }}>{color.label}</td>}
+                      {matrix.sizes.map((s) => {
+                        const cell = matrix.grid.get(`${color.i}|${s.i}`);
+                        if (!cell) return <td key={s.i} style={{ ...td, color: "var(--ink-muted)" }}>—</td>;
+                        const label = `${color.label} ${s.label}`.trim();
+                        const low = (cell.stock ?? 0) <= 0;
+                        return (
+                          <td key={s.i} style={td}>
+                            <div style={{ fontSize: 11, color: low ? "var(--danger)" : "var(--ink-muted)" }}>מלאי: {cell.stock ?? "-"}</div>
+                            <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 2 }}>
+                              <input type="number" min={0} value={cellQty[cell.itemkey] ?? 0}
+                                onChange={(e) => setCellQty({ ...cellQty, [cell.itemkey]: Number(e.target.value) })}
+                                style={{ width: 44 }} />
+                              <button onClick={() => addCell(cell, label)} disabled={!ctx} style={addBtn} title={`הוסף ${label}`}>+</button>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : bridgeErr
             ? <p className="chip chip-warn">גריד המידות והמלאי ייטענו כשהגשר יחובר.</p>

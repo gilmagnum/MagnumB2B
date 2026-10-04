@@ -30,7 +30,8 @@ export default function CartPage() {
       setPriceErr(false);
       const entries = await Promise.all(lines.map(async (l) => {
         try {
-          const r = await bridge.price(ctx.accountKey, l.itemkey, l.qty);
+          const unitsQty = l.qty * (l.packSize ?? 1); // price tiers are by unit quantity
+          const r = await bridge.price(ctx.accountKey, l.itemkey, unitsQty);
           return [l.itemkey + l.unit, r.unitPrice] as const;
         } catch {
           return [l.itemkey + l.unit, NaN] as const;
@@ -57,9 +58,10 @@ export default function CartPage() {
     const p = prices[itemkey + unit];
     return p != null ? p : fallback;
   };
+  const unitsOf = (l: typeof lines[number]) => l.qty * (l.packSize ?? 1);
   const total = lines.reduce((s, l) => {
     const p = priceOf(l.itemkey, l.unit, l.unitPrice);
-    return s + (p != null ? p * l.qty : 0);
+    return s + (p != null ? p * unitsOf(l) : 0);
   }, 0);
 
   const submit = async () => {
@@ -96,7 +98,7 @@ export default function CartPage() {
       <table style={{ borderCollapse: "collapse", width: "100%", maxWidth: 760, minWidth: 560 }}>
         <thead>
           <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
-            <th style={{ padding: 8 }}>פריט</th><th>יחידה</th><th>כמות</th><th>מחיר יח׳</th><th>סה״כ שורה</th><th></th>
+            <th style={{ padding: 8 }}>פריט</th><th>יחידה</th><th>כמות</th><th>יח׳</th><th>מחיר יח׳</th><th>סה״כ שורה</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -115,14 +117,15 @@ export default function CartPage() {
                     <div>{l.title}<div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.itemkey}</div></div>
                   </div>
                 </td>
-                <td>{l.unit === "carton" ? "קרטון" : "חבילה"}</td>
+                <td>{l.unit === "carton" ? "קרטון" : "חבילה"}{l.packSize ? <div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.packSize} יח׳</div> : null}</td>
                 <td>
                   <input type="number" min={1} value={l.qty}
                     onChange={(e) => setQty(l.itemkey, l.unit, Number(e.target.value))}
                     style={{ width: 56 }} />
                 </td>
+                <td style={{ fontWeight: 600 }}>{unitsOf(l).toLocaleString("he-IL")}</td>
                 <td>{p != null ? `${p.toFixed(2)} ₪` : "—"}</td>
-                <td>{p != null ? `${(p * l.qty).toFixed(2)} ₪` : "—"}</td>
+                <td>{p != null ? `${(p * unitsOf(l)).toFixed(2)} ₪` : "—"}</td>
                 <td><button onClick={() => remove(l.itemkey, l.unit)} style={{ color: "#b00", border: 0, background: "none", cursor: "pointer" }}>הסר</button></td>
               </tr>
             );
@@ -130,7 +133,7 @@ export default function CartPage() {
         </tbody>
         <tfoot>
           <tr style={{ borderTop: "2px solid #1e2a78", fontWeight: 700 }}>
-            <td style={{ padding: 8 }} colSpan={4}>סה״כ</td>
+            <td style={{ padding: 8 }} colSpan={5}>סה״כ</td>
             <td>{total.toFixed(2)} ₪</td><td></td>
           </tr>
         </tfoot>

@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 
 export type Unit = "carton" | "bundle";
-export type CartLine = { itemkey: string; title: string; qty: number; unit: Unit; unitPrice?: number };
+// qty = number of cartons/bundles; packSize = units per carton/bundle (so units = qty * packSize).
+export type CartLine = { itemkey: string; title: string; qty: number; unit: Unit; unitPrice?: number; packSize?: number };
 
 const KEY = "magnumb2b_cart";
 const EVT = "magnumb2b-cart-change";
