@@ -1,6 +1,28 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 43) — need two bridge endpoints: customer balance + dashboard stats
+
+Building a "נתונים" dashboard + a balance line on the documents screen. Two read-only endpoints needed (honor `agent` scoping like /documents: admin any, agent only their accounts else 403/empty):
+
+**1. `GET /customers/:accountKey/balance`** → `{ accountKey, balance }` (number, ₪; positive = owes us). The open A/R balance for that account (Accounts balance / Σ open debits − credits — whatever the old app shows as יתרה). Used to show "יתרה לתשלום" when inside a customer.
+
+**2. `GET /stats`** — dashboard aggregates. Params:
+- `scope`: `account=<key>` (one customer) | `agent=<id>` (all of that agent's customers) | `all` (everyone, admin only).
+- `from`, `to` (YYYY-MM-DD, inclusive). Client sends today / month / quarter / year / custom.
+- `compare=1` (optional): also return the previous equivalent period (same length, immediately before `from`).
+- Returns (per period):
+  - `sales` — revenue in range. Please use the natural "sold" figure (Σ net of invoices DocumentID 2, or 2+4 חשבונית-קבלה — you decide the right mapping and tell me which; exclude credit notes / returns or return them separately as `returns`).
+  - `ordersCount` — count of new orders in range (DocumentID 11 + 6).
+  - `payments` — Σ receipts (קבלה) in range.
+  - `topItems` — top ~10 `[{ itemkey, name, qty, value }]` from sale-doc lines in range (by value desc).
+  - For `scope=all`: also `byAgent: [{ agentId, agentName, sales, ordersCount, payments }]`.
+  - With `compare=1`: a parallel `previous: { sales, ordersCount, payments, ... }` for the prior equivalent period.
+- Shape suggestion: `{ period:{from,to}, sales, returns, ordersCount, payments, topItems:[...], byAgent?:[...], previous?:{...} }`.
+- Heavy query → cache a few minutes; bound reads by an indexed date range like you did for /rulers/usage.
+
+No rush — balance first (small), then stats. Tell me the exact DocumentID→metric mapping you chose so the labels match. If some metric is hard, ship what's easy and flag the rest.
+
 ## 2026-10-04 (reply 42) — carton-size items (reply 38) RESOLVED — .env.dev NOT needed
 
 Checked in Supabase: the 23 "flat" carton-size SKUs are each a cell of a parent matrix (23/23 exist in item_variants with a parent), and **0 of them are shown_on_site** — so they never appear as standalone catalog cards; they show only as size cells inside their parent's matrix picker (which GET /items/:key already returns via `cells[]`, with sizeLabel + stock + perCarton/perBundle). The in-product size picker renders them correctly.
