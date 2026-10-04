@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 
 export type Unit = "carton" | "bundle";
 // qty = number of cartons/bundles; packSize = units per carton/bundle (so units = qty * packSize).
-export type CartLine = { itemkey: string; title: string; qty: number; unit: Unit; unitPrice?: number; packSize?: number };
+// sizeLabel = for ruler products (one SKU, ordered per size); each size is its own line so the
+// picker picks it separately. Empty for plain/matrix items (matrix uses a distinct SKU per cell).
+export type CartLine = { itemkey: string; title: string; qty: number; unit: Unit; unitPrice?: number; packSize?: number; sizeLabel?: string };
 
 const KEY = "magnumb2b_cart";
 const EVT = "magnumb2b-cart-change";
@@ -15,6 +17,8 @@ function write(next: CartLine[]) {
   try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* ignore */ }
   try { window.dispatchEvent(new Event(EVT)); } catch { /* ignore */ }
 }
+const same = (l: CartLine, itemkey: string, unit: Unit, sizeLabel?: string) =>
+  l.itemkey === itemkey && l.unit === unit && (l.sizeLabel ?? "") === (sizeLabel ?? "");
 
 // Per-viewer cart in localStorage, reactive across all components on the page
 // (so the header badge and the catalog steppers stay in sync).
@@ -34,18 +38,18 @@ export function useCart() {
 
   const add = (line: CartLine) => {
     const cur = read();
-    const i = cur.findIndex((l) => l.itemkey === line.itemkey && l.unit === line.unit);
+    const i = cur.findIndex((l) => same(l, line.itemkey, line.unit, line.sizeLabel));
     if (i >= 0) cur[i] = { ...cur[i], qty: cur[i].qty + line.qty };
     else cur.push(line);
     persist(cur);
   };
-  const setQty = (itemkey: string, unit: Unit, qty: number) =>
-    persist(read().map((l) => (l.itemkey === itemkey && l.unit === unit ? { ...l, qty: Math.max(1, qty) } : l)));
-  const remove = (itemkey: string, unit: Unit) =>
-    persist(read().filter((l) => !(l.itemkey === itemkey && l.unit === unit)));
+  const setQty = (itemkey: string, unit: Unit, qty: number, sizeLabel?: string) =>
+    persist(read().map((l) => (same(l, itemkey, unit, sizeLabel) ? { ...l, qty: Math.max(1, qty) } : l)));
+  const remove = (itemkey: string, unit: Unit, sizeLabel?: string) =>
+    persist(read().filter((l) => !same(l, itemkey, unit, sizeLabel)));
   const clear = () => persist([]);
 
   const count = lines.reduce((s, l) => s + l.qty, 0);
-  const qtyOf = (itemkey: string, unit: Unit) => lines.find((l) => l.itemkey === itemkey && l.unit === unit)?.qty ?? 0;
+  const qtyOf = (itemkey: string, unit: Unit, sizeLabel?: string) => lines.find((l) => same(l, itemkey, unit, sizeLabel))?.qty ?? 0;
   return { lines, add, setQty, remove, clear, count, qtyOf };
 }

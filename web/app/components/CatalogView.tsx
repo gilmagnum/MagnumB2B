@@ -115,6 +115,11 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
                   <span className="chip chip-info">{it.is_carton_size_item ? "קרטון לפי מידה" : "מטריצה"}</span>
                   <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-primary btn-sm" style={{ display: "block", marginTop: 8, textAlign: "center" }}>בחירת מידות ←</a>
                 </div>
+              ) : it.ruler_code ? (
+                <div style={{ marginTop: 6 }}>
+                  <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={p} />
+                  <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-sm" style={{ display: "block", marginTop: 6, textAlign: "center" }}>בחירת מידות ←</a>
+                </div>
               ) : (
                 <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={p} />
               )}

@@ -70,7 +70,7 @@ export default function CartPage() {
       const res = await bridge.createOrder({
         accountKey: ctx.accountKey,
         orderKind: ctx.orderKind,
-        lines: lines.map((l) => ({ itemkey: l.itemkey, qty: l.qty, unit: l.unit, price: priceOf(l.itemkey, l.unit, l.unitPrice) })),
+        lines: lines.map((l) => ({ itemkey: l.itemkey, qty: l.qty, unit: l.unit, price: priceOf(l.itemkey, l.unit, l.unitPrice), size: l.sizeLabel || undefined })),
       });
       setMsg(`ההזמנה נשלחה ✓ מספר הזמנה: ${res.stockId}`);
       // Fire a push event (new order) — best-effort.
@@ -105,7 +105,7 @@ export default function CartPage() {
           {lines.map((l) => {
             const p = priceOf(l.itemkey, l.unit, l.unitPrice);
             return (
-              <tr key={l.itemkey + l.unit} style={{ borderBottom: "1px solid #eee" }}>
+              <tr key={l.itemkey + l.unit + (l.sizeLabel ?? "")} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: 8 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     {images[l.itemkey] ? (
@@ -114,19 +114,19 @@ export default function CartPage() {
                     ) : (
                       <div style={{ width: 40, height: 40, borderRadius: 6, background: "var(--surface-muted)" }} />
                     )}
-                    <div>{l.title}<div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.itemkey}</div></div>
+                    <div>{l.title}{l.sizeLabel ? <span className="chip" style={{ marginInlineStart: 6, background: "var(--brand-soft)" }}>מידה {l.sizeLabel}</span> : null}<div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.itemkey}</div></div>
                   </div>
                 </td>
                 <td>{l.unit === "carton" ? "קרטון" : "חבילה"}{l.packSize ? <div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.packSize} יח׳</div> : null}</td>
                 <td>
                   <input type="number" min={1} value={l.qty}
-                    onChange={(e) => setQty(l.itemkey, l.unit, Number(e.target.value))}
+                    onChange={(e) => setQty(l.itemkey, l.unit, Number(e.target.value), l.sizeLabel)}
                     style={{ width: 56 }} />
                 </td>
                 <td style={{ fontWeight: 600 }}>{unitsOf(l).toLocaleString("he-IL")}</td>
                 <td>{p != null ? `${p.toFixed(2)} ₪` : "—"}</td>
                 <td>{p != null ? `${(p * unitsOf(l)).toFixed(2)} ₪` : "—"}</td>
-                <td><button onClick={() => remove(l.itemkey, l.unit)} style={{ color: "#b00", border: 0, background: "none", cursor: "pointer" }}>הסר</button></td>
+                <td><button onClick={() => remove(l.itemkey, l.unit, l.sizeLabel)} style={{ color: "#b00", border: 0, background: "none", cursor: "pointer" }}>הסר</button></td>
               </tr>
             );
           })}

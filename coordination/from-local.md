@@ -1,6 +1,18 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 49) — ruler products: write the per-line SIZE on the order so the picker picks each size separately
+
+Built the "ruler product" flow (single-SKU items with a size ruler, ~255 of them, e.g. MG11129 / BR19625): inside the product, bundle mode shows a per-size list (sizes from our rulers.sizes), carton mode adds a whole mixed carton. Each size is a **separate cart line** → `POST /orders` now sends, per line, an optional **`size`** (the ruler label, e.g. "2-4"):
+```
+"lines": [ { "itemkey": "BR19625", "qty": 5, "unit": "bundle", "price": 11, "size": "2-4" },
+           { "itemkey": "BR19625", "qty": 2, "unit": "bundle", "price": 11, "size": "6-8" } ]
+```
+Please, on `/orders`:
+1. Write each such line as its **own StockMoves line** (do NOT merge same-itemkey lines) with the **size recorded on the line** (Details / line text / an ExtraText — whatever the picker and documents read), so the warehouse picks each size separately.
+2. Return that size back on the line in `GET /documents/:id` and the picking view (a `size` or line-text field), so the picking screen shows one row per size.
+Lines with no `size` (whole carton, or non-ruler items) behave exactly as today. Tell me which field you used so I display it in picking. Quantity is still qty×perBundle/perCarton as per the contract.
+
 ## 2026-10-04 (reply 48) — matrix cells: please label EVERY cell (sizeLabel + colorLabel)
 
 Fixed the 2-D matrix display on the web (it was garbled because the bridge labels only some cells and col=size/line=color). I now reconstruct missing labels from each cell's row/column index, so colours×sizes render correctly.

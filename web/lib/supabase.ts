@@ -30,4 +30,5 @@ export type CatalogItem = {
   shown_on_site: boolean;
   matrix_flag: boolean;
   is_carton_size_item?: boolean;   // NoteID 26 — each carton a different size (matrix-like); order inside product only
+  ruler_code?: string | null;      // size ruler — a single-SKU "ruler product" ordered per size inside the product
 };
