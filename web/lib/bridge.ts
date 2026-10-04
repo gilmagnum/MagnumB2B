@@ -53,7 +53,7 @@ export type DocumentDetail = Document & {
 export type OrderKind = "picking" | "future";
 export type NewOrder = {
   accountKey: string; orderKind: OrderKind;
-  lines: { itemkey: string; qty: number; unit: "carton" | "bundle"; price?: number }[];
+  lines: { itemkey: string; qty: number; unit: "carton" | "bundle"; price?: number; size?: string }[];
   shipping?: { carton?: number; pallet?: number };
 };
 

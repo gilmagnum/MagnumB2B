@@ -21,6 +21,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const [cellQty, setCellQty] = useState<Record<string, number>>({});
   const [finalPrice, setFinalPrice] = useState<number | null>(null);
   const [activeImg, setActiveImg] = useState(0);
+  const [rulerSizes, setRulerSizes] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -36,6 +37,16 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   useEffect(() => {
     bridge.item(key).then(setItem).catch(() => setBridgeErr(true));
   }, [key]);
+
+  // Ruler products (one SKU, sizes from the in-app ruler): load the ruler's size list.
+  useEffect(() => {
+    const code = item?.rulerCode;
+    if (!code || item?.isMatrix) { setRulerSizes([]); return; }
+    let alive = true;
+    supabaseBrowser().from("rulers").select("sizes").eq("code", code).single()
+      .then(({ data }) => { if (alive) setRulerSizes(((data?.sizes as string[] | null) ?? []).filter(Boolean)); });
+    return () => { alive = false; };
+  }, [item?.rulerCode, item?.isMatrix]);
 
   useEffect(() => {
     if (!ctx) { setFinalPrice(null); return; }
@@ -88,6 +99,8 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const basePrice = item?.price ?? cat.price;
   const effPrice = ctx && finalPrice != null ? finalPrice : basePrice;
   const isMatrix = (item?.isMatrix ?? (cat.matrix_flag || cat.is_carton_size_item)) || false;
+  // Ruler product: single SKU, order per size (bundle) via the in-app ruler, or a whole carton (mixed).
+  const isRuler = !isMatrix && rulerSizes.length > 0;
   const gallery = (cat.images && cat.images.length ? cat.images : (cat.image_url ? [cat.image_url] : []));
   const mainImg = gallery[activeImg] ?? gallery[0];
 
@@ -108,6 +121,13 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
     if (qty < 1) return;
     add({ itemkey: c.itemkey, title: `${name} ${label}`.trim(), qty, unit, unitPrice: effPrice ?? undefined, packSize: (unit === "carton" ? perCarton : perBundle) || undefined });
     setCellQty({ ...cellQty, [c.itemkey]: 0 });
+  };
+
+  // Ruler product: add a whole carton (no size) or a specific size by the bundle.
+  const addRuler = (size?: string) => {
+    const k = size ?? "__carton__";
+    const qty = Math.max(1, cellQty[k] ?? 1);
+    add({ itemkey: key, title: name, qty, unit, unitPrice: effPrice ?? undefined, packSize: (unit === "carton" ? perCarton : perBundle) || undefined, sizeLabel: unit === "bundle" ? size : undefined });
   };
 
   return (
@@ -157,9 +177,9 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
 
         {!ctx && <p className="chip chip-warn" style={{ marginBottom: 12 }}>בחר לקוח לפני הזמנה — <a href="/customer" style={{ color: "inherit", textDecoration: "underline" }}>בחירת לקוח</a></p>}
 
-        {isMatrix && (perCarton > 0 || perBundle > 0) && (
+        {(isMatrix || isRuler) && (perCarton > 0 || perBundle > 0) && (
           <label style={{ display: "block", margin: "8px 0" }}>
-            יחידה:{" "}
+            {isRuler ? "בחר יחידת מידה:" : "יחידה:"}{" "}
             <select value={unit} onChange={(e) => setUnit(e.target.value as Unit)} className="select" style={{ maxWidth: 200, display: "inline-block" }}>
               {perCarton > 0 && <option value="carton">קרטון ({perCarton})</option>}
               {perBundle > 0 && <option value="bundle">חבילה ({perBundle})</option>}
@@ -206,6 +226,38 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
           ) : bridgeErr
             ? <p className="chip chip-warn">גריד המידות והמלאי ייטענו כשהגשר יחובר.</p>
             : <p>טוען מידות…</p>
+        ) : isRuler ? (
+          unit === "bundle" ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              {!ctx && <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>בחר לקוח כדי להזמין.</span>}
+              {rulerSizes.map((size) => {
+                const q = Math.max(1, cellQty[size] ?? 1);
+                return (
+                  <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
+                    <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <button onClick={() => setCellQty({ ...cellQty, [size]: Math.max(1, q - 1) })} className="btn btn-sm" style={{ padding: "2px 9px" }}>−</button>
+                      <input type="number" min={1} value={q} onChange={(e) => setCellQty({ ...cellQty, [size]: Math.max(1, Number(e.target.value)) })} style={{ width: 48, textAlign: "center" }} />
+                      <button onClick={() => setCellQty({ ...cellQty, [size]: q + 1 })} className="btn btn-sm" style={{ padding: "2px 9px" }}>+</button>
+                    </div>
+                    <button onClick={() => addRuler(size)} disabled={!ctx} className="btn btn-primary btn-sm" style={{ marginInlineStart: "auto" }}>
+                      הוספה · חבילה{perBundle ? ` (${perBundle})` : ""}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <button onClick={() => setCellQty({ ...cellQty, __carton__: Math.max(1, (cellQty.__carton__ ?? 1) - 1) })} className="btn btn-sm" style={{ padding: "2px 9px" }}>−</button>
+                <input type="number" min={1} value={Math.max(1, cellQty.__carton__ ?? 1)} onChange={(e) => setCellQty({ ...cellQty, __carton__: Math.max(1, Number(e.target.value)) })} style={{ width: 48, textAlign: "center" }} />
+                <button onClick={() => setCellQty({ ...cellQty, __carton__: (cellQty.__carton__ ?? 1) + 1 })} className="btn btn-sm" style={{ padding: "2px 9px" }}>+</button>
+              </div>
+              <button onClick={() => addRuler()} disabled={!ctx} className="btn btn-primary">הוספה לסל · קרטון{perCarton ? ` (${perCarton})` : ""}</button>
+              <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>קרטון מעורב — לפירוט לפי מידה בחר "חבילה"</span>
+            </div>
+          )
         ) : (
           <AddToCart itemkey={cat.itemkey} title={name} perCarton={perCarton} perBundle={perBundle} price={effPrice} />
         )}
