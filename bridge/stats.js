@@ -7,6 +7,7 @@
 // Amounts: sales/returns = TFtal / (1 + VatPrc/100) = net of VAT, after the order discount;
 // payments = TFtal (what was received, incl. VAT). Cancelled documents (DocCancel=1) are excluded.
 import { query, key, sql } from './db.js';
+import { CUSTOMER_SORT_GROUPS } from './config.js';
 
 export const STAT_DOCS = {
   sales: [1, 2, 9, 37, 87],
@@ -93,7 +94,8 @@ async function totals(range, scope, { byAgent = false } = {}) {
             ${sum(STAT_DOCS.sales, net)} AS sales,
             ${sum(STAT_DOCS.returns, `ABS(${net})`)} AS returns,
             ${sum(STAT_DOCS.orders, '1')} AS ordersCount,
-            ${sum(STAT_DOCS.payments, 's.TFtal')} AS payments
+            ${sum(STAT_DOCS.payments, 's.TFtal')} AS payments,
+            COUNT(DISTINCT CASE WHEN s.DocumentID IN (${inList(STAT_DOCS.sales)}) THEN s.AccountKey END) AS activeCustomers
      FROM Stock s LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
      WHERE s.ValueDate >= @from AND s.ValueDate < DATEADD(day, 1, @to)
        AND s.DocumentID IN (${inList(ALL_DOCS)}) AND ISNULL(s.DocCancel, 0) = 0${where}
@@ -105,6 +107,7 @@ async function totals(range, scope, { byAgent = false } = {}) {
     returns: round2(r.returns),
     ordersCount: r.ordersCount ?? 0,
     payments: round2(r.payments),
+    activeCustomers: r.activeCustomers ?? 0,
   });
   return byAgent ? rows.map((r) => ({ agentId: r.agentId, ...shape(r) })) : shape(rows[0] ?? {});
 }
@@ -137,6 +140,102 @@ async function agentNames(ids) {
   return new Map(rows.map((r) => [r.NameID, trim(r.Name)]));
 }
 
+// 2. top customers by sales in range (scope=account -> that one customer).
+async function topCustomers(range, scope) {
+  const params = { from: { type: sql.Date, value: range.from }, to: { type: sql.Date, value: range.to } };
+  const where = scopeFilter(scope, params);
+  const rows = await query(
+    `SELECT TOP 10 s.AccountKey, MAX(ISNULL(a.FullName, s.AccountName)) AS name,
+            SUM(CASE WHEN s.DocumentID IN (${inList(STAT_DOCS.sales)}) THEN s.TFtal / (1 + ISNULL(s.VatPrc, 0) / 100) ELSE 0 END) AS sales,
+            SUM(CASE WHEN s.DocumentID IN (${inList(STAT_DOCS.orders)}) THEN 1 ELSE 0 END) AS ordersCount
+     FROM Stock s LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
+     WHERE s.ValueDate >= @from AND s.ValueDate < DATEADD(day, 1, @to)
+       AND s.DocumentID IN (${inList([...STAT_DOCS.sales, ...STAT_DOCS.orders])}) AND ISNULL(s.DocCancel, 0) = 0${where}
+     GROUP BY s.AccountKey
+     ORDER BY 3 DESC`,
+    params,
+  );
+  return rows
+    .filter((r) => r.sales > 0)
+    .map((r) => ({ accountKey: trim(r.AccountKey), name: trim(r.name), sales: round2(r.sales), ordersCount: r.ordersCount }));
+}
+
+// 3. sales/payments time series, at most ~90 points: day (<= 90 days), week (<= 630 days), else month.
+export function seriesBucket(from, to) {
+  const days = Math.round((to - from) / 86_400_000) + 1;
+  return days <= 90 ? 'day' : days <= 630 ? 'week' : 'month';
+}
+export function bucketStarts(from, to, bucket) {
+  const out = [];
+  if (bucket === 'month') {
+    for (let m = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1)); m <= to;
+      m = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1))) out.push(m < from ? from : m);
+  } else {
+    const step = bucket === 'week' ? 7 : 1;
+    for (let d = from; d <= to; d = new Date(d.getTime() + step * 86_400_000)) out.push(d);
+  }
+  return out;
+}
+async function series(range, scope) {
+  const bucket = seriesBucket(range.from, range.to);
+  const params = { from: { type: sql.Date, value: range.from }, to: { type: sql.Date, value: range.to } };
+  const where = scopeFilter(scope, params);
+  const idx = bucket === 'month' ? 'DATEDIFF(month, @from, s.ValueDate)'
+    : bucket === 'week' ? 'DATEDIFF(day, @from, s.ValueDate) / 7' : 'DATEDIFF(day, @from, s.ValueDate)';
+  // Bucket computed in a derived table, then grouped by its column (no parameter in GROUP BY).
+  const rows = await query(
+    `SELECT x.b,
+            SUM(CASE WHEN x.DocumentID IN (${inList(STAT_DOCS.sales)}) THEN x.TFtal / (1 + ISNULL(x.VatPrc, 0) / 100) ELSE 0 END) AS sales,
+            SUM(CASE WHEN x.DocumentID IN (${inList(STAT_DOCS.payments)}) THEN x.TFtal ELSE 0 END) AS payments
+     FROM (
+       SELECT ${idx} AS b, s.DocumentID, s.TFtal, s.VatPrc
+       FROM Stock s LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
+       WHERE s.ValueDate >= @from AND s.ValueDate < DATEADD(day, 1, @to)
+         AND s.DocumentID IN (${inList([...STAT_DOCS.sales, ...STAT_DOCS.payments])}) AND ISNULL(s.DocCancel, 0) = 0${where}
+     ) x
+     GROUP BY x.b`,
+    params,
+  );
+  const byIdx = new Map(rows.map((r) => [r.b, r]));
+  return bucketStarts(range.from, range.to, bucket).map((d, i) => ({
+    date: isoDay(d), sales: round2(byIdx.get(i)?.sales), payments: round2(byIdx.get(i)?.payments),
+  }));
+}
+
+// 4. pipeline right now (not range): open agent orders, by the warehouse marker.
+async function pipeline(scope) {
+  const params = {};
+  const where = scopeFilter(scope, params);
+  const [r] = await query(
+    `SELECT SUM(CASE WHEN ISNULL(s.ExtraText2, '') NOT LIKE N'לוקט%' THEN 1 ELSE 0 END) AS waitCount,
+            SUM(CASE WHEN ISNULL(s.ExtraText2, '') NOT LIKE N'לוקט%' THEN s.TFtal / (1 + ISNULL(s.VatPrc, 0) / 100) ELSE 0 END) AS waitValue,
+            SUM(CASE WHEN s.ExtraText2 LIKE N'לוקט%' THEN 1 ELSE 0 END) AS pickedCount,
+            SUM(CASE WHEN s.ExtraText2 LIKE N'לוקט%' THEN s.TFtal / (1 + ISNULL(s.VatPrc, 0) / 100) ELSE 0 END) AS pickedValue
+     FROM Stock s LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
+     WHERE s.DocumentID = 11 AND s.Status = 0${where}`,
+    params,
+  );
+  return {
+    awaitingPicking: { count: r?.waitCount ?? 0, value: round2(r?.waitValue) },
+    awaitingProduction: { count: r?.pickedCount ?? 0, value: round2(r?.pickedValue) },
+  };
+}
+
+// 5. open balance right now: sum of Accounts.Balance over the scope's customers (same sign as /balance).
+async function openBalance(scope) {
+  const params = {};
+  let where = ` AND a.SortGroup IN (${CUSTOMER_SORT_GROUPS.map(Number).join(',')})`;
+  if (scope.scope === 'account') {
+    where = ' AND a.AccountKey = @account';
+    params.account = key(scope.account);
+  } else if (scope.scope === 'agent') {
+    where += ' AND a.Agent = @agent';
+    params.agent = Number(scope.agent);
+  }
+  const [r] = await query(`SELECT SUM(a.Balance) AS total FROM Accounts a WHERE ISNULL(a.Dumi, 0) <> 1${where}`, params);
+  return round2(r?.total);
+}
+
 const cache = new Map();
 
 /** scope: { scope: 'account'|'agent'|'all', account?, agent? }, from/to 'YYYY-MM-DD', compare boolean. */
@@ -154,17 +253,21 @@ export async function getStats({ scope = 'all', account, agent, from, to, compar
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
 
   const prev = compare ? previousPeriod(range.from, range.to) : null;
-  const [main, items, agents, previous] = await Promise.all([
+  const [main, items, agents, previous, customers, points, pipe, balance] = await Promise.all([
     totals(range, s),
     topItems(range, s),
     scope === 'all' ? totals(range, s, { byAgent: true }) : null,
     prev ? totals(prev, s) : null,
+    topCustomers(range, s),
+    series(range, s),
+    pipeline(s),
+    openBalance(s),
   ]);
   let byAgent;
   if (agents) {
     const names = await agentNames(agents.map((x) => x.agentId).filter(Boolean));
     byAgent = agents
-      .map(({ agentId, sales, ordersCount, payments }) => ({
+      .map(({ agentId, sales, ordersCount, payments }) => ({ // activeCustomers left out of byAgent on purpose
         agentId, agentName: names.get(agentId) ?? (agentId ? null : 'ללא סוכן'), sales, ordersCount, payments,
       }))
       .sort((x, y) => y.sales - x.sales);
@@ -173,6 +276,10 @@ export async function getStats({ scope = 'all', account, agent, from, to, compar
     period: { from: isoDay(range.from), to: isoDay(range.to) },
     ...main,
     topItems: items,
+    topCustomers: customers,
+    series: points,
+    pipeline: pipe,
+    openBalance: balance,
     ...(byAgent && { byAgent }),
     ...(previous && { previous }),
   };

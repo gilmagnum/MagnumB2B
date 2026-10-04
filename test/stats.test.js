@@ -24,3 +24,17 @@ test('validation rejects bad input before touching the database', async () => {
 test('document mapping matches what we tell the web app', () => {
   assert.deepEqual(STAT_DOCS, { sales: [1, 2, 9, 37, 87], returns: [3, 73], orders: [6, 11], payments: [31, 2, 87] });
 });
+
+test('series bucketing stays at ~90 points or fewer', async () => {
+  const { seriesBucket, bucketStarts } = await import('../bridge/stats.js');
+  const cases = [['2026-09-01', '2026-09-30', 'day', 30], ['2026-01-01', '2026-03-31', 'day', 90],
+    ['2026-01-01', '2026-12-31', 'week', 53], ['2025-01-01', '2026-12-31', 'month', 24]];
+  for (const [f, t, bucket, points] of cases) {
+    assert.equal(seriesBucket(d(f), d(t)), bucket, `${f}..${t}`);
+    const starts = bucketStarts(d(f), d(t), bucket);
+    assert.equal(starts.length, points, `${f}..${t} points`);
+    assert.equal(iso(starts[0]), f);
+  }
+  const mid = bucketStarts(d('2026-01-15'), d('2026-03-10'), 'month').map(iso);
+  assert.deepEqual(mid, ['2026-01-15', '2026-02-01', '2026-03-01']); // first bucket clamped to from
+});

@@ -1,6 +1,30 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 25) — the 5 /stats fields (reply 44) written. Gil: restart the bridge task, then the local session verifies
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator. I can't restart it from this session: it's not elevated.) Thanks for verifying /stats + /balance live.
+
+All 5 fields are added to `GET /stats`, with the same params/scope/compare; cache 3 min as before:
+1. **`activeCustomers`** — `COUNT(DISTINCT AccountKey)` of sales docs (1,2,9,37,87) in range. **Also in `previous`.**
+2. **`topCustomers`** — `[{ accountKey, name, sales, ordersCount }]`, top 10 by sales (net of VAT), only customers with sales > 0.
+   - `name` = Accounts.FullName, else the document's AccountName.
+   - `ordersCount` = doc 6/11 in range. For scope=account it's that one customer.
+3. **`series`** — `[{ date, sales, payments }]`, ascending, **zero-filled** (every bucket present).
+   - Bucket: **day** if the range is ≤ 90 days, **week** if ≤ 630 days (≤ 90 points, weeks counted from `from`), else **month** (≤ 27 points for the 800-day max).
+   - `date` = bucket start; the first month bucket is clamped to `from`.
+4. **`pipeline`** — right now, not range: open **doc 11, Status 0** in scope.
+   - `awaitingPicking` = ExtraText2 not `לוקט…`;
+   - `awaitingProduction` = `לוקט…`;
+   - `{ count, value }`, value = net ₪ (TFtal ÷ (1+VAT)). Same rule as /picking/queue.
+5. **`openBalance`** — right now: Σ `Accounts.Balance`, same sign as /balance.
+   - scope=account → that customer;
+   - agent → that agent's customers (groups 10/11/12, Dumi≠1);
+   - all → all customers in groups 10/11/12.
+- **Tests:** 14/14 unit tests (incl. bucketing/point counts). The SQL is **not run here** (no DB access); the time series groups through a derived table to avoid GROUP BY-with-parameter issues. If any field errors, `bridge.log` has it.
+
 ## ⚡ 2026-10-04 (reply 24) — GET /customers/:key/balance + GET /stats written. Gil: restart the bridge task
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

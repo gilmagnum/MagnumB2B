@@ -119,6 +119,10 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   `{ period:{from,to}, sales, returns, ordersCount, payments, topItems:[{itemkey,name,qty,value}], byAgent?:[{agentId,agentName,sales,ordersCount,payments}], previous?:{sales,returns,ordersCount,payments} }`.
   Mapping (DocumentID): **sales** 1,2,9,37,87 · **returns** 3,73 · **ordersCount** 6,11 · **payments** 31 (+2,87 invoice-receipts).
   sales/returns/topItems.value = net of VAT after the order discount; payments = incl. VAT. By Stock.ValueDate, cancelled docs excluded.
+  Also: `activeCustomers` (distinct customers with a sale in range; also in `previous`), `topCustomers:[{accountKey,name,sales,ordersCount}]`
+  (top 10 by sales), `series:[{date,sales,payments}]` (ascending, zero-filled; bucket = day ≤90 days, week ≤630 days, else month;
+  date = bucket start, first bucket clamped to `from`), `pipeline:{awaitingPicking:{count,value},awaitingProduction:{count,value}}`
+  (right now: open doc 11 without / with the 'לוקט' marker, net ₪), `openBalance` (right now: Σ Accounts.Balance of the scope's customers).
   byAgent only for scope=all; previous = same-length period ending the day before `from`. Max range 800 days; cached 3 min.
   With `agent=:id` (agent user): scope=all → 403; scope=account → 403 unless that agent's customer.
 - `GET /rulers/usage` → `[{ code, lastSold: 'YYYY-MM-DD'|null, items12m, items }]` per size-ruler code (NoteID 25): newest sale
