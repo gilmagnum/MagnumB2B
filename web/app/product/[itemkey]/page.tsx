@@ -12,13 +12,11 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const { itemkey } = use(params);
   const key = decodeURIComponent(itemkey);
   const { ctx } = useOrderContext();
-  const { add } = useCart();
   const [cat, setCat] = useState<CatalogItem | null>(null);
   const [catLoading, setCatLoading] = useState(true);
   const [item, setItem] = useState<Item | null>(null);
   const [bridgeErr, setBridgeErr] = useState(false);
   const [unit, setUnit] = useState<Unit>("carton");
-  const [cellQty, setCellQty] = useState<Record<string, number>>({});
   const [finalPrice, setFinalPrice] = useState<number | null>(null);
   const [activeImg, setActiveImg] = useState(0);
   const [rulerSizes, setRulerSizes] = useState<string[]>([]);
@@ -47,6 +45,13 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
       .then(({ data }) => { if (alive) setRulerSizes(((data?.sizes as string[] | null) ?? []).filter(Boolean)); });
     return () => { alive = false; };
   }, [item?.rulerCode, item?.isMatrix]);
+
+  // Default the unit to the smallest available pack (bundle if it exists) once the item loads.
+  useEffect(() => {
+    if (!item) return;
+    if ((item.perBundle ?? 0) > 0) setUnit("bundle");
+    else if ((item.perCarton ?? 0) > 0) setUnit("carton");
+  }, [item?.itemkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!ctx) { setFinalPrice(null); return; }
@@ -115,20 +120,6 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
     ["כמות בקרטון", perCarton || null],
     ["כמות בחבילה", perBundle || null],
   ];
-
-  const addCell = (c: MatrixCell, label: string) => {
-    const qty = cellQty[c.itemkey] ?? 0;
-    if (qty < 1) return;
-    add({ itemkey: c.itemkey, title: `${name} ${label}`.trim(), qty, unit, unitPrice: effPrice ?? undefined, packSize: (unit === "carton" ? perCarton : perBundle) || undefined });
-    setCellQty({ ...cellQty, [c.itemkey]: 0 });
-  };
-
-  // Ruler product: add a whole carton (no size) or a specific size by the bundle.
-  const addRuler = (size?: string) => {
-    const k = size ?? "__carton__";
-    const qty = Math.max(1, cellQty[k] ?? 1);
-    add({ itemkey: key, title: name, qty, unit, unitPrice: effPrice ?? undefined, packSize: (unit === "carton" ? perCarton : perBundle) || undefined, sizeLabel: unit === "bundle" ? size : undefined });
-  };
 
   return (
     <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -209,11 +200,8 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
                         return (
                           <td key={s.i} style={td}>
                             <div style={{ fontSize: 11, color: low ? "var(--danger)" : "var(--ink-muted)" }}>מלאי: {cell.stock ?? "-"}</div>
-                            <div style={{ display: "flex", gap: 2, justifyContent: "center", marginTop: 2 }}>
-                              <input type="number" min={0} value={cellQty[cell.itemkey] ?? 0}
-                                onChange={(e) => setCellQty({ ...cellQty, [cell.itemkey]: Number(e.target.value) })}
-                                style={{ width: 44 }} />
-                              <button onClick={() => addCell(cell, label)} disabled={!ctx} style={addBtn} title={`הוסף ${label}`}>+</button>
+                            <div style={{ display: "flex", justifyContent: "center", marginTop: 2 }}>
+                              <Stepper itemkey={cell.itemkey} unit={unit} title={`${name} ${label}`.trim()} packSize={unit === "carton" ? perCarton : perBundle} price={effPrice} disabled={!ctx} />
                             </div>
                           </td>
                         );
@@ -230,31 +218,19 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
           unit === "bundle" ? (
             <div style={{ display: "grid", gap: 8 }}>
               {!ctx && <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>בחר לקוח כדי להזמין.</span>}
-              {rulerSizes.map((size) => {
-                const q = Math.max(1, cellQty[size] ?? 1);
-                return (
-                  <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
-                    <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <button onClick={() => setCellQty({ ...cellQty, [size]: Math.max(1, q - 1) })} className="btn btn-sm" style={{ padding: "2px 9px" }}>−</button>
-                      <input type="number" min={1} value={q} onChange={(e) => setCellQty({ ...cellQty, [size]: Math.max(1, Number(e.target.value)) })} style={{ width: 48, textAlign: "center" }} />
-                      <button onClick={() => setCellQty({ ...cellQty, [size]: q + 1 })} className="btn btn-sm" style={{ padding: "2px 9px" }}>+</button>
-                    </div>
-                    <button onClick={() => addRuler(size)} disabled={!ctx} className="btn btn-primary btn-sm" style={{ marginInlineStart: "auto" }}>
-                      הוספה · חבילה{perBundle ? ` (${perBundle})` : ""}
-                    </button>
-                  </div>
-                );
-              })}
+              {rulerSizes.map((size) => (
+                <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
+                  <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
+                  <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>חבילה{perBundle ? ` (${perBundle} יח׳)` : ""}</span>
+                  <span style={{ marginInlineStart: "auto" }}>
+                    <Stepper itemkey={key} unit="bundle" sizeLabel={size} title={name} packSize={perBundle} price={effPrice} disabled={!ctx} addLabel="חבילה" />
+                  </span>
+                </div>
+              ))}
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <button onClick={() => setCellQty({ ...cellQty, __carton__: Math.max(1, (cellQty.__carton__ ?? 1) - 1) })} className="btn btn-sm" style={{ padding: "2px 9px" }}>−</button>
-                <input type="number" min={1} value={Math.max(1, cellQty.__carton__ ?? 1)} onChange={(e) => setCellQty({ ...cellQty, __carton__: Math.max(1, Number(e.target.value)) })} style={{ width: 48, textAlign: "center" }} />
-                <button onClick={() => setCellQty({ ...cellQty, __carton__: (cellQty.__carton__ ?? 1) + 1 })} className="btn btn-sm" style={{ padding: "2px 9px" }}>+</button>
-              </div>
-              <button onClick={() => addRuler()} disabled={!ctx} className="btn btn-primary">הוספה לסל · קרטון{perCarton ? ` (${perCarton})` : ""}</button>
+              <Stepper itemkey={key} unit="carton" title={name} packSize={perCarton} price={effPrice} disabled={!ctx} addLabel={`קרטון${perCarton ? ` (${perCarton})` : ""}`} />
               <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>קרטון מעורב — לפירוט לפי מידה בחר "חבילה"</span>
             </div>
           )
@@ -266,6 +242,25 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   );
 }
 
+// One-click stepper: every +/- changes the cart immediately (no separate qty box).
+function Stepper({ itemkey, unit, title, packSize, price, sizeLabel, disabled, addLabel }: {
+  itemkey: string; unit: Unit; title: string; packSize?: number; price?: number | null; sizeLabel?: string; disabled?: boolean; addLabel?: string;
+}) {
+  const { add, setQty, remove, qtyOf } = useCart();
+  const q = qtyOf(itemkey, unit, sizeLabel);
+  const inc = () => add({ itemkey, title, qty: 1, unit, unitPrice: price ?? undefined, packSize: packSize || undefined, sizeLabel });
+  const dec = () => { if (q <= 1) remove(itemkey, unit, sizeLabel); else setQty(itemkey, unit, q - 1, sizeLabel); };
+  if (q > 0) {
+    return (
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid var(--brand)", borderRadius: "var(--radius-sm)", padding: "2px 4px" }}>
+        <button onClick={dec} className="btn btn-sm" style={{ padding: "2px 9px", border: 0, background: "transparent", color: "var(--brand)", fontSize: 16 }}>−</button>
+        <span style={{ minWidth: 24, textAlign: "center", fontWeight: 700 }}>{q}</span>
+        <button onClick={inc} className="btn btn-sm" style={{ padding: "2px 9px", border: 0, background: "transparent", color: "var(--brand)", fontSize: 16 }}>+</button>
+      </div>
+    );
+  }
+  return <button onClick={inc} disabled={disabled} className="btn btn-primary btn-sm">+ {addLabel ?? "הוספה"}</button>;
+}
+
 const th = { border: "1px solid var(--border)", padding: "4px 8px", background: "var(--surface-muted)", fontSize: 13, fontWeight: 700 as const };
 const td = { border: "1px solid var(--border)", padding: "4px 8px", textAlign: "center" as const, fontSize: 13 };
-const addBtn = { background: "var(--brand)", color: "#fff", border: 0, borderRadius: 6, padding: "4px 8px", cursor: "pointer", marginInlineStart: 4 };

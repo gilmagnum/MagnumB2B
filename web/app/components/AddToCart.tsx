@@ -3,17 +3,18 @@ import { useCart, type Unit } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
 
 export default function AddToCart({
-  itemkey, title, perCarton, perBundle, price,
+  itemkey, title, perCarton, perBundle, price, only,
 }: {
   itemkey: string; title: string;
   perCarton?: number | null; perBundle?: number | null; price?: number | null;
+  only?: Unit; // restrict to a single order unit (e.g. carton only, for ruler cards in the grid)
 }) {
   const { add, setQty, remove, qtyOf } = useCart();
   const { ctx } = useOrderContext();
 
   const units: Unit[] = [];
-  if ((perCarton ?? 0) > 0) units.push("carton");
-  if ((perBundle ?? 0) > 0) units.push("bundle");
+  if ((perCarton ?? 0) > 0 && only !== "bundle") units.push("carton");
+  if ((perBundle ?? 0) > 0 && only !== "carton") units.push("bundle");
   if (!units.length) return <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>לא פתוח להזמנה</span>;
 
   // No customer selected → ordering is blocked (choosing a customer is like signing in).
