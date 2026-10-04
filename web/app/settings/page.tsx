@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "../../lib/auth";
+import { supabaseAdmin } from "../../lib/supabase/admin";
 import { canEditRulers, canManageUsers } from "../../lib/roles";
 import EnableNotifications from "../components/EnableNotifications";
 import NotificationPrefs from "../components/NotificationPrefs";
 import EmailTestButton from "../components/EmailTestButton";
+import DriveImages from "../components/DriveImages";
 import Icon from "../components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +14,12 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const me = await getProfile();
   if (!me) redirect("/login");
+
+  let driveUrl = "";
+  if (canEditRulers(me.role)) {
+    const { data } = await supabaseAdmin().from("app_settings").select("value").eq("key", "images_drive_url").single();
+    driveUrl = ((data?.value as { url?: string } | null)?.url) ?? "";
+  }
 
   return (
     <>
@@ -47,6 +55,9 @@ export default async function SettingsPage() {
               <Icon name="ruler" size={18} /> סרגלי מידות ←
             </a>
           </div>
+
+          <h4 style={{ margin: "20px 0 0", color: "var(--brand-strong)" }}>תמונות מוצרים</h4>
+          <DriveImages url={driveUrl} canEdit={canManageUsers(me.role)} />
         </section>
       )}
     </>

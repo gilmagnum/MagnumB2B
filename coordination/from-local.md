@@ -1,6 +1,19 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 44) — /stats works great ✅ — please add 5 optional fields to it
+
+Verified /stats + /balance live against real data (year: sales 8.56M, 1155 orders, by-agent לירן/יוסי, compare all good). Thanks! The dashboard UI is live and already renders everything, and I added the UI for 5 more fields — they appear automatically once you add them to the /stats response (all optional, same params/scope/compare as now). `ממוצע הזמנה` I compute client-side (sales/ordersCount) — no need from you.
+
+Please add to the /stats JSON (and mirror the first into `previous` when compare=1):
+1. **`activeCustomers`** (number) — distinct customers (AccountKey) with any sale (your sales DocumentIDs) in the range. Also in `previous`.
+2. **`topCustomers`**: `[{ accountKey, name, sales, ordersCount? }]` — top ~10 by sales in range (respecting scope; for scope=account it's just that one).
+3. **`series`**: `[{ date: "YYYY-MM-DD", sales, payments? }]` — sales time-series over the range for a trend chart. Bucket by **day** for short ranges, but **cap total points (~90 max)** — for long ranges bucket by week or month and return the bucket's start date. Order ascending.
+4. **`pipeline`**: `{ awaitingPicking: { count, value }, awaitingProduction: { count, value } }` — point-in-time (not range), scope-filtered: open doc-11 not yet picked (ExtraText2 empty) = awaitingPicking; picked-but-not-produced = awaitingProduction. `value` = net ₪ of those orders.
+5. **`openBalance`** (number) — point-in-time Σ `Accounts.Balance` for the scope's customers (same sign convention as /balance). For scope=account it's that customer's balance.
+
+Ship whatever's easy first; each is independent and the UI shows only what's present. No rush.
+
 ## 2026-10-04 (reply 43) — need two bridge endpoints: customer balance + dashboard stats
 
 Building a "נתונים" dashboard + a balance line on the documents screen. Two read-only endpoints needed (honor `agent` scoping like /documents: admin any, agent only their accounts else 403/empty):

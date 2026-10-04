@@ -68,6 +68,17 @@ export async function saveBannerAction(_prev: AdminState, formData: FormData): P
   return { ok: "הבאנר נשמר" };
 }
 
+// Save the Google-Drive images folder URL (superadmin).
+export async function saveImagesDriveUrlAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  try { await requireSuperadmin(); } catch { return { error: "אין הרשאה" }; }
+  const url = String(formData.get("url") ?? "").trim();
+  const { error } = await supabaseAdmin().from("app_settings")
+    .upsert({ key: "images_drive_url", value: { url }, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) return { error: error.message };
+  revalidatePath("/settings");
+  return { ok: "הלינק נשמר" };
+}
+
 // Save a ruler's size values (ordered). Managers and above may edit rulers.
 export async function saveRulerAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
   const me = await getProfile().catch(() => null);

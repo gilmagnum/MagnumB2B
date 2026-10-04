@@ -6,6 +6,7 @@ import { useOrderContext } from "../../../lib/useOrderContext";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import type { CatalogItem } from "../../../lib/supabase";
 import AddToCart from "../../components/AddToCart";
+import ImageUploader from "../../components/ImageUploader";
 
 export default function ProductPage({ params }: { params: Promise<{ itemkey: string }> }) {
   const { itemkey } = use(params);
@@ -101,6 +102,10 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
             ))}
           </div>
         )}
+        <ImageUploader kind="product" id={key} onDone={(url) => {
+          setCat((c) => (c ? { ...c, image_url: url, images: [url, ...((c.images ?? []).filter((u) => u !== url))] } : c));
+          setActiveImg(0);
+        }} />
       </div>
 
       {/* details */}
