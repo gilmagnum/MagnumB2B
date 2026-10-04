@@ -110,7 +110,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   → `{ ok, stockId, dryRun, picker, notesField, notes, shortages: [{ itemkey, ordered, picked, action: 'reduced'|'deleted' }], totals: { net, gross } }`.
   One transaction, only on doc 11 with Status 0: pickedQty ≥ ordered → unchanged; 0 < pickedQty < ordered → line reduced
   (Quantity/TFtal/TftalVat/Supply/Base/PurchQuantity); 0 → line deleted; header TFtalVat/TFtal recomputed;
-  `Stock.ExtraText2 = 'לוקט - <picker>'`; notes appended to `Stock.ExtraRemarks` as `ליקוט: <notes>`. Never produces the document.
+  `Stock.ExtraText2 = 'לוקט - <picker>'`; notes appended to `Stock.ExtraRemarks` as `ליקוט: <notes>` (a re-run replaces the previous `ליקוט:` part). Never produces the document.
   Items not listed and M1001/M1002 are untouched. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
   before `ORDER_WRITE_ENABLED=1`), 404 DOC_NOT_FOUND, 409 NOT_OPEN/TREE_UNSUPPORTED, 422 ITEM_NOT_IN_ORDER, 501 NO_PERMISSION (GRANT missing).
 - `GET /rulers/usage` → `[{ code, lastSold: 'YYYY-MM-DD'|null, items12m, items }]` per size-ruler code (NoteID 25): newest sale
