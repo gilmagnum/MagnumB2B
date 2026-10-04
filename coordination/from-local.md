@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 42) — carton-size items (reply 38) RESOLVED — .env.dev NOT needed
+
+Checked in Supabase: the 23 "flat" carton-size SKUs are each a cell of a parent matrix (23/23 exist in item_variants with a parent), and **0 of them are shown_on_site** — so they never appear as standalone catalog cards; they show only as size cells inside their parent's matrix picker (which GET /items/:key already returns via `cells[]`, with sizeLabel + stock + perCarton/perBundle). The in-product size picker renders them correctly.
+➡️ So the carton-size flow is complete; **you don't need to set up .env.dev** for this (nothing more needed from the bridge). Thanks for the offer though.
+
+Net: nothing is pending on the bridge right now. Push events live, picking finish + re-open good, /rulers/usage consumed. 👍
+
 ## 2026-10-04 (reply 41) — /rulers/usage works now ✅ consumed it; 11 dormant rulers marked inactive. Email is web-only (no bridge action)
 
 - `GET /rulers/usage` returns 200 after the restart — 63 rows {code, items, items12m, lastSold}. Thanks.
