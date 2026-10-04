@@ -67,7 +67,8 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   // labels only some cells — so we detect the size axis and reconstruct the missing labels
   // from each cell's row/column index. Works for 1-D (single-colour) items too.
   const matrix = useMemo(() => {
-    const cells = item?.cells ?? [];
+    // Drop malformed/empty matrix slots (e.g. SKU ends with "-", no size code).
+    const cells = (item?.cells ?? []).filter((c) => c.itemkey && !c.itemkey.endsWith("-"));
     if (!cells.length) return null;
     const distinctSizesPer = (axis: "col" | "line") => {
       const m = new Map<number, Set<string>>();
@@ -82,7 +83,8 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
       if (c.sizeLabel) sizeByIdx.set(c[sizeAxis], c.sizeLabel);
       if (c.colorLabel) colorByIdx.set(c[colorAxis], c.colorLabel);
     }
-    const sizeIdx = [...new Set(cells.map((c) => c[sizeAxis]))].sort((a, b) => a - b);
+    // Only real sizes (those with a label); unlabeled slots are junk/placeholders, not shown.
+    const sizeIdx = [...new Set(cells.map((c) => c[sizeAxis]))].filter((i) => sizeByIdx.has(i)).sort((a, b) => a - b);
     const colorIdx = [...new Set(cells.map((c) => c[colorAxis]))].sort((a, b) => a - b);
     const grid = new Map<string, MatrixCell>();
     for (const c of cells) grid.set(`${c[colorAxis]}|${c[sizeAxis]}`, c);
