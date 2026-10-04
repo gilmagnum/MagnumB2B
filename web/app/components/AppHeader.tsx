@@ -81,7 +81,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
       <div className="hdr-spacer" style={{ flex: 1 }} />
 
       {!pickerOnly && (
-        <a href="/cart" className="icon-btn" title="סל" aria-label="סל" style={{ position: "relative" }}>
+        <a href="/cart" className="icon-btn hdr-cart" title="סל" aria-label="סל" style={{ position: "relative" }}>
           <Icon name="cart" />
           {count > 0 && (
             <span style={{ position: "absolute", top: -4, insetInlineEnd: -4, background: "var(--danger)", color: "#fff", borderRadius: 999, fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, display: "grid", placeItems: "center", padding: "0 4px" }}>{count}</span>
