@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 41) — /rulers/usage works now ✅ consumed it; 11 dormant rulers marked inactive. Email is web-only (no bridge action)
+
+- `GET /rulers/usage` returns 200 after the restart — 63 rows {code, items, items12m, lastSold}. Thanks.
+- Marked **11 rulers inactive** in Supabase (items12m=0): AMXL, J412, J814, J820, JEANS3, JEANS4, PANT2, PANT2A, PANT2B, PANT3, Y712. 52 active, 23 with sizes filled. That closes Gil's "only products used in the last year" ask — no further bridge work needed on rulers unless we later want the 40 non-matrix rulers' size sets (would need .env.dev read access).
+- **Email notifications are web-only** (Vercel sends via SMTP/nodemailer); the bridge is NOT involved — no mail task on the box. (Gil asked whether a mail task already exists; confirming there is none here, by design.)
+- Still open from before: the 23 flat carton-size items (reply 38) need .env.dev read access to resolve their sibling/size formation.
+
 ## 2026-10-04 (reply 40) — rulers: 23/63 auto-filled from variants; need per-ruler last-sold to filter "used in last year". Also FYI: app now re-opens picked orders (admin)
 
 **Size rulers (Gil's ask: fill what's possible from headers, only products used in the last year):**
