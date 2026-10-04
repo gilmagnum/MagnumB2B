@@ -15,6 +15,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [picked, setPicked] = useState<Record<string, number>>({});
   const [images, setImages] = useState<Record<string, string>>({});
   const [picker, setPicker] = useState("");
+  const [role, setRole] = useState("");
   const [notes, setNotes] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -24,8 +25,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     (async () => {
       const { data: { user } } = await supabaseBrowser().auth.getUser();
       if (user) {
-        const { data: prof } = await supabaseBrowser().from("profiles").select("full_name").eq("id", user.id).single();
+        const { data: prof } = await supabaseBrowser().from("profiles").select("full_name, role").eq("id", user.id).single();
         setPicker(prof?.full_name ?? user.email ?? "");
+        setRole(prof?.role ?? "");
       }
     })();
     bridge.document(id)
@@ -97,11 +99,28 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   if (err) return <p className="chip chip-warn">{err} <a href="/picking">← לתור</a></p>;
   if (!doc) return <p>טוען…</p>;
 
+  const alreadyPicked = doc.picked === true;
+  const isAdmin = role === "admin";
+  const readOnly = alreadyPicked && !isAdmin; // picker can't touch a closed pick
+  const reopened = alreadyPicked && isAdmin;  // admin re-opening a closed pick
+
   return (
     <>
       <p><a href="/picking" style={{ color: "var(--brand)" }}>← תור הליקוט</a></p>
       <h1>ליקוט: {doc.docTypeName} {doc.docNumber ? `#${doc.docNumber}` : `(זמני ${doc.stockId})`}</h1>
       <p style={{ color: "var(--ink-muted)" }}>לקוח: <b>{doc.customerName}</b> ({doc.accountKey}){doc.customer?.address ? ` · ${doc.customer.address}` : ""}{picker ? ` · מלקט: ${picker}` : ""}</p>
+
+      {readOnly && (
+        <p className="chip chip-warn" style={{ display: "block", padding: 12 }}>
+          הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""}. פתיחה מחדש לעדכון מתאפשרת למנהל בלבד.
+        </p>
+      )}
+      {reopened && !done && (
+        <p className="chip chip-info" style={{ display: "block", padding: 12 }}>
+          הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""} ונפתחה מחדש לעדכון. שינוי יעדכן את הליקוט בחשבשבת.
+          <br />שים לב: שורה שנמחקה בליקוט קודם (חוסר מלא) לא חוזרת — יש להוסיף אותה מחדש בחשבשבת.
+        </p>
+      )}
 
       {done && <p className="chip chip-ok" style={{ display: "block", padding: 12 }}>{done} <a href="/picking" style={{ color: "inherit", textDecoration: "underline" }}>לתור</a></p>}
 
@@ -126,7 +145,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                   <td style={{ color: (l.onHand ?? 0) < l.qty ? "var(--danger)" : "var(--ok)" }}>{l.onHand ?? "—"}</td>
                   <td>{l.qty}{l.unit ? ` ${l.unit}` : ""}</td>
                   <td>
-                    <input type="number" min={0} max={l.qty} value={picked[l.itemkey] ?? 0}
+                    <input type="number" min={0} max={l.qty} value={picked[l.itemkey] ?? 0} disabled={readOnly}
                       onChange={(e) => setPicked({ ...picked, [l.itemkey]: Math.max(0, Math.min(l.qty, Number(e.target.value))) })}
                       style={{ width: 64 }} />
                   </td>
@@ -146,9 +165,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         <b>סיכום:</b> {lines.length} שורות · {shortages.length ? `${shortages.length} עם חוסר` : "ללא חוסרים"}
       </div>
 
-      {!done && (
+      {!done && !readOnly && (
         <div style={{ marginTop: 16 }}>
-          <button onClick={() => setConfirm(true)} className="btn btn-primary" style={{ padding: "10px 20px" }}>סיום ליקוט</button>
+          <button onClick={() => setConfirm(true)} className="btn btn-primary" style={{ padding: "10px 20px" }}>{reopened ? "עדכון ליקוט" : "סיום ליקוט"}</button>
         </div>
       )}
 
@@ -156,7 +175,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       {confirm && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", display: "grid", placeItems: "center", zIndex: 100, padding: 16 }} onClick={() => !saving && setConfirm(false)}>
           <div className="card card-pad" style={{ maxWidth: 480, width: "100%", maxHeight: "85vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ marginTop: 0 }}>אישור סיום ליקוט</h2>
+            <h2 style={{ marginTop: 0 }}>{reopened ? "אישור עדכון ליקוט" : "אישור סיום ליקוט"}</h2>
             <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>מלקט: <b>{picker || "—"}</b></p>
             {shortages.length === 0
               ? <p className="chip chip-ok">אין חוסרים — כל השורות סופקו במלואן.</p>
@@ -179,7 +198,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
             </label>
             <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
               <button onClick={() => setConfirm(false)} disabled={saving} className="btn">ביטול</button>
-              <button onClick={confirmFinish} disabled={saving} className="btn btn-primary">{saving ? "שומר…" : "אשר וסיים ליקוט"}</button>
+              <button onClick={confirmFinish} disabled={saving} className="btn btn-primary">{saving ? "שומר…" : reopened ? "אשר ועדכן ליקוט" : "אשר וסיים ליקוט"}</button>
             </div>
           </div>
         </div>

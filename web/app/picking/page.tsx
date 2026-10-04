@@ -70,7 +70,13 @@ export default function PickingPage() {
                   <td>{d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""}</td>
                   <td>{d.total != null ? `${d.total.toFixed(2)} ₪` : ""}</td>
                   {state === "picked" && <td>{d.picker ?? "—"}</td>}
-                  <td><a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>ליקוט ←</a></td>
+                  <td>
+                    {state === "waiting"
+                      ? <a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>ליקוט ←</a>
+                      : role === "admin"
+                        ? <a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>פתח מחדש ←</a>
+                        : <span style={{ color: "#888" }}>לוקט</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>

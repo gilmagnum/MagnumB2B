@@ -41,6 +41,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
         { href: "/documents", label: "מסמכים", icon: "docs" },
         ...(canPick ? [{ href: "/picking", label: "ליקוט", icon: "picking" }] : []),
         ...(isAdmin ? [{ href: "/admin", label: "ניהול", icon: "admin" }] : []),
+        { href: "/settings", label: "הגדרות", icon: "user" },
       ];
   const home = pickerOnly ? "/picking" : "/";
 

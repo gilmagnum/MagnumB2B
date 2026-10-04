@@ -110,7 +110,7 @@ h3 { font-size: 16px; font-weight: 700; }
   width: clamp(110px, 22vw, 220px);
 }
 .header-search:focus { outline: none; border-color: var(--brand); background: var(--surface); }
-@media (max-width: 640px) { .hdr-user { display: none; } }
+@media (max-width: 640px) { .hdr-user { max-width: 92px; font-size: 12px; } }
 @media (max-width: 560px) {
   /* search drops to its own full-width second row */
   .hdr-spacer { display: none; }
@@ -118,6 +118,7 @@ h3 { font-size: 16px; font-weight: 700; }
 }
 @media (max-width: 460px) {
   .hdr-title { font-size: 14px; max-width: 42vw; }
+  .hdr-user { max-width: 70px; }
   .app-header { gap: 7px; padding: 8px 10px; }
   .icon-btn { width: 34px; height: 34px; font-size: 16px; }
 }
