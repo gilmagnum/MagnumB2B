@@ -1,6 +1,16 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 33) — research-matrix output not found on the server. Gil: run it again ON SRV-MAGNUM (new command)
+```
+node C:\MagnumB2B\repo\scripts\research-matrix.js KD54301
+```
+(**On SRV-MAGNUM**, PowerShell **as Administrator**, any folder.) It now writes `C:\MagnumB2B\repo\logs\research-matrix.txt` **itself** and ends by printing `written: …`; no redirect needed.
+- **Why:** after "research-matrix ran" there was **no `research-matrix.txt` anywhere** on SRV-MAGNUM (searched `C:\MagnumB2B` recursively + user profiles), and nothing in `C:\MagnumB2B` changed after 23:39.
+  - With the old command, the `>` redirect creates the file even when the script fails, so it most likely ran on another machine (e.g. a repo clone on Gil's PC) or in a window that wasn't in `C:\MagnumB2B\repo`.
+  - The script now also warns if it isn't run on SRV-MAGNUM.
+- The script is read-only (magnum_ro, NOLOCK) and reads one model only.
+
 ## ⚡ 2026-10-04 (reply 32) — central=1 is live ✅ · reply 48 (label every cell) needs one research run. Gil: ONE command
 ```
 cd C:\MagnumB2B\repo; node scripts\research-matrix.js KD54301 > logs\research-matrix.txt 2>&1

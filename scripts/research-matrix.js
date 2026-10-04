@@ -1,14 +1,27 @@
 // Read-only research for reply 48: where Hashavshevet keeps matrix row/column (colour/size) labels.
-// Run ONCE from an elevated PowerShell (it needs .env.local):
-//   cd C:\MagnumB2B\repo; node scripts\research-matrix.js KD54301 > logs\research-matrix.txt 2>&1
+// Run ONCE on SRV-MAGNUM from an elevated PowerShell (it needs .env.local):
+//   node C:\MagnumB2B\repo\scripts\research-matrix.js KD54301
+// It writes C:\MagnumB2B\repo\logs\research-matrix.txt itself (no redirect needed) and prints the path.
 // Small metadata queries + rows for ONE model only. Uses the read-only (NOLOCK) pool.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { query, closeAll } from '../bridge/db.js';
+import { ROOT } from '../bridge/config.js';
 
+const OUT = path.join(ROOT, 'logs', 'research-matrix.txt');
 const model = process.argv[2] || 'KD54301';
-const show = (title, rows) => {
-  console.log(`\n=== ${title} (${rows.length})`);
-  for (const r of rows.slice(0, 60)) console.log(JSON.stringify(r));
+const lines = [`research-matrix ${model} on ${os.hostname()} at ${new Date().toISOString()}`];
+const log = (...a) => {
+  const line = a.join(' ');
+  lines.push(line);
+  console.log(line);
 };
+const show = (title, rows) => {
+  log(`\n=== ${title} (${rows.length})`);
+  for (const r of rows.slice(0, 60)) log(JSON.stringify(r));
+};
+if (os.hostname().toUpperCase() !== 'SRV-MAGNUM') log('WARNING: not SRV-MAGNUM - run it on the Hashavshevet server');
 
 try {
   // 1. Tables that look like matrix / variety definitions, with their columns.
@@ -46,8 +59,11 @@ try {
       await query(`SELECT TOP 15 * FROM [${tbl}]${where}`, { k: model }));
   }
 } catch (err) {
-  console.log('ERROR', err.message);
+  log('ERROR', err.message);
   process.exitCode = 1;
 } finally {
   await closeAll();
+  fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.writeFileSync(OUT, `${lines.join('\n')}\n`, 'utf8');
+  console.log(`\nwritten: ${OUT}`);
 }
