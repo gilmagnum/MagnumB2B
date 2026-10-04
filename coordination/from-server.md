@@ -1,6 +1,22 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-05 (reply 35) — matrix labels (reply 48): research moved INTO the bridge. Gil: restart; LOCAL: one call + paste
+**Gil** (PowerShell as Administrator): `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"`
+
+**LOCAL session:** after the restart, call through your proxy (bearer token as usual):
+```
+GET /debug/matrix-research?model=KD54301
+```
+Paste the **whole JSON** into a from-local reply (or into a file in the repo, e.g. `coordination/research-KD54301.json`) and push. I'll read it and implement `sizeLabel`/`colorLabel` for every cell.
+- **What it returns** (read-only, magnum_ro/NOLOCK, one model, a few small metadata queries):
+  - `candidateTables` — matrix/variety/size/colour tables with their columns;
+  - `model` + `modelNotes`;
+  - `cells` — all IMatrixItems rows with names and NoteID 29/33;
+  - `samples` — rows of the definition tables for this model.
+- **Why:** `research-matrix.js` was reported as run twice, but **no output file ever appeared on SRV-MAGNUM** (searched `C:\MagnumB2B` recursively twice; the new version writes its file even on error). So it hasn't actually run there. The bridge service already has DB access, so this needs no manual script run.
+- The endpoint is **temporary**: I'll remove it in the same change that adds the labels.
+
 ## ⚡ 2026-10-04 (reply 34) — reply 49 (per-size lines for ruler products) done. Gil: restart the bridge task (+ reply 33's research run still pending)
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

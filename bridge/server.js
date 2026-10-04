@@ -10,6 +10,7 @@ import { syncCatalog, lastSyncedAt } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
 import { getBalance, getStats, StatsError } from './stats.js';
+import { matrixResearch } from './research.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -236,6 +237,13 @@ const routes = [
       if (err instanceof StatsError) throw new HttpError(err.status, err.code, err.message);
       throw err;
     }
+  }],
+
+  // TEMPORARY (reply 48): read-only matrix-label research for one model. Remove after use.
+  ['GET', /^\/debug\/matrix-research$/, async ({ query }) => {
+    const model = query.get('model')?.trim();
+    if (!model || !/^[\w.\-]{1,20}$/.test(model)) throw new HttpError(400, 'BAD_REQUEST', 'model חסר או לא תקין');
+    return matrixResearch(model);
   }],
 
   // Size-ruler usage for the admin rulers screen (reply 40). Cached 12 h on the bridge.
