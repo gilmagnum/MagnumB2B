@@ -25,6 +25,10 @@ const trim = (v) => (typeof v === 'string' ? v.trim() : v);
 const inList = (ids) => ids.map(Number).join(',');
 
 // --- balance ------------------------------------------------------------------------------
+// Hashavshevet's Accounts.Balance is negative when the customer owes us (Σ over all customers came
+// out at -1.73M, which can only be receivables). We return positive = customer owes us.
+// BALANCE_SIGN=1 in .env.local reverts to the raw value without a code change.
+const BALANCE_SIGN = process.env.BALANCE_SIGN === '1' ? 1 : -1;
 // Accounts.Balance is Hashavshevet's running balance of the account; for a customer a positive
 // (debit) balance = the customer owes us. Obligo = open credit exposure (cheques etc.).
 export async function getBalance(accountKey) {
@@ -37,7 +41,7 @@ export async function getBalance(accountKey) {
     accountKey: trim(a.AccountKey),
     customerName: trim(a.FullName),
     agent: a.Agent || undefined,
-    balance: round2(a.Balance),
+    balance: round2(BALANCE_SIGN * (a.Balance ?? 0)),
     obligo: round2(a.Obligo),
     maxCredit: a.MaxCredit || undefined,
     maxObligo: a.MaxObligo || undefined,
@@ -110,6 +114,59 @@ async function totals(range, scope, { byAgent = false } = {}) {
     activeCustomers: r.activeCustomers ?? 0,
   });
   return byAgent ? rows.map((r) => ({ agentId: r.agentId, ...shape(r) })) : shape(rows[0] ?? {});
+}
+
+// Item -> main category (NoteID 22). Matrix cells take their parent model's category (cells have no
+// extra fields of their own); an item's own value wins. Cached 1 h.
+let categoryCache;
+async function itemCategories() {
+  if (!categoryCache || Date.now() - categoryCache.at > 3600_000) {
+    const map = Promise.all([
+      query(`SELECT c.ItemKey, LTRIM(RTRIM(n.Note)) AS cat FROM IMatrixItems c
+             JOIN ExtraNotes n ON n.KeF = c.FItemKey AND n.NoteID = 22 WHERE LTRIM(RTRIM(ISNULL(n.Note, ''))) <> ''`),
+      query(`SELECT KeF AS ItemKey, LTRIM(RTRIM(Note)) AS cat FROM ExtraNotes
+             WHERE NoteID = 22 AND LTRIM(RTRIM(ISNULL(Note, ''))) <> ''`),
+    ]).then(([cells, own]) => new Map([...cells, ...own].map((r) => [trim(r.ItemKey), r.cat])));
+    categoryCache = { at: Date.now(), map };
+    map.catch(() => (categoryCache = undefined));
+  }
+  return categoryCache.map;
+}
+
+// Top 10 main categories by sales (net line totals of the sales docs) in range.
+async function topCategories(range, scope) {
+  const params = { from: { type: sql.Date, value: range.from }, to: { type: sql.Date, value: range.to } };
+  const where = scopeFilter(scope, params);
+  const [rows, cats] = await Promise.all([
+    query(
+      `SELECT m.ItemKey, SUM(m.TFtal) AS value, SUM(m.Quantity) AS qty
+       FROM Stock s
+       LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
+       JOIN StockMoves m ON m.StockID = s.ID
+       WHERE s.ValueDate >= @from AND s.ValueDate < DATEADD(day, 1, @to)
+         AND s.DocumentID IN (${inList(STAT_DOCS.sales)}) AND ISNULL(s.DocCancel, 0) = 0${where}
+         AND m.Tree IN (0, 1) AND m.ItemKey NOT IN (${SHIPPING.map((k) => `'${k}'`).join(',')})
+       GROUP BY m.ItemKey`,
+      params,
+    ),
+    itemCategories(),
+  ]);
+  return aggregateCategories(rows, cats);
+}
+
+export function aggregateCategories(rows, cats, top = 10) {
+  const byCat = new Map();
+  for (const r of rows) {
+    const name = cats.get(trim(r.ItemKey)) ?? 'ללא קטגוריה';
+    const c = byCat.get(name) ?? { name, sales: 0, qty: 0 };
+    c.sales += r.value ?? 0;
+    c.qty += r.qty ?? 0;
+    byCat.set(name, c);
+  }
+  return [...byCat.values()]
+    .map((c) => ({ ...c, sales: round2(c.sales) }))
+    .sort((x, y) => y.sales - x.sales)
+    .slice(0, top);
 }
 
 async function topItems(range, scope) {
@@ -233,7 +290,7 @@ async function openBalance(scope) {
     params.agent = Number(scope.agent);
   }
   const [r] = await query(`SELECT SUM(a.Balance) AS total FROM Accounts a WHERE ISNULL(a.Dumi, 0) <> 1${where}`, params);
-  return round2(r?.total);
+  return round2(BALANCE_SIGN * (r?.total ?? 0));
 }
 
 const cache = new Map();
@@ -253,7 +310,7 @@ export async function getStats({ scope = 'all', account, agent, from, to, compar
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
 
   const prev = compare ? previousPeriod(range.from, range.to) : null;
-  const [main, items, agents, previous, customers, points, pipe, balance] = await Promise.all([
+  const [main, items, agents, previous, customers, points, pipe, balance, categories] = await Promise.all([
     totals(range, s),
     topItems(range, s),
     scope === 'all' ? totals(range, s, { byAgent: true }) : null,
@@ -262,6 +319,7 @@ export async function getStats({ scope = 'all', account, agent, from, to, compar
     series(range, s),
     pipeline(s),
     openBalance(s),
+    topCategories(range, s),
   ]);
   let byAgent;
   if (agents) {
@@ -277,6 +335,7 @@ export async function getStats({ scope = 'all', account, agent, from, to, compar
     ...main,
     topItems: items,
     topCustomers: customers,
+    topCategories: categories,
     series: points,
     pipeline: pipe,
     openBalance: balance,

@@ -38,3 +38,19 @@ test('series bucketing stays at ~90 points or fewer', async () => {
   const mid = bucketStarts(d('2026-01-15'), d('2026-03-10'), 'month').map(iso);
   assert.deepEqual(mid, ['2026-01-15', '2026-02-01', '2026-03-01']); // first bucket clamped to from
 });
+
+test('topCategories: sums items per category, unknown -> ללא קטגוריה, sorted, top 10', async () => {
+  const { aggregateCategories } = await import('../bridge/stats.js');
+  const cats = new Map([['A', 'הלבשה תחתונה'], ['B', 'הלבשה תחתונה'], ['C', 'נעליים']]);
+  const rows = [
+    { ItemKey: 'A ', value: 100, qty: 10 }, { ItemKey: 'B', value: 50.005, qty: 5 },
+    { ItemKey: 'C', value: 200, qty: 2 }, { ItemKey: 'Z', value: 1, qty: 1 },
+  ];
+  assert.deepEqual(aggregateCategories(rows, cats), [
+    { name: 'נעליים', sales: 200, qty: 2 },
+    { name: 'הלבשה תחתונה', sales: 150.01, qty: 15 },
+    { name: 'ללא קטגוריה', sales: 1, qty: 1 },
+  ]);
+  const many = Array.from({ length: 15 }, (_, i) => ({ ItemKey: `I${i}`, value: i, qty: 1 }));
+  assert.equal(aggregateCategories(many, new Map(many.map((r) => [r.ItemKey, r.ItemKey]))).length, 10);
+});

@@ -1,6 +1,23 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 27) — reply 45: balance sign flipped + topCategories. Gil: restart the bridge task
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+
+**openBalance / balance sign — flipped.** You're right: Σ over ~1,600 customers of a wholesaler can only be receivables, so −1,730,312 means Hashavshevet stores `Accounts.Balance` **negative when the customer owes us**.
+- Both **`/customers/:key/balance`** and **`/stats.openBalance`** now return **−Accounts.Balance** → **positive = customer owes us** (scope=all should now show **+1,730,312**).
+- **Gil, one check:** open one customer that you know owes money in the old app and compare with `/balance`. If it ever turns out wrong, `BALANCE_SIGN=1` in `.env.local` + restart reverts it, no code change.
+- `obligo` is unchanged (raw `Accounts.Obligo`).
+
+**`topCategories`** → `[{ name, sales, qty }]`, top 10 `category_main` by sales in range, respecting scope:
+- **sales** = Σ net line totals (`StockMoves.TFtal`) of the sales docs (1,2,9,37,87), Tree 0/1, no M1001/M1002 — same basis as topItems.
+- **category:** item → NoteID 22 (category_main). Matrix cells take their **parent model's** category (cells have no extra fields). Items without one → `ללא קטגוריה`.
+- **Load:** the item→category map is cached 1 h; the SQL side is one grouped query per item (like topItems); aggregation happens in the bridge.
+- Tests 15/15. **Not run against SQL** (no DB access here); errors would be in `bridge.log`.
+
 ## 2026-10-04 (reply 26) — restart OK, /stats with the 5 new fields answers 200 · no command needed
 - `logs\bridge.log` after the restart: `bridge listening` → `push events on: from order 117096, produced 117089`.
 - **7 × `GET /stats` → 200**, 18:47–18:49 UTC. First computations took 145–538 ms, cache hits 0–2 ms. **No SQL errors.**
