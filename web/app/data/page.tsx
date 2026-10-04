@@ -71,7 +71,7 @@ export default function DataPage() {
   // Scope: inside a customer → that account; manager/admin → all; agent → their customers.
   const scope = useMemo(() => {
     if (ctx) return { kind: "account" as const, label: `לקוח: ${ctx.customerName}`, q: { scope: "account" as const, account: ctx.accountKey } };
-    if (managerOrAbove(role)) return { kind: "all" as const, label: "כלל הלקוחות", q: { scope: "all" as const } };
+    if (managerOrAbove(role)) return { kind: "all" as const, label: "כלל הלקוחות", q: { scope: "all" as const, central: true } };
     return { kind: "agent" as const, label: "הלקוחות שלי", q: { scope: "agent" as const, agent: agentId } };
   }, [ctx, role, agentId]);
 
@@ -216,33 +216,49 @@ function BarList({ title, items, metric, qtyLabel }: { title: string; items: Bar
   );
 }
 
-// Lightweight inline SVG bar chart (no external libs) for the sales trend.
+// Inline SVG line/area chart (no external libs) — sales over a time axis, payments as a 2nd line.
 function TrendChart({ series }: { series: SeriesPoint[] }) {
-  const max = Math.max(1, ...series.map((p) => p.sales));
   const n = series.length;
-  const W = 760, H = 180, pad = 24;
-  const bw = (W - pad * 2) / n;
+  const W = 780, H = 230, L = 52, R = 14, T = 14, B = 28;
+  const plotW = W - L - R, plotH = H - T - B;
+  const hasPay = series.some((p) => p.payments != null);
+  const max = Math.max(1, ...series.map((p) => Math.max(p.sales, hasPay ? (p.payments ?? 0) : 0)));
+  const x = (i: number) => L + (n <= 1 ? plotW / 2 : (i * plotW) / (n - 1));
+  const y = (v: number) => T + plotH * (1 - v / max);
+  const kfmt = (v: number) => { const a = Math.abs(v); return a >= 1e6 ? (v / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "M" : a >= 1e3 ? Math.round(v / 1e3) + "K" : String(Math.round(v)); };
   const fmtDate = (s: string) => { const d = new Date(s); return `${d.getDate()}/${d.getMonth() + 1}`; };
-  const step = Math.ceil(n / 8); // label density
+  const line = (key: "sales" | "payments") => series.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p[key] ?? 0).toFixed(1)}`).join(" ");
+  const area = `${line("sales")} L${x(n - 1).toFixed(1)} ${y(0).toFixed(1)} L${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
+  const ticks = [0, 0.25, 0.5, 0.75, 1];
+  const step = Math.ceil(n / 9);
   return (
-    <div className="table-wrap">
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: W, height: "auto" }} role="img" aria-label="מגמת מכירות">
-        {series.map((p, i) => {
-          const h = Math.round(((H - pad * 2) * p.sales) / max);
-          const x = pad + i * bw;
-          const y = H - pad - h;
-          return (
-            <g key={p.date}>
-              <rect x={x + bw * 0.15} y={y} width={bw * 0.7} height={h} rx={2} fill="var(--brand)">
-                <title>{`${fmtDate(p.date)}: ${Math.round(p.sales).toLocaleString("he-IL")} ₪`}</title>
-              </rect>
-              {i % step === 0 && <text x={x + bw / 2} y={H - 6} textAnchor="middle" fontSize="10" fill="var(--ink-muted)">{fmtDate(p.date)}</text>}
+    <>
+      <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--ink-muted)", marginBottom: 6 }}>
+        <span><span style={{ display: "inline-block", width: 10, height: 10, background: "var(--brand)", borderRadius: 2, marginInlineEnd: 4 }} />מכירות</span>
+        {hasPay && <span><span style={{ display: "inline-block", width: 10, height: 2, background: "var(--ok)", verticalAlign: "middle", marginInlineEnd: 4 }} />תשלומים</span>}
+      </div>
+      <div className="table-wrap">
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", maxWidth: W, height: "auto" }} role="img" aria-label="מגמת מכירות">
+          {ticks.map((t) => (
+            <g key={t}>
+              <line x1={L} y1={y(max * t)} x2={W - R} y2={y(max * t)} stroke="var(--border)" strokeDasharray={t ? "3 3" : undefined} />
+              <text x={L - 6} y={y(max * t) + 3} textAnchor="end" fontSize="10" fill="var(--ink-muted)">{kfmt(max * t)}</text>
             </g>
-          );
-        })}
-        <line x1={pad} y1={H - pad} x2={W - pad} y2={H - pad} stroke="var(--border)" />
-      </svg>
-    </div>
+          ))}
+          <path d={area} fill="var(--brand)" opacity={0.12} />
+          <path d={line("sales")} fill="none" stroke="var(--brand)" strokeWidth={2} strokeLinejoin="round" />
+          {hasPay && <path d={line("payments")} fill="none" stroke="var(--ok)" strokeWidth={1.5} strokeDasharray="4 3" strokeLinejoin="round" />}
+          {series.map((p, i) => (
+            <circle key={p.date} cx={x(i)} cy={y(p.sales)} r={2.5} fill="var(--brand)">
+              <title>{`${fmtDate(p.date)} · מכירות ${Math.round(p.sales).toLocaleString("he-IL")} ₪${p.payments != null ? ` · תשלומים ${Math.round(p.payments).toLocaleString("he-IL")} ₪` : ""}`}</title>
+            </circle>
+          ))}
+          {series.map((p, i) => (i % step === 0 || i === n - 1) && (
+            <text key={"x" + p.date} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--ink-muted)">{fmtDate(p.date)}</text>
+          ))}
+        </svg>
+      </div>
+    </>
   );
 }
 
