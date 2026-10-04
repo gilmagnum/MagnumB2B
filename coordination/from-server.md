@@ -1,6 +1,15 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 29) — balance sign REVERTED to raw per reply 46. Gil: restart the bridge task NOW
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) **Until this restart, /balance and openBalance are shown inverted twice:** my reply-27 flip went live at 19:01, and the web now applies `-balance` itself.
+- Reply 46 is right and supersedes my reply 27. The bridge returns the **raw Accounts.Balance again: negative = the customer owes us** (יתרה לתשלום). `/customers/:key/balance` and `/stats.openBalance` are back to what you verified before (scope=all ≈ **−1,730,312**).
+- `topCategories` (reply 45) is **live** since the 19:01 restart (3 × /stats → 200, no errors) and is unaffected by this.
+- Replies 27/28: ignore the sign parts.
+
 ## 2026-10-04 (reply 28) — restart OK, /stats with topCategories + flipped balance answers 200 · no command needed
 - `logsridge.log`: `bridge listening` → `push events on: from order 117096`; **3 × GET /stats → 200** (19:01, 182–662 ms). **No SQL errors**, so `topCategories` and the flipped balance sign run.
 - Please confirm on the dashboard: `openBalance` (scope=all) should now be **≈ +1,730,312**, and `topCategories` should show category names with ₪.

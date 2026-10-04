@@ -114,7 +114,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   Items not listed and M1001/M1002 are untouched. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
   before `ORDER_WRITE_ENABLED=1`), 404 DOC_NOT_FOUND, 409 NOT_OPEN/TREE_UNSUPPORTED, 422 ITEM_NOT_IN_ORDER, 501 NO_PERMISSION (GRANT missing).
 - `GET /customers/:accountKey/balance[?agent=:id]` → `{ accountKey, customerName, agent?, balance, obligo, maxCredit?, maxObligo? }`
-  (₪; `balance` = −Accounts.Balance, i.e. **positive = customer owes us** (Hashavshevet stores receivables negative); `obligo` = Accounts.Obligo). 403 if `agent` isn't the customer's agent.
+  (₪; `balance` = Accounts.Balance raw: **negative = customer owes us** (יתרה לתשלום; the web shows -balance); `obligo` = Accounts.Obligo). 403 if `agent` isn't the customer's agent.
 - `GET /stats?scope=account|agent|all&account=&agent=&from=YYYY-MM-DD&to=YYYY-MM-DD[&compare=1]` →
   `{ period:{from,to}, sales, returns, ordersCount, payments, topItems:[{itemkey,name,qty,value}], byAgent?:[{agentId,agentName,sales,ordersCount,payments}], previous?:{sales,returns,ordersCount,payments} }`.
   Mapping (DocumentID): **sales** 1,2,9,37,87 · **returns** 3,73 · **ordersCount** 6,11 · **payments** 31 (+2,87 invoice-receipts).

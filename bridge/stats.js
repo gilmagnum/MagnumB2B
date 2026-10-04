@@ -25,12 +25,11 @@ const trim = (v) => (typeof v === 'string' ? v.trim() : v);
 const inList = (ids) => ids.map(Number).join(',');
 
 // --- balance ------------------------------------------------------------------------------
-// Hashavshevet's Accounts.Balance is negative when the customer owes us (Σ over all customers came
-// out at -1.73M, which can only be receivables). We return positive = customer owes us.
-// BALANCE_SIGN=1 in .env.local reverts to the raw value without a code change.
-const BALANCE_SIGN = process.env.BALANCE_SIGN === '1' ? 1 : -1;
-// Accounts.Balance is Hashavshevet's running balance of the account; for a customer a positive
-// (debit) balance = the customer owes us. Obligo = open credit exposure (cheques etc.).
+// Raw Hashavshevet sign (Gil, reply 46): Accounts.Balance NEGATIVE = the customer owes us (יתרה לתשלום).
+// The web app presents -balance. BALANCE_SIGN=-1 in .env.local would flip it (not used).
+const BALANCE_SIGN = process.env.BALANCE_SIGN === '-1' ? -1 : 1;
+// Accounts.Balance is Hashavshevet's running balance of the account (negative = owes us, see above).
+// Obligo = open credit exposure (cheques etc.).
 export async function getBalance(accountKey) {
   const [a] = await query(
     'SELECT AccountKey, FullName, Agent, Balance, Obligo, MaxCredit, MaxObligo FROM Accounts WHERE AccountKey = @k',
