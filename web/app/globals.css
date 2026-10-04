@@ -112,9 +112,9 @@ h3 { font-size: 16px; font-weight: 700; }
 .header-search:focus { outline: none; border-color: var(--brand); background: var(--surface); }
 @media (max-width: 640px) { .hdr-user { max-width: 92px; font-size: 12px; } }
 @media (max-width: 560px) {
-  /* search drops to its own full-width second row; cart pins to the left corner */
+  /* search drops to its own full-width second row; bell+cart pin to the left corner as a group */
   .hdr-spacer { display: none; }
-  .hdr-cart { margin-inline-start: auto; }
+  .hdr-bell { margin-inline-start: auto; }
   .header-search { flex: 1 1 100%; width: auto; order: 9; }
 }
 @media (max-width: 460px) {

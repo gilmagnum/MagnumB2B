@@ -21,6 +21,7 @@ export default async function Home() {
     { href: "/catalog", icon: "catalog", label: "קטלוג" },
     { href: "/customer", icon: "customers", label: "בחירת לקוח" },
     { href: "/documents", icon: "docs", label: "מסמכים" },
+    { href: "/data", icon: "chart", label: "נתונים" },
     ...(managerOrAbove(me.role) ? [{ href: "/picking", icon: "picking", label: "ליקוט" }] : []),
     ...(canSeeAdminPanel(me.role) ? [{ href: "/admin", icon: "admin", label: "ניהול" }] : []),
     { href: "/settings", icon: "user", label: "הגדרות" },

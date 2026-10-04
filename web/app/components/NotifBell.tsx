@@ -26,7 +26,7 @@ export default function NotifBell() {
   }, []);
 
   return (
-    <a href="/notifications" className="icon-btn" title="התראות" aria-label="התראות" style={{ position: "relative" }}>
+    <a href="/notifications" className="icon-btn hdr-bell" title="התראות" aria-label="התראות" style={{ position: "relative" }}>
       <Bell />
       {unread > 0 && (
         <span style={{ position: "absolute", top: -4, insetInlineEnd: -4, background: "var(--danger)", color: "#fff", borderRadius: 999, fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, display: "grid", placeItems: "center", padding: "0 4px" }}>

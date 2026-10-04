@@ -110,4 +110,35 @@ export const bridge = {
     if (opts.state) p.set("state", opts.state === "picked" ? "picked" : "waiting");
     return call<Document[]>(`/picking/queue?${p.toString()}`);
   },
+  // Open A/R balance for a customer (positive = owes us).
+  balance: (accountKey: string) =>
+    call<{ accountKey: string; balance: number }>(`/customers/${encodeURIComponent(accountKey)}/balance`),
+  // Dashboard aggregates for a scope + date range (compare = also prior equivalent period).
+  stats: (opts: StatsQuery) => {
+    const p = new URLSearchParams();
+    if (opts.account) p.set("account", opts.account);
+    if (opts.agent != null) p.set("agent", String(opts.agent));
+    if (opts.scope) p.set("scope", opts.scope);
+    p.set("from", opts.from); p.set("to", opts.to);
+    if (opts.compare) p.set("compare", "1");
+    return call<Stats>(`/stats?${p.toString()}`);
+  },
+};
+
+export type StatsQuery = {
+  scope?: "account" | "agent" | "all";
+  account?: string;
+  agent?: number | null;
+  from: string;
+  to: string;
+  compare?: boolean;
+};
+export type StatMetrics = { sales: number; ordersCount: number; payments: number; returns?: number };
+export type TopItem = { itemkey: string; name: string; qty: number; value: number };
+export type AgentStat = { agentId: number; agentName: string; sales: number; ordersCount: number; payments: number };
+export type Stats = StatMetrics & {
+  period: { from: string; to: string };
+  topItems: TopItem[];
+  byAgent?: AgentStat[];
+  previous?: StatMetrics;
 };

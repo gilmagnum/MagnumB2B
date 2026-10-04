@@ -25,6 +25,15 @@ export default function DocumentsPage() {
   const [detail, setDetail] = useState<Record<number, DocumentDetail>>({});
   const [images, setImages] = useState<Record<string, string>>({});
   const [loadingId, setLoadingId] = useState<number | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
+
+  // Inside a customer: show their open balance (best-effort; hidden if the bridge endpoint isn't up).
+  useEffect(() => {
+    if (!(ctx && onlyCustomer)) { setBalance(null); return; }
+    let alive = true;
+    bridge.balance(ctx.accountKey).then((r) => { if (alive) setBalance(r.balance); }).catch(() => { if (alive) setBalance(null); });
+    return () => { alive = false; };
+  }, [ctx, onlyCustomer]);
 
   // Load a document's lines + images once; cache them.
   const ensureDetail = async (stockId: number): Promise<DocumentDetail | null> => {
@@ -98,7 +107,9 @@ export default function DocumentsPage() {
     <>
       <h1>היסטוריית מסמכים</h1>
       {ctx && onlyCustomer
-        ? <p style={{ color: "var(--brand-strong)", fontSize: 14 }}>מסמכי <b>{ctx.customerName}</b> ({ctx.accountKey}) · <button onClick={() => setOnlyCustomer(false)} style={linkBtn}>הצג את כל המסמכים</button></p>
+        ? <p style={{ color: "var(--brand-strong)", fontSize: 14 }}>מסמכי <b>{ctx.customerName}</b> ({ctx.accountKey})
+            {balance != null && <span className="chip" style={{ marginInlineStart: 8, background: balance > 0 ? "var(--danger-soft)" : "var(--surface-muted)", color: balance > 0 ? "var(--danger)" : "var(--ink)" }}>יתרה לתשלום: {Math.round(balance).toLocaleString("he-IL")} ₪</span>}
+            {" "}· <button onClick={() => setOnlyCustomer(false)} style={linkBtn}>הצג את כל המסמכים</button></p>
         : <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>
             {managerOrAbove(role) ? "מציג את כל המסמכים" : "מציג את המסמכים של הלקוחות שלך"}
             {ctx && <> · <button onClick={() => setOnlyCustomer(true)} style={linkBtn}>רק {ctx.customerName}</button></>}

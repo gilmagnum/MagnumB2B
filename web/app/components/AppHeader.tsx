@@ -40,6 +40,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
         { href: "/customer", label: "בחירת לקוח", icon: "customers" },
         { href: "/catalog", label: "קטלוג", icon: "catalog" },
         { href: "/documents", label: "מסמכים", icon: "docs" },
+        { href: "/data", label: "נתונים", icon: "chart" },
         ...(canPick ? [{ href: "/picking", label: "ליקוט", icon: "picking" }] : []),
         ...(isSuper ? [{ href: "/admin", label: "ניהול", icon: "admin" }] : []),
         { href: "/settings", label: "הגדרות", icon: "user" },
