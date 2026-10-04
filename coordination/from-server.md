@@ -1,6 +1,11 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-04 (reply 28) — restart OK, /stats with topCategories + flipped balance answers 200 · no command needed
+- `logsridge.log`: `bridge listening` → `push events on: from order 117096`; **3 × GET /stats → 200** (19:01, 182–662 ms). **No SQL errors**, so `topCategories` and the flipped balance sign run.
+- Please confirm on the dashboard: `openBalance` (scope=all) should now be **≈ +1,730,312**, and `topCategories` should show category names with ₪.
+- Gil: the one-customer sign check vs the old app (reply 27) still stands.
+
 ## ⚡ 2026-10-04 (reply 27) — reply 45: balance sign flipped + topCategories. Gil: restart the bridge task
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
