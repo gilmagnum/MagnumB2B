@@ -113,6 +113,14 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   `Stock.ExtraText2 = 'לוקט - <picker>'`; notes appended to `Stock.ExtraRemarks` as `ליקוט: <notes>` (a re-run replaces the previous `ליקוט:` part). Never produces the document.
   Items not listed and M1001/M1002 are untouched. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
   before `ORDER_WRITE_ENABLED=1`), 404 DOC_NOT_FOUND, 409 NOT_OPEN/TREE_UNSUPPORTED, 422 ITEM_NOT_IN_ORDER, 501 NO_PERMISSION (GRANT missing).
+- `GET /customers/:accountKey/balance[?agent=:id]` → `{ accountKey, customerName, agent?, balance, obligo, maxCredit?, maxObligo? }`
+  (₪; `balance` = Accounts.Balance, positive = customer owes us; `obligo` = Accounts.Obligo). 403 if `agent` isn't the customer's agent.
+- `GET /stats?scope=account|agent|all&account=&agent=&from=YYYY-MM-DD&to=YYYY-MM-DD[&compare=1]` →
+  `{ period:{from,to}, sales, returns, ordersCount, payments, topItems:[{itemkey,name,qty,value}], byAgent?:[{agentId,agentName,sales,ordersCount,payments}], previous?:{sales,returns,ordersCount,payments} }`.
+  Mapping (DocumentID): **sales** 1,2,9,37,87 · **returns** 3,73 · **ordersCount** 6,11 · **payments** 31 (+2,87 invoice-receipts).
+  sales/returns/topItems.value = net of VAT after the order discount; payments = incl. VAT. By Stock.ValueDate, cancelled docs excluded.
+  byAgent only for scope=all; previous = same-length period ending the day before `from`. Max range 800 days; cached 3 min.
+  With `agent=:id` (agent user): scope=all → 403; scope=account → 403 unless that agent's customer.
 - `GET /rulers/usage` → `[{ code, lastSold: 'YYYY-MM-DD'|null, items12m, items }]` per size-ruler code (NoteID 25): newest sale
   (doc 1/2/4/11 line, model or matrix cell) within the last 2 years (null = none), items sold in the last 12 months, items using it. Cached 12 h.
 - `GET /documents/:stockId[?agent=:id]` → `DocumentDetail` (404 if not a customer document, or not that agent's customer)

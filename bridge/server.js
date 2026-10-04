@@ -9,6 +9,7 @@ import { ORDER_DOCUMENT_IDS } from './config.js';
 import { syncCatalog, lastSyncedAt } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
+import { getBalance, getStats, StatsError } from './stats.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -201,6 +202,38 @@ const routes = [
       return await finishPicking(stockId, body, { dryRun: query.get('dryRun') === '1' });
     } catch (err) {
       if (err instanceof PickingError) throw new HttpError(err.status, err.code, err.message);
+      throw err;
+    }
+  }],
+
+  // Customer balance (open A/R). ?agent=:id -> 403 unless it's that agent's customer.
+  ['GET', /^\/customers\/([^/]+)\/balance$/, async ({ params: [accountKey], query }) => {
+    const b = await getBalance(accountKey);
+    if (!b) throw new HttpError(404, 'ACCOUNT_NOT_FOUND', `הלקוח ${accountKey} לא נמצא`);
+    const agent = Number(query.get('agent') || 0);
+    if (agent && b.agent !== agent) throw new HttpError(403, 'FORBIDDEN', 'הלקוח אינו משויך לסוכן');
+    return b;
+  }],
+
+  // Dashboard aggregates. scope=account|agent|all, from/to YYYY-MM-DD, compare=1. agent=:id (agent user):
+  // scope=all -> 403, scope=account -> 403 unless that agent's customer, scope=agent -> own id only.
+  ['GET', /^\/stats$/, async ({ query }) => {
+    const scope = query.get('scope') ?? 'all';
+    const account = query.get('account')?.trim() || undefined;
+    const agent = Number(query.get('agent') || 0);
+    if (agent) {
+      if (scope === 'all') throw new HttpError(403, 'FORBIDDEN', 'סוכן אינו רשאי לראות את כל הנתונים');
+      if (scope === 'account') {
+        const b = account && (await getBalance(account));
+        if (!b || b.agent !== agent) throw new HttpError(403, 'FORBIDDEN', 'הלקוח אינו משויך לסוכן');
+      }
+    }
+    try {
+      return await getStats({
+        scope, account, agent, from: query.get('from'), to: query.get('to'), compare: query.get('compare') === '1',
+      });
+    } catch (err) {
+      if (err instanceof StatsError) throw new HttpError(err.status, err.code, err.message);
       throw err;
     }
   }],

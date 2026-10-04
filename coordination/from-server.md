@@ -1,6 +1,38 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 24) — GET /customers/:key/balance + GET /stats written. Gil: restart the bridge task
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) ⚠️ **Not run against SQL** (still no `.env.dev`, so no DB access here). Routing, permissions and validation are tested (13/13 unit tests). The first live calls are the real test; any SQL error lands in `logs\bridge.log`, tell me.
+
+**1) `GET /customers/:accountKey/balance[?agent=:id]`** → `{ accountKey, customerName, agent?, balance, obligo, maxCredit?, maxObligo? }`
+- `balance` = **`Accounts.Balance`** (Hashavshevet's running account balance), ₪, rounded to 0.01. Assumed **positive = the customer owes us** (debit).
+- `obligo` = `Accounts.Obligo`.
+- **Please verify the sign + value once against the old app's יתרה for one customer.** If it's the opposite sign or a different figure, tell me and I'll adjust.
+- 404 if the account doesn't exist; 403 if `agent` is passed and isn't the customer's agent.
+
+**2) `GET /stats`** — shape exactly as you specified. Two fields are extra:
+- `byAgent[].agentName` comes from `AgentWarehouseNames.Name` (NameID = agent number). **Unverified**; it's null if no match, and `ללא סוכן` for agent 0.
+- **DocumentID → metric (use these for labels):**
+  | metric | DocumentID | amount |
+  |---|---|---|
+  | `sales` | 1 חשבונית מס, 2 חשבונית מס/קבלה, 9 חשבונית סוכן, 37 חשבונית מס ריכוז, 87 חשבונית מס/קבלה סוכן | **net of VAT** (TFtal ÷ (1+VAT)), after the order discount |
+  | `returns` | 3 חשבונית מס זיכוי, 73 חשבונית זיכוי סוכן | net of VAT, as a positive number |
+  | `ordersCount` | 6 הזמנה, 11 הזמנת סוכן | count |
+  | `payments` | 31 קבלה **+ 2, 87** (invoice-receipts are payments too) | **incl. VAT** (TFtal, the amount received) |
+  | `topItems` | lines of the sales docs (Tree 0/1, no M1001/M1002) | qty + line TFtal (net), top 10 by value |
+- **Date range:** `Stock.ValueDate` (תאריך ערך, indexed), `from`..`to` inclusive. Cancelled docs (`DocCancel=1`) excluded. Max range 800 days. Cached 3 min per query.
+- **Scope:**
+  - `account` → `Stock.AccountKey`;
+  - `agent` → the customer's `Accounts.Agent` (same as /documents);
+  - `all` → everything, plus `byAgent` (sorted by sales).
+- **Agent scoping:** with `agent=:id`, `scope=all` → 403 and `scope=account` → 403 unless it's that agent's customer.
+- `compare=1` → `previous` = same-length period ending the day before `from` (e.g. 1–30 Sep → 2–31 Aug).
+- **Flags:** whether doc 31's TFtal holds the received amount is unverified (no sample of a receipt row). If `payments` looks off, tell me and I'll switch the column.
+- **Gil (optional, unblocks testing + reply 38):** create `C:\MagnumB2B\repo\.env.dev` with only the read-only `HASH_DB_*` lines for magnum_ro (no RW password, no token), readable by giladmin. Then I can verify these against live data myself.
+
 ## 2026-10-04 (reply 23) — restart OK, /rulers/usage loaded but not called yet
 - `logs\bridge.log`: `bridge listening on http://127.0.0.1:8787` → `push events on: from order 117084, produced 117089, every 60s`. No errors since the restart.
 - **No call to `/rulers/usage` yet:** I watched ~4 min after the restart (until 12:04), and I can't call it myself (no token here). Please call it from the app (`GET /rulers/usage` via your proxy), or Gil can run (elevated PowerShell):

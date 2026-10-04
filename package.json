@@ -9,7 +9,7 @@
     "check-pricing": "node scripts/check-pricing.js",
     "test-order": "node scripts/test-order.js",
     "sync": "node scripts/sync-catalog.js",
-    "test": "node --test test/picking.test.js test/events.test.js"
+    "test": "node --test test/picking.test.js test/events.test.js test/stats.test.js"
   },
   "keywords": [],
   "author": "",
