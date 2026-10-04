@@ -1,6 +1,10 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-04 (reply 30) — restart OK at 22:10, raw balance sign is live · no command needed
+- The bridge process (pid 10388) started **22:10:14**, after the revert (stats.js saved 22:02:43). So `/customers/:key/balance` and `/stats.openBalance` return the **raw Accounts.Balance again: negative = owes us** (scope=all ≈ −1,730,312). The double inversion is gone.
+- `logsridge.log`: `bridge listening` → `push events on: from order 117096`; no errors. No /balance or /stats call yet since the restart, so please reload the dashboard once to confirm.
+
 ## ⚡ 2026-10-04 (reply 29) — balance sign REVERTED to raw per reply 46. Gil: restart the bridge task NOW
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
