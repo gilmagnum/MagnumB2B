@@ -85,7 +85,7 @@ type DocumentDetail = Document & {
   pickNotes?: string;         // Stock.ExtraRemarks - picker notes written by /picking/:id/finish
   customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
   lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
-           discountPct: number; lineTotal: number; onHand?: number; isShipping?: true }[];  // onHand = Items.Quantity now; M1001/M1002 flagged, not removed
+           discountPct: number; lineTotal: number; onHand?: number; isShipping?: true; lineId: number; size?: string }[];  // onHand = Items.Quantity now; M1001/M1002 flagged, not removed
 };
 
 type ApiError = { error: { code: string; message: string } };  // message in Hebrew, show as-is
@@ -106,7 +106,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /picking/queue[?agent=][&q=][&state=waiting|picked][&limit=200][&offset=0]` → `Document[]` (read-only), **oldest first**.
   Open agent orders only (doc 11, Status 0). `waiting` (default) = no picker marker; `picked` = ExtraText2 `לוקט - <name>`
   (picked, waiting for production in Hashavshevet). Same row shape as /documents incl. `picked`, `picker`, `pickedMarker`.
-- `POST /picking/:stockId/finish[?dryRun=1]` **(WRITES to Hashavshevet)** body `{ picker, notes?, lines: [{ itemkey, pickedQty }] }`
+- `POST /picking/:stockId/finish[?dryRun=1]` **(WRITES to Hashavshevet)** body `{ picker, notes?, lines: [{ itemkey, size?, pickedQty }] }` (`size` targets only that size's line)
   → `{ ok, stockId, dryRun, picker, notesField, notes, shortages: [{ itemkey, ordered, picked, action: 'reduced'|'deleted' }], totals: { net, gross } }`.
   One transaction, only on doc 11 with Status 0: pickedQty ≥ ordered → unchanged; 0 < pickedQty < ordered → line reduced
   (Quantity/TFtal/TftalVat/Supply/Base/PurchQuantity); 0 → line deleted; header TFtalVat/TFtal recomputed;
@@ -145,7 +145,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
     "orderKind": "picking" | "future",      // picking -> DocumentID 11 "הזמנת סוכן", future -> DocumentID 6 "הזמנה"
     "remarks": "...",                        // optional -> Stock.Remarks
     "orderDiscountPct": 0,                  // optional, header-level discount % (Stock.DiscountPrc/DiscountPrcR)
-    "lines": [ { "itemkey": "WF3400036", "qty": 2, "unit": "carton" | "bundle", "price"?: 8.55, "discountPct"?: 0 } ],
+    "lines": [ { "itemkey": "WF3400036", "qty": 2, "unit": "carton" | "bundle", "price"?: 8.55, "discountPct"?: 0, "size"?: "2-4" } ],
     "shipping": { "carton": 1, "pallet": 0 } // picking only -> M1001 / M1002 (both always written, qty 0 when unused)
   }
   // 200 response
@@ -155,6 +155,8 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   // ?dryRun=1: full validation + write inside a rolled-back transaction; stockId = null, nothing saved
   ```
   - `qty` is in cartons/bundles; the bridge writes units (qty × perCarton / perBundle).
+  - `size` (ruler products, ≤ 20 chars): each line stays its own StockMoves line (never merged); size → `StockMoves.Details`
+    and appended to the line name as ` - מידה <size>`. Response lines echo `size`.
   - Omit `price` → the bridge prices it (same as /price). If sent, `price` (+ `discountPct`) is written as-is.
   - Matrix: one line per cell SKU (`cells[].itemkey`); the cell inherits shownOnSite/pack sizes/ignoreStock from its parent.
   - Errors: 422 `ApiError` with codes `NO_ACCOUNT, ACCOUNT_NOT_FOUND, ACCOUNT_INACTIVE, BAD_KIND, NO_LINES, BAD_LINE,
