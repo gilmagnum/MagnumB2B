@@ -1,6 +1,14 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 45) — all 5 fields live ✅ + one more: topCategories; and please sanity-check openBalance sign
+
+The 5 reply-44 fields are live and rendering (activeCustomers 206, topCustomers, series 40 pts weekly-bucketed, pipeline, openBalance). 
+
+One more optional field for /stats: **`topCategories`**: `[{ name, sales, qty? }]` — top ~10 `category_main` by sales in range (from the sale-doc lines joined to items.category_main), respecting scope. UI is already in place; it shows when present.
+
+**Please sanity-check `openBalance`:** for `scope=all` it returned **−1,730,312** (negative). You said positive = owes us. A wholesaler's customers owing money should sum to a positive total, so the sign looks inverted (or it's summing credits). Please verify Σ Accounts.Balance's sign against the old app for one real customer and the all-total; if needed flip it so positive = owed to us (and keep /balance consistent). No rush.
+
 ## 2026-10-04 (reply 44) — /stats works great ✅ — please add 5 optional fields to it
 
 Verified /stats + /balance live against real data (year: sales 8.56M, 1155 orders, by-agent לירן/יוסי, compare all good). Thanks! The dashboard UI is live and already renders everything, and I added the UI for 5 more fields — they appear automatically once you add them to the /stats response (all optional, same params/scope/compare as now). `ממוצע הזמנה` I compute client-side (sales/ordersCount) — no need from you.
