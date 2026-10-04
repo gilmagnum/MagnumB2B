@@ -5,6 +5,7 @@ import { supabaseBrowser } from "../../lib/supabase/browser";
 import { exportExcel, exportPdf } from "../../lib/docExport";
 import { fetchImages } from "../../lib/images";
 import { useOrderContext } from "../../lib/useOrderContext";
+import { managerOrAbove } from "../../lib/roles";
 
 // Documents screen. Admin sees ALL; an agent sees only their customers'. A "+" per
 // row expands the document's lines (with product images) inline. When a customer is
@@ -24,6 +25,15 @@ export default function DocumentsPage() {
   const [detail, setDetail] = useState<Record<number, DocumentDetail>>({});
   const [images, setImages] = useState<Record<string, string>>({});
   const [loadingId, setLoadingId] = useState<number | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
+
+  // Inside a customer: show their open balance (best-effort; hidden if the bridge endpoint isn't up).
+  useEffect(() => {
+    if (!(ctx && onlyCustomer)) { setBalance(null); return; }
+    let alive = true;
+    bridge.balance(ctx.accountKey).then((r) => { if (alive) setBalance(r.balance); }).catch(() => { if (alive) setBalance(null); });
+    return () => { alive = false; };
+  }, [ctx, onlyCustomer]);
 
   // Load a document's lines + images once; cache them.
   const ensureDetail = async (stockId: number): Promise<DocumentDetail | null> => {
@@ -69,12 +79,12 @@ export default function DocumentsPage() {
       if (!user) { setErr("יש להתחבר מחדש"); setLoading(false); return; }
       const { data: prof } = await supabase.from("profiles").select("role, agent_id").eq("id", user.id).single();
       setRole(prof?.role ?? "");
-      setAgentId(prof?.role === "admin" ? 0 : (prof?.agent_id ?? null));
+      setAgentId(managerOrAbove(prof?.role) ? 0 : (prof?.agent_id ?? null));
     })();
   }, []);
 
   const load = useCallback(async () => {
-    if (agentId == null) { setLoading(false); if (role && role !== "admin") setErr("למשתמש לא משויך קוד סוכן"); return; }
+    if (agentId == null) { setLoading(false); if (role && !managerOrAbove(role)) setErr("למשתמש לא משויך קוד סוכן"); return; }
     setLoading(true); setErr(""); setExpanded(new Set());
     const effectiveQ = (ctx && onlyCustomer) ? ctx.accountKey : (q.trim() || undefined);
     try {
@@ -97,9 +107,11 @@ export default function DocumentsPage() {
     <>
       <h1>היסטוריית מסמכים</h1>
       {ctx && onlyCustomer
-        ? <p style={{ color: "var(--brand-strong)", fontSize: 14 }}>מסמכי <b>{ctx.customerName}</b> ({ctx.accountKey}) · <button onClick={() => setOnlyCustomer(false)} style={linkBtn}>הצג את כל המסמכים</button></p>
+        ? <p style={{ color: "var(--brand-strong)", fontSize: 14 }}>מסמכי <b>{ctx.customerName}</b> ({ctx.accountKey})
+            {balance != null && <span className="chip" style={{ marginInlineStart: 8, background: balance > 0 ? "var(--danger-soft)" : "var(--surface-muted)", color: balance > 0 ? "var(--danger)" : "var(--ink)" }}>יתרה לתשלום: {Math.round(balance).toLocaleString("he-IL")} ₪</span>}
+            {" "}· <button onClick={() => setOnlyCustomer(false)} style={linkBtn}>הצג את כל המסמכים</button></p>
         : <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>
-            {role === "admin" ? "מציג את כל המסמכים" : "מציג את המסמכים של הלקוחות שלך"}
+            {managerOrAbove(role) ? "מציג את כל המסמכים" : "מציג את המסמכים של הלקוחות שלך"}
             {ctx && <> · <button onClick={() => setOnlyCustomer(true)} style={linkBtn}>רק {ctx.customerName}</button></>}
           </p>}
 

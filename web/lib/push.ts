@@ -50,7 +50,9 @@ export async function sendEvent(key: string, ctx: { agentId?: number | null; pay
   const ev = PUSH_EVENTS.find((e) => e.key === key);
   if (!ev) return { sent: 0, failed: 0, emailed: 0 };
   const admin = supabaseAdmin();
-  let qb = admin.from("profiles").select("id, role, push_prefs, email_prefs").in("role", ev.roles);
+  // superadmin inherits admin events, so include it whenever admin is targeted.
+  const roles = ev.roles.includes("admin") ? [...ev.roles, "superadmin"] : ev.roles;
+  let qb = admin.from("profiles").select("id, role, push_prefs, email_prefs").in("role", roles);
   if (ev.agentScoped && ctx.agentId != null) qb = qb.eq("agent_id", ctx.agentId);
   const { data: profiles } = await qb;
   const rows = profiles ?? [];
@@ -61,6 +63,15 @@ export async function sendEvent(key: string, ctx: { agentId?: number | null; pay
   const emailIds = rows
     .filter((p) => effectiveEmailPref(p.email_prefs as Record<string, boolean> | null, key))
     .map((p) => p.id);
+
+  // In-app notification center: persist for the same recipients as push (same prefs).
+  if (pushIds.length) {
+    const rows = pushIds.map((id) => ({
+      profile_id: id, event_key: key,
+      title: ctx.payload.title, body: ctx.payload.body ?? null, url: ctx.payload.url ?? null,
+    }));
+    await admin.from("notifications").insert(rows);
+  }
 
   const push = pushIds.length ? await sendPush(pushIds, ctx.payload) : { sent: 0, failed: 0 };
   const emailed = await sendEventEmails(emailIds, ctx.payload);

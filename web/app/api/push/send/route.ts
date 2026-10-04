@@ -2,13 +2,14 @@ import { NextRequest } from "next/server";
 import { getProfile } from "../../../../lib/auth";
 import { supabaseAdmin } from "../../../../lib/supabase/admin";
 import { sendPush } from "../../../../lib/push";
+import { canManageUsers } from "../../../../lib/roles";
 
 export const dynamic = "force-dynamic";
 
-// Admin: send a push to all / a role / a specific user.
+// Superadmin: send a push to all / a role / a specific user.
 export async function POST(req: NextRequest) {
   const me = await getProfile();
-  if (!me || me.role !== "admin") return Response.json({ error: "forbidden" }, { status: 403 });
+  if (!me || !canManageUsers(me.role)) return Response.json({ error: "forbidden" }, { status: 403 });
 
   const { title, body, url, target } = await req.json().catch(() => ({}));
   if (!title) return Response.json({ error: "חסרה כותרת" }, { status: 400 });

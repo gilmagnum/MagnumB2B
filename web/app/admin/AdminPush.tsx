@@ -47,6 +47,7 @@ export default function AdminPush({ users }: { users: ManagedUser[] }) {
           <option value="agent">סוכנים</option>
           <option value="picker">מלקטים</option>
           <option value="admin">מנהלים</option>
+          <option value="superadmin">אדמינים</option>
         </select>
       )}
       {targetType === "user" && (

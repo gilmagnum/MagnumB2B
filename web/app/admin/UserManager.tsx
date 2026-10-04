@@ -1,9 +1,10 @@
 "use client";
 import { Fragment, useState } from "react";
 import { supabaseBrowser } from "../../lib/supabase/browser";
-import { setActiveAction, resetPasswordAction, changeRoleAction } from "./actions";
+import { setActiveAction, resetPasswordAction, changeRoleAction, updateUserAction, deleteUserAction } from "./actions";
 import { saveUserPrefs, saveUserEmailPrefs } from "../notif-actions";
 import { eventsForRole, effectivePref, effectiveEmailPref, type Role } from "../../lib/pushEvents";
+import { ASSIGNABLE_ROLES, roleLabel } from "../../lib/roles";
 
 export type ManagedUser = {
   id: string; fullName: string | null; role: string; agentId: number | null;
@@ -23,6 +24,33 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
   const [log, setLog] = useState<LogRow[]>([]);
   const [logLoading, setLogLoading] = useState(false);
   const [openPrefs, setOpenPrefs] = useState<string | null>(null);
+  const [openEdit, setOpenEdit] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+
+  const startEdit = (u: ManagedUser) => {
+    if (openEdit === u.id) { setOpenEdit(null); return; }
+    setOpenEdit(u.id); setEditName(u.fullName ?? ""); setEditEmail(u.email ?? "");
+  };
+  const saveEdit = async (u: ManagedUser) => {
+    setBusy(u.id);
+    const fd = new FormData(); fd.set("id", u.id); fd.set("full_name", editName); fd.set("email", editEmail);
+    const res = await updateUserAction({}, fd);
+    setBusy(null);
+    if (res.ok) {
+      setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, fullName: editName.trim() || null, email: editEmail.trim() || x.email } : x)));
+      setOpenEdit(null); flash(u.id, res.ok, true);
+    } else flash(u.id, res.error ?? "שגיאה", false);
+  };
+  const deleteUser = async (u: ManagedUser) => {
+    if (!window.confirm(`למחוק לצמיתות את ${u.fullName || u.email}? פעולה זו אינה הפיכה.`)) return;
+    setBusy(u.id);
+    const fd = new FormData(); fd.set("id", u.id);
+    const res = await deleteUserAction({}, fd);
+    setBusy(null);
+    if (res.ok) setUsers((us) => us.filter((x) => x.id !== u.id));
+    else flash(u.id, res.error ?? "שגיאה", false);
+  };
 
   const togglePref = async (u: ManagedUser, key: string, on: boolean) => {
     const next = { ...(u.pushPrefs ?? {}), [key]: on };
@@ -97,25 +125,40 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
                 <td>
                   <select value={u.role} onChange={(e) => changeRole(u, e.target.value)} disabled={busy === u.id || u.id === meId}
                     className="select" style={{ padding: "4px 8px", minWidth: 90 }}>
-                    <option value="agent">סוכן</option>
-                    <option value="picker">מלקט</option>
-                    <option value="admin">מנהל</option>
+                    {ASSIGNABLE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                   </select>
                 </td>
                 <td>{u.agentId ?? "—"}</td>
                 <td style={{ whiteSpace: "nowrap" }}>{dt(u.lastSignIn)}</td>
                 <td>{u.active ? <span className="chip chip-ok">פעיל</span> : <span className="chip chip-danger">מושבת</span>}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
-                  <button onClick={() => toggleActive(u)} disabled={busy === u.id || u.id === meId} className="btn btn-sm" title={u.id === meId ? "לא ניתן על עצמך" : ""}>
+                  <button onClick={() => startEdit(u)} disabled={busy === u.id} className="btn btn-sm">{openEdit === u.id ? "סגור עריכה" : "ערוך"}</button>
+                  <button onClick={() => toggleActive(u)} disabled={busy === u.id || u.id === meId} className="btn btn-sm" style={{ marginInlineStart: 6 }} title={u.id === meId ? "לא ניתן על עצמך" : ""}>
                     {u.active ? "השבת" : "הפעל"}
                   </button>
                   <button onClick={() => resetPw(u)} disabled={busy === u.id} className="btn btn-sm" style={{ marginInlineStart: 6 }}>איפוס סיסמה</button>
                   <button onClick={() => showLog(u)} className="btn btn-sm" style={{ marginInlineStart: 6 }}>{openLog === u.id ? "סגור לוג" : "לוג כניסות"}</button>
                   <button onClick={() => setOpenPrefs(openPrefs === u.id ? null : u.id)} className="btn btn-sm" style={{ marginInlineStart: 6 }}>{openPrefs === u.id ? "סגור התראות" : "התראות"}</button>
+                  <button onClick={() => deleteUser(u)} disabled={busy === u.id || u.id === meId} className="btn btn-sm" style={{ marginInlineStart: 6, color: "var(--danger)" }} title={u.id === meId ? "לא ניתן על עצמך" : ""}>מחק</button>
                 </td>
               </tr>
               {msg?.id === u.id && (
                 <tr><td colSpan={7}><span className={msg.ok ? "chip chip-ok" : "chip chip-danger"}>{msg.text}</span></td></tr>
+              )}
+              {openEdit === u.id && (
+                <tr><td colSpan={7} style={{ background: "var(--surface-muted)" }}>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <label style={{ fontSize: 13 }}>שם מלא<br />
+                      <input value={editName} onChange={(e) => setEditName(e.target.value)} className="input" style={{ minWidth: 200 }} />
+                    </label>
+                    <label style={{ fontSize: 13 }}>אימייל<br />
+                      <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="input" style={{ minWidth: 240 }} />
+                    </label>
+                    <button onClick={() => saveEdit(u)} disabled={busy === u.id} className="btn btn-primary btn-sm">{busy === u.id ? "שומר…" : "שמירה"}</button>
+                    <button onClick={() => setOpenEdit(null)} disabled={busy === u.id} className="btn btn-sm">ביטול</button>
+                  </div>
+                  <p style={{ fontSize: 12, color: "var(--ink-muted)", margin: "6px 0 0" }}>שינוי אימייל מעדכן את כתובת ההתחברות של המשתמש.</p>
+                </td></tr>
               )}
               {openLog === u.id && (
                 <tr><td colSpan={7} style={{ background: "var(--surface-muted)" }}>
@@ -130,7 +173,7 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
               )}
               {openPrefs === u.id && (
                 <tr><td colSpan={7} style={{ background: "var(--surface-muted)" }}>
-                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>התראות עבור {u.fullName || u.email} ({u.role === "admin" ? "מנהל" : u.role === "agent" ? "סוכן" : u.role === "picker" ? "מלקט" : u.role}):</div>
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>התראות עבור {u.fullName || u.email} ({roleLabel(u.role)}):</div>
                   {eventsForRole(u.role as Role).length === 0 ? <span style={{ color: "var(--ink-muted)", fontSize: 13 }}>אין אירועים מוצעים לתפקיד זה.</span> : (
                     <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
                       <div>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getProfile } from "../../lib/auth";
+import { canSeeAdminPanel } from "../../lib/roles";
 import { supabaseAdmin } from "../../lib/supabase/admin";
 import CreateUserForm from "./CreateUserForm";
 import BannerForm from "./BannerForm";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage() {
   const me = await getProfile();
   if (!me) redirect("/login?next=/admin");
-  if (me.role !== "admin") redirect("/");
+  if (!canSeeAdminPanel(me.role)) redirect("/");
 
   const admin = supabaseAdmin();
   const { data: profiles } = await admin
@@ -47,7 +48,6 @@ export default async function AdminPage() {
     },
     { key: "push", label: "התראות", icon: "bell", content: <AdminPush users={users} /> },
     { key: "banner", label: "באנר", icon: "home", content: <BannerForm banner={(bannerRow?.value as Record<string, string>) ?? {}} /> },
-    { key: "rulers", label: "סרגלי מידות", icon: "ruler", content: <a href="/admin/rulers" className="btn btn-primary">פתח ניהול סרגלי מידות ←</a> },
   ];
 
   return (

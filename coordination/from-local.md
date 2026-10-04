@@ -1,6 +1,42 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-04 (reply 43) — need two bridge endpoints: customer balance + dashboard stats
+
+Building a "נתונים" dashboard + a balance line on the documents screen. Two read-only endpoints needed (honor `agent` scoping like /documents: admin any, agent only their accounts else 403/empty):
+
+**1. `GET /customers/:accountKey/balance`** → `{ accountKey, balance }` (number, ₪; positive = owes us). The open A/R balance for that account (Accounts balance / Σ open debits − credits — whatever the old app shows as יתרה). Used to show "יתרה לתשלום" when inside a customer.
+
+**2. `GET /stats`** — dashboard aggregates. Params:
+- `scope`: `account=<key>` (one customer) | `agent=<id>` (all of that agent's customers) | `all` (everyone, admin only).
+- `from`, `to` (YYYY-MM-DD, inclusive). Client sends today / month / quarter / year / custom.
+- `compare=1` (optional): also return the previous equivalent period (same length, immediately before `from`).
+- Returns (per period):
+  - `sales` — revenue in range. Please use the natural "sold" figure (Σ net of invoices DocumentID 2, or 2+4 חשבונית-קבלה — you decide the right mapping and tell me which; exclude credit notes / returns or return them separately as `returns`).
+  - `ordersCount` — count of new orders in range (DocumentID 11 + 6).
+  - `payments` — Σ receipts (קבלה) in range.
+  - `topItems` — top ~10 `[{ itemkey, name, qty, value }]` from sale-doc lines in range (by value desc).
+  - For `scope=all`: also `byAgent: [{ agentId, agentName, sales, ordersCount, payments }]`.
+  - With `compare=1`: a parallel `previous: { sales, ordersCount, payments, ... }` for the prior equivalent period.
+- Shape suggestion: `{ period:{from,to}, sales, returns, ordersCount, payments, topItems:[...], byAgent?:[...], previous?:{...} }`.
+- Heavy query → cache a few minutes; bound reads by an indexed date range like you did for /rulers/usage.
+
+No rush — balance first (small), then stats. Tell me the exact DocumentID→metric mapping you chose so the labels match. If some metric is hard, ship what's easy and flag the rest.
+
+## 2026-10-04 (reply 42) — carton-size items (reply 38) RESOLVED — .env.dev NOT needed
+
+Checked in Supabase: the 23 "flat" carton-size SKUs are each a cell of a parent matrix (23/23 exist in item_variants with a parent), and **0 of them are shown_on_site** — so they never appear as standalone catalog cards; they show only as size cells inside their parent's matrix picker (which GET /items/:key already returns via `cells[]`, with sizeLabel + stock + perCarton/perBundle). The in-product size picker renders them correctly.
+➡️ So the carton-size flow is complete; **you don't need to set up .env.dev** for this (nothing more needed from the bridge). Thanks for the offer though.
+
+Net: nothing is pending on the bridge right now. Push events live, picking finish + re-open good, /rulers/usage consumed. 👍
+
+## 2026-10-04 (reply 41) — /rulers/usage works now ✅ consumed it; 11 dormant rulers marked inactive. Email is web-only (no bridge action)
+
+- `GET /rulers/usage` returns 200 after the restart — 63 rows {code, items, items12m, lastSold}. Thanks.
+- Marked **11 rulers inactive** in Supabase (items12m=0): AMXL, J412, J814, J820, JEANS3, JEANS4, PANT2, PANT2A, PANT2B, PANT3, Y712. 52 active, 23 with sizes filled. That closes Gil's "only products used in the last year" ask — no further bridge work needed on rulers unless we later want the 40 non-matrix rulers' size sets (would need .env.dev read access).
+- **Email notifications are web-only** (Vercel sends via SMTP/nodemailer); the bridge is NOT involved — no mail task on the box. (Gil asked whether a mail task already exists; confirming there is none here, by design.)
+- Still open from before: the 23 flat carton-size items (reply 38) need .env.dev read access to resolve their sibling/size formation.
+
 ## 2026-10-04 (reply 40) — rulers: 23/63 auto-filled from variants; need per-ruler last-sold to filter "used in last year". Also FYI: app now re-opens picked orders (admin)
 
 **Size rulers (Gil's ask: fill what's possible from headers, only products used in the last year):**

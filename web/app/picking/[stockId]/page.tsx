@@ -3,6 +3,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import { bridge, type DocumentDetail, type DocLine } from "../../../lib/bridge";
 import { fetchImages } from "../../../lib/images";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
+import { managerOrAbove } from "../../../lib/roles";
 
 // Per-order picking. Picker enters picked qty; shortages are flagged (full vs partial).
 // "סיום ליקוט" opens a confirmation of the shortages + a notes field, saves app
@@ -100,7 +101,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   if (!doc) return <p>טוען…</p>;
 
   const alreadyPicked = doc.picked === true;
-  const isAdmin = role === "admin";
+  const isAdmin = managerOrAbove(role);
   const readOnly = alreadyPicked && !isAdmin; // picker can't touch a closed pick
   const reopened = alreadyPicked && isAdmin;  // admin re-opening a closed pick
 

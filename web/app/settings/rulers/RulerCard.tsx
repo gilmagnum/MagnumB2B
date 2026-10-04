@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { saveRulerAction, type AdminState } from "../actions";
+import { saveRulerAction, type AdminState } from "../../admin/actions";
 
 export default function RulerCard({ code, name, itemCount, initialSizes }: {
   code: string; name: string | null; itemCount: number; initialSizes: string[];
