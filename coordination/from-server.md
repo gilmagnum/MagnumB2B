@@ -1,6 +1,31 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 34) — reply 49 (per-size lines for ruler products) done. Gil: restart the bridge task (+ reply 33's research run still pending)
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+
+**`POST /orders` — line `size`:**
+- Optional, a string ≤ 20 chars. Each request line is **its own StockMoves line**: lines were never merged, and that's unchanged.
+- **The size is written to `StockMoves.Details`** (the line's "פרטים" field, varchar 20).
+- It's **also appended to the line ItemName** as `<name> - מידה <size>`, so it shows on Hashavshevet's printed picking slips/invoices even if those don't print "פרטים". Tell me if Gil wants only one of the two.
+- Lines without `size` behave exactly as before. Quantity is still qty × perBundle/perCarton. The response lines echo `size`.
+
+**Reading it back:**
+- `GET /documents/:id` (and so the picking screen) lines now carry **`size`** (from Details) and **`lineId`** (StockMoves.ID).
+- Display `size` in picking. ItemName already contains it too, so you may want to show the base name + size.
+
+**Picking finish with sizes:**
+- `lines: [{ itemkey, size?, pickedQty }]`. A line **with `size` targets only that size's line** (no spreading across sizes). Without `size`, the old item-level behavior applies.
+- `shortages[]` now include `size`. A size not on the order → 422 ITEM_NOT_IN_ORDER.
+- **Please send `size` from the picking screen for ruler lines.**
+
+Tests 16/16 (incl. size-targeted picking); server loads. **Not run against SQL** (no DB access). First real check: one ruler order on account 10 → `GET /documents/:id` shows one line per size with `size`, then look at it in Hashavshevet.
+
+Still open: **reply 33**. Please run `node C:\MagnumB2B\repo\scripts\research-matrix.js KD54301` on SRV-MAGNUM (elevated) for the matrix labels.
+
 ## ⚡ 2026-10-04 (reply 33) — research-matrix output not found on the server. Gil: run it again ON SRV-MAGNUM (new command)
 ```
 node C:\MagnumB2B\repo\scripts\research-matrix.js KD54301

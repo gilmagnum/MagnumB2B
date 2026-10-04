@@ -24,6 +24,8 @@ export class OrderError extends Error {
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 const trim = (v) => (typeof v === 'string' ? v.trim() : v);
+const SIZE_MAX = 20; // StockMoves.Details varchar(20)
+const ITEM_NAME_MAX = 100; // StockMoves.ItemName varchar(100)
 const UNIT_FIELD = { carton: 'perCarton', bundle: 'perPack' }; // ExtraSums SuFID 5 / 6
 
 let columnsCache;
@@ -101,6 +103,9 @@ function validate(order) {
     if (!line.itemkey) throw new OrderError('BAD_LINE', 'חסר מק"ט בשורה');
     if (!Number.isInteger(line.qty) || line.qty < 1) throw new OrderError('BAD_LINE', `כמות לא תקינה לפריט ${line.itemkey}`);
     if (!(line.unit in UNIT_FIELD)) throw new OrderError('BAD_LINE', `יחידת הזמנה לא תקינה לפריט ${line.itemkey} (קרטון/חבילה)`);
+    if (line.size != null && (typeof line.size !== 'string' || !line.size.trim() || line.size.trim().length > SIZE_MAX)) {
+      throw new OrderError('BAD_LINE', `מידה לא תקינה לפריט ${line.itemkey} (עד ${SIZE_MAX} תווים)`);
+    }
     if (line.price != null && !(line.price >= 0)) throw new OrderError('BAD_LINE', `מחיר לא תקין לפריט ${line.itemkey}`);
     const discount = line.discountPct ?? 0;
     if (!(discount >= 0 && discount <= 100)) throw new OrderError('BAD_LINE', `הנחה לא תקינה לפריט ${line.itemkey}`);
@@ -194,7 +199,10 @@ export async function writeOrder(order, { commit = false } = {}) {
     const price = line.price ?? resolved?.price;
     if (!(price >= 0)) throw new OrderError('NO_PRICE', `לא נמצא מחיר לפריט ${itemKey}`);
     const discountPrc = line.price != null ? (line.discountPct ?? 0) : (resolved.discountPrc ?? 0);
-    return { itemKey, quantity, price, discountPrc, priceSource: line.price != null ? 'web' : resolved.source };
+    return {
+      itemKey, quantity, price, discountPrc, size: line.size?.trim() || undefined,
+      priceSource: line.price != null ? 'web' : resolved.source,
+    };
   });
 
   // Picking orders only for what is in stock, unless the item ignores stock.
@@ -235,7 +243,10 @@ export async function writeOrder(order, { commit = false } = {}) {
     const total = round2(exact);
     const optional = {
       ...LINE_DEFAULTS,
-      ItemName: trim(row.ItemName) || line.fallbackName,
+      // Ruler products: one line per size; the size goes to Details ('פרטים') and is appended to the
+      // line name so it shows on Hashavshevet's printed documents too.
+      ItemName: line.size ? `${trim(row.ItemName) || ''} - מידה ${line.size}`.slice(0, ITEM_NAME_MAX) : trim(row.ItemName) || line.fallbackName,
+      Details: line.size,
       Unit: line.shipping ? DEFAULT_UNIT : trim(row.SalesUnit) || DEFAULT_UNIT,
       Agent: account.Agent,
       LineNum: 0,
@@ -336,7 +347,9 @@ export async function writeOrder(order, { commit = false } = {}) {
       documentId,
       accountKey,
       totals,
-      lines: allLines.map(({ itemKey, quantity, price, discountPrc, priceSource }) => ({ itemKey, quantity, price, discountPrc, priceSource })),
+      lines: allLines.map(({ itemKey, quantity, price, discountPrc, size, priceSource }) => ({
+        itemKey, quantity, price, discountPrc, ...(size && { size }), priceSource,
+      })),
       ...(written && { written }),
     };
   } catch (err) {

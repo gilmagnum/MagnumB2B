@@ -406,7 +406,7 @@ export async function getDocument(stockId) {
   if (!o) return null;
   const [lines, produced] = await Promise.all([
     query(
-      `SELECT m.ItemKey, m.ItemName, m.Quantity, m.Unit, m.Price, m.DiscountPrc, m.TFtal, m.Tree, i.Quantity AS onHand
+      `SELECT m.ID, m.Details, m.ItemKey, m.ItemName, m.Quantity, m.Unit, m.Price, m.DiscountPrc, m.TFtal, m.Tree, i.Quantity AS onHand
        FROM StockMoves m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
        WHERE m.StockID = @id ORDER BY m.LineNoForSorting, m.ID`,
       { id: o.ID },
@@ -432,6 +432,8 @@ export async function getDocument(stockId) {
       .filter((l) => l.Tree !== 2) // matrix cells under a tree parent would double-count
       .map((l) => ({
         itemkey: trim(l.ItemKey),
+        lineId: l.ID,
+        size: trim(l.Details) || undefined, // ruler size written by POST /orders (StockMoves.Details)
         name: trim(l.ItemName) ?? '',
         qty: l.Quantity,
         unit: trim(l.Unit) || undefined,

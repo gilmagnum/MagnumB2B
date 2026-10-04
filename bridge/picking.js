@@ -33,12 +33,14 @@ function validate(body) {
   const picker = trim(body?.picker);
   if (!picker) throw new PickingError(400, 'BAD_REQUEST', 'חסר שם מלקט');
   if (!Array.isArray(body.lines)) throw new PickingError(400, 'BAD_REQUEST', 'חסרות שורות');
+  // Key = itemkey, or itemkey + size for ruler products (one order line per size, size in Details).
   const picked = new Map();
   for (const l of body.lines) {
     const itemKey = trim(l?.itemkey);
     const qty = Number(l?.pickedQty);
     if (!itemKey || !Number.isFinite(qty)) throw new PickingError(400, 'BAD_LINE', 'שורה לא תקינה');
-    picked.set(itemKey, (picked.get(itemKey) ?? 0) + Math.max(qty, 0));
+    const k = pickKey(itemKey, trim(l?.size));
+    picked.set(k, (picked.get(k) ?? 0) + Math.max(qty, 0));
   }
   return { picker, notes: trim(body.notes) || '', picked };
 }
@@ -50,6 +52,8 @@ export function mergePickNotes(existing, notes) {
   return [...others, `ליקוט: ${notes}`].join(' | ').slice(0, NOTES_MAX);
 }
 
+export const pickKey = (itemKey, size) => (size ? `${itemKey}|${size}` : itemKey);
+
 // Pure plan: which lines to reduce/delete. pickedQty per item is spread over that item's lines in
 // line order; items not in `picked` and shipping lines are left untouched.
 export function planShortages(lines, picked, shipping = new Set()) {
@@ -58,14 +62,18 @@ export function planShortages(lines, picked, shipping = new Set()) {
   const shortages = [];
   for (const line of lines) {
     const itemKey = trim(line.ItemKey);
-    if (shipping.has(itemKey) || !remaining.has(itemKey)) continue;
+    if (shipping.has(itemKey)) continue;
+    // A size-specific entry targets exactly that size's line; otherwise the item-level entry applies.
+    const size = trim(line.Details) || undefined;
+    const k = size && remaining.has(pickKey(itemKey, size)) ? pickKey(itemKey, size) : itemKey;
+    if (!remaining.has(k)) continue;
     const ordered = line.Quantity;
-    const take = Math.min(remaining.get(itemKey), ordered);
-    remaining.set(itemKey, remaining.get(itemKey) - take);
+    const take = Math.min(remaining.get(k), ordered);
+    remaining.set(k, remaining.get(k) - take);
     if (take >= ordered) continue;
     const action = take <= 0 ? 'deleted' : 'reduced';
     changes.push({ lineId: line.ID, action, qty: Math.max(take, 0), price: line.Price, discountPrc: line.DiscountPrc ?? 0 });
-    shortages.push({ itemkey: itemKey, ordered, picked: Math.max(take, 0), action });
+    shortages.push({ itemkey: itemKey, ...(size && { size }), ordered, picked: Math.max(take, 0), action });
   }
   return { changes, shortages };
 }
@@ -99,13 +107,13 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
       throw new PickingError(403, 'WRITE_DISABLED', 'כתיבת ליקוט ללקוחות אמיתיים אינה מופעלת עדיין (ORDER_WRITE_ENABLED)');
     }
     const lines = (await req().query(
-      `SELECT ID, ItemKey, Quantity, Price, DiscountPrc, Tree
+      `SELECT ID, ItemKey, Details, Quantity, Price, DiscountPrc, Tree
        FROM StockMoves WITH (UPDLOCK) WHERE StockID = @id ORDER BY LineNoForSorting, ID`,
     )).recordset;
     if (lines.some((l) => l.Tree !== 0)) {
       throw new PickingError(409, 'TREE_UNSUPPORTED', 'הזמנה עם פריטי עץ/מטריצה מקוננים - יש לטפל בחשבשבת');
     }
-    const orderKeys = new Set(lines.map((l) => trim(l.ItemKey)));
+    const orderKeys = new Set(lines.flatMap((l) => [trim(l.ItemKey), pickKey(trim(l.ItemKey), trim(l.Details))]));
     const unknown = [...picked.keys()].filter((k) => !orderKeys.has(k));
     if (unknown.length) throw new PickingError(422, 'ITEM_NOT_IN_ORDER', `פריטים שאינם בהזמנה: ${unknown.join(', ')}`);
 

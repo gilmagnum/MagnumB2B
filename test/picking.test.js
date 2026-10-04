@@ -47,3 +47,15 @@ test('notes: appended to other text, a re-run replaces the previous pick note', 
   assert.equal(mergePickNotes('הערת משרד | ליקוט: חסר X', 'הכל סופק'), 'הערת משרד | ליקוט: הכל סופק');
   assert.equal(mergePickNotes('ליקוט: ישן', 'חדש'), 'ליקוט: חדש');
 });
+
+test('ruler sizes: a size entry targets only that size line', async () => {
+  const { planShortages: plan, pickKey } = await import('../bridge/picking.js');
+  const sized = (ID, size, Quantity) => ({ ID, ItemKey: 'BR19625', Details: size, Quantity, Price: 11, DiscountPrc: 0, Tree: 0 });
+  const lines = [sized(1, '2-4', 25), sized(2, '6-8', 10)];
+  const r = plan(lines, new Map([[pickKey('BR19625', '2-4'), 25], [pickKey('BR19625', '6-8'), 4]]), ship);
+  assert.deepEqual(r.changes.map((c) => [c.lineId, c.action, c.qty]), [[2, 'reduced', 4]]);
+  assert.deepEqual(r.shortages, [{ itemkey: 'BR19625', size: '6-8', ordered: 10, picked: 4, action: 'reduced' }]);
+  // item-level entry (no size) still spreads over the lines in order
+  const all = plan(lines, new Map([['BR19625', 30]]), ship);
+  assert.deepEqual(all.changes.map((c) => [c.lineId, c.action, c.qty]), [[2, 'reduced', 5]]);
+});
