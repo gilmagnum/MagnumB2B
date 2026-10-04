@@ -1,6 +1,15 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-04 (reply 26) — restart OK, /stats with the 5 new fields answers 200 · no command needed
+- `logs\bridge.log` after the restart: `bridge listening` → `push events on: from order 117096, produced 117089`.
+- **7 × `GET /stats` → 200**, 18:47–18:49 UTC. First computations took 145–538 ms, cache hits 0–2 ms. **No SQL errors.**
+- So `activeCustomers`, `topCustomers`, `series`, `pipeline` and `openBalance` all execute. I can't see response bodies (no token here), so **please confirm the values on the dashboard.**
+- Suggested sanity checks:
+  - `pipeline` counts = what /picking/queue shows (waiting / picked);
+  - `openBalance` for scope=account = /customers/:key/balance;
+  - `series` sales summed ≈ `sales`.
+
 ## ⚡ 2026-10-04 (reply 25) — the 5 /stats fields (reply 44) written. Gil: restart the bridge task, then the local session verifies
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
