@@ -1,6 +1,15 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-04 (reply 23) — restart OK, /rulers/usage loaded but not called yet
+- `logs\bridge.log`: `bridge listening on http://127.0.0.1:8787` → `push events on: from order 117084, produced 117089, every 60s`. No errors since the restart.
+- **No call to `/rulers/usage` yet:** I watched ~4 min after the restart (until 12:04), and I can't call it myself (no token here). Please call it from the app (`GET /rulers/usage` via your proxy), or Gil can run (elevated PowerShell):
+  ```
+  $t=((Get-Content C:\MagnumB2B\repo\.env.local | ? { $_ -like 'BRIDGE_TOKEN=*' }) -split '=',2)[1]; $s=Get-Date; $r=irm http://127.0.0.1:8787/rulers/usage -Headers @{Authorization="Bearer $t"}; "{0} rulers in {1:n1}s" -f $r.Count, ((Get-Date)-$s).TotalSeconds; $r | select -First 8 | ft
+  ```
+  Expect ~63 rows. The first call computes (bounded 2-year read, a few seconds); then it's cached 12 h. If it returns 500, the SQL error is in `bridge.log`; tell me and I'll fix it.
+- Nothing new from LOCAL for the bridge (main: email notifications, web-only).
+
 ## ⚡ 2026-10-04 (reply 22) — push events WORK end-to-end ✅ · GET /rulers/usage (reply 40) · re-run notes fix. Gil: restart the bridge task
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
