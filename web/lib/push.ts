@@ -1,7 +1,8 @@
 import "server-only";
 import webpush from "web-push";
 import { supabaseAdmin } from "./supabase/admin";
-import { PUSH_EVENTS, effectivePref, type Role } from "./pushEvents";
+import { PUSH_EVENTS, effectivePref, effectiveEmailPref, type Role } from "./pushEvents";
+import { isEmailConfigured, sendMail } from "./email";
 
 let configured = false;
 function configure() {
@@ -43,18 +44,39 @@ export async function sendPush(profileIds: string[] | null, payload: Payload) {
   return { sent, failed };
 }
 
-// Fire an event: push to users whose role+prefs opt in (agent-scoped events go only
-// to the matching customer's agent).
+// Fire an event: push to users whose role+prefs opt in, AND email those who opted into
+// email for it (agent-scoped events go only to the matching customer's agent).
 export async function sendEvent(key: string, ctx: { agentId?: number | null; payload: Payload }) {
   const ev = PUSH_EVENTS.find((e) => e.key === key);
-  if (!ev) return { sent: 0, failed: 0 };
+  if (!ev) return { sent: 0, failed: 0, emailed: 0 };
   const admin = supabaseAdmin();
-  let qb = admin.from("profiles").select("id, role, agent_id, push_prefs").in("role", ev.roles);
+  let qb = admin.from("profiles").select("id, role, push_prefs, email_prefs").in("role", ev.roles);
   if (ev.agentScoped && ctx.agentId != null) qb = qb.eq("agent_id", ctx.agentId);
   const { data: profiles } = await qb;
-  const ids = (profiles ?? [])
+  const rows = profiles ?? [];
+
+  const pushIds = rows
     .filter((p) => effectivePref(p.role as Role, p.push_prefs as Record<string, boolean> | null, key))
     .map((p) => p.id);
-  if (!ids.length) return { sent: 0, failed: 0 };
-  return sendPush(ids, ctx.payload);
+  const emailIds = rows
+    .filter((p) => effectiveEmailPref(p.email_prefs as Record<string, boolean> | null, key))
+    .map((p) => p.id);
+
+  const push = pushIds.length ? await sendPush(pushIds, ctx.payload) : { sent: 0, failed: 0 };
+  const emailed = await sendEventEmails(emailIds, ctx.payload);
+  return { ...push, emailed };
+}
+
+// Resolve recipient emails (from auth) and send — best-effort, never throws.
+async function sendEventEmails(profileIds: string[], payload: Payload): Promise<number> {
+  if (!profileIds.length || !isEmailConfigured()) return 0;
+  const admin = supabaseAdmin();
+  const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
+  const emailById = new Map((data?.users ?? []).map((u) => [u.id, u.email]));
+  const targets = profileIds.map((id) => emailById.get(id)).filter((e): e is string => !!e);
+  if (!targets.length) return 0;
+  const results = await Promise.all(
+    targets.map((to) => sendMail({ to, subject: payload.title, title: payload.title, body: payload.body, url: payload.url })),
+  );
+  return results.filter((r) => r.ok).length;
 }

@@ -16,9 +16,14 @@ export const PUSH_EVENTS: PushEvent[] = [
 
 export const eventsForRole = (role: Role) => PUSH_EVENTS.filter((e) => e.roles.includes(role));
 
-// Whether a user effectively gets an event: explicit pref wins; else default-on if suggested for their role.
+// Whether a user effectively gets an event by PUSH: explicit pref wins; else default-on if suggested for their role.
 export function effectivePref(role: Role, prefs: Record<string, boolean> | null | undefined, key: string): boolean {
   if (prefs && key in prefs) return !!prefs[key];
   const ev = PUSH_EVENTS.find((e) => e.key === key);
   return ev ? ev.roles.includes(role) : false;
+}
+
+// Email is opt-in (default OFF), to avoid inboxing people by surprise: only an explicit true counts.
+export function effectiveEmailPref(prefs: Record<string, boolean> | null | undefined, key: string): boolean {
+  return !!(prefs && prefs[key] === true);
 }
