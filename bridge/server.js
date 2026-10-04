@@ -230,7 +230,7 @@ const routes = [
     }
     try {
       return await getStats({
-        scope, account, agent, from: query.get('from'), to: query.get('to'), compare: query.get('compare') === '1',
+        scope, account, agent, from: query.get('from'), to: query.get('to'), compare: query.get('compare') === '1', central: query.get('central') === '1',
       });
     } catch (err) {
       if (err instanceof StatsError) throw new HttpError(err.status, err.code, err.message);

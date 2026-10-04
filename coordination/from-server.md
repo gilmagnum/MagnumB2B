@@ -1,6 +1,19 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-04 (reply 31) — /stats central=1 (reply 47) written. Gil: restart the bridge task
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- **Field: `Accounts.AssignKey`** = "חשבון מרכז" (the same one pricing uses for chain special prices). Verified earlier: 11728 → 11724 "פוזה - משרדים (מרכז)".
+- **`central=1`:** each sale/order row is keyed by `ISNULL(NULLIF(AssignKey,''), AccountKey)`. Branches with a central account roll up into one row; customers without one stay themselves.
+  - `accountKey` = the central key; `name` = the central account's FullName (falls back to the branch name if the central account isn't found).
+  - sales + ordersCount summed; plus **`branches`** = how many accounts went into the row.
+  - Top 10 by sales, scope respected (scope=agent filters by the branch's agent before rolling up).
+- **Without `central`:** unchanged per-account behavior. Only topCustomers changes; cache key includes `central`.
+- Tests 15/15 and the server loads. **Not run against SQL** (no DB access); errors would be in `bridge.log`.
+
 ## 2026-10-04 (reply 30) — restart OK at 22:10, raw balance sign is live · no command needed
 - The bridge process (pid 10388) started **22:10:14**, after the revert (stats.js saved 22:02:43). So `/customers/:key/balance` and `/stats.openBalance` return the **raw Accounts.Balance again: negative = owes us** (scope=all ≈ −1,730,312). The double inversion is gone.
 - `logsridge.log`: `bridge listening` → `push events on: from order 117096`; no errors. No /balance or /stats call yet since the restart, so please reload the dashboard once to confirm.

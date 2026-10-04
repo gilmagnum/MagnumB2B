@@ -197,23 +197,37 @@ async function agentNames(ids) {
 }
 
 // 2. top customers by sales in range (scope=account -> that one customer).
-async function topCustomers(range, scope) {
+// central=true: branches roll up into their central account (Accounts.AssignKey, "חשבון מרכז");
+// a customer without one stays itself. Grouped through a derived table (no expression in GROUP BY).
+async function topCustomers(range, scope, { central = false } = {}) {
   const params = { from: { type: sql.Date, value: range.from }, to: { type: sql.Date, value: range.to } };
   const where = scopeFilter(scope, params);
+  const groupKey = central ? "ISNULL(NULLIF(LTRIM(RTRIM(a.AssignKey)), ''), s.AccountKey)" : 's.AccountKey';
   const rows = await query(
-    `SELECT TOP 10 s.AccountKey, MAX(ISNULL(a.FullName, s.AccountName)) AS name,
-            SUM(CASE WHEN s.DocumentID IN (${inList(STAT_DOCS.sales)}) THEN s.TFtal / (1 + ISNULL(s.VatPrc, 0) / 100) ELSE 0 END) AS sales,
-            SUM(CASE WHEN s.DocumentID IN (${inList(STAT_DOCS.orders)}) THEN 1 ELSE 0 END) AS ordersCount
-     FROM Stock s LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
-     WHERE s.ValueDate >= @from AND s.ValueDate < DATEADD(day, 1, @to)
-       AND s.DocumentID IN (${inList([...STAT_DOCS.sales, ...STAT_DOCS.orders])}) AND ISNULL(s.DocCancel, 0) = 0${where}
-     GROUP BY s.AccountKey
+    `SELECT TOP 10 x.k AS AccountKey, MAX(ISNULL(c.FullName, x.accName)) AS name,
+            SUM(x.sales) AS sales, SUM(x.orders) AS ordersCount, COUNT(DISTINCT x.acct) AS branches
+     FROM (
+       SELECT ${groupKey} AS k, s.AccountKey AS acct, ISNULL(a.FullName, s.AccountName) AS accName,
+              CASE WHEN s.DocumentID IN (${inList(STAT_DOCS.sales)}) THEN s.TFtal / (1 + ISNULL(s.VatPrc, 0) / 100) ELSE 0 END AS sales,
+              CASE WHEN s.DocumentID IN (${inList(STAT_DOCS.orders)}) THEN 1 ELSE 0 END AS orders
+       FROM Stock s LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
+       WHERE s.ValueDate >= @from AND s.ValueDate < DATEADD(day, 1, @to)
+         AND s.DocumentID IN (${inList([...STAT_DOCS.sales, ...STAT_DOCS.orders])}) AND ISNULL(s.DocCancel, 0) = 0${where}
+     ) x
+     LEFT JOIN Accounts c ON c.AccountKey = x.k
+     GROUP BY x.k
      ORDER BY 3 DESC`,
     params,
   );
   return rows
     .filter((r) => r.sales > 0)
-    .map((r) => ({ accountKey: trim(r.AccountKey), name: trim(r.name), sales: round2(r.sales), ordersCount: r.ordersCount }));
+    .map((r) => ({
+      accountKey: trim(r.AccountKey),
+      name: trim(r.name),
+      sales: round2(r.sales),
+      ordersCount: r.ordersCount,
+      ...(central && { branches: r.branches }),
+    }));
 }
 
 // 3. sales/payments time series, at most ~90 points: day (<= 90 days), week (<= 630 days), else month.
@@ -295,7 +309,7 @@ async function openBalance(scope) {
 const cache = new Map();
 
 /** scope: { scope: 'account'|'agent'|'all', account?, agent? }, from/to 'YYYY-MM-DD', compare boolean. */
-export async function getStats({ scope = 'all', account, agent, from, to, compare = false }) {
+export async function getStats({ scope = 'all', account, agent, from, to, compare = false, central = false }) {
   if (!['account', 'agent', 'all'].includes(scope)) throw new StatsError(400, 'BAD_REQUEST', 'scope לא תקין');
   if (scope === 'account' && !account) throw new StatsError(400, 'BAD_REQUEST', 'חסר account');
   if (scope === 'agent' && !(Number(agent) > 0)) throw new StatsError(400, 'BAD_REQUEST', 'חסר agent');
@@ -304,7 +318,7 @@ export async function getStats({ scope = 'all', account, agent, from, to, compar
   if ((range.to - range.from) / 86_400_000 > MAX_DAYS) throw new StatsError(400, 'BAD_REQUEST', `טווח עד ${MAX_DAYS} יום`);
 
   const s = { scope, account: trim(account), agent: Number(agent) || undefined };
-  const cacheKey = JSON.stringify([s, from, to, Boolean(compare)]);
+  const cacheKey = JSON.stringify([s, from, to, Boolean(compare), Boolean(central)]);
   const hit = cache.get(cacheKey);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
 
@@ -314,7 +328,7 @@ export async function getStats({ scope = 'all', account, agent, from, to, compar
     topItems(range, s),
     scope === 'all' ? totals(range, s, { byAgent: true }) : null,
     prev ? totals(prev, s) : null,
-    topCustomers(range, s),
+    topCustomers(range, s, { central }),
     series(range, s),
     pipeline(s),
     openBalance(s),
