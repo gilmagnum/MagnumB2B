@@ -117,8 +117,8 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
                 </div>
               ) : it.ruler_code ? (
                 <div style={{ marginTop: 6 }}>
-                  <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={p} />
-                  <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-sm" style={{ display: "block", marginTop: 6, textAlign: "center" }}>בחירת מידות ←</a>
+                  <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={p} only="carton" />
+                  <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-sm" style={{ display: "block", marginTop: 6, textAlign: "center" }}>בחירת מידות (חבילה לפי מידה) ←</a>
                 </div>
               ) : (
                 <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={p} />
