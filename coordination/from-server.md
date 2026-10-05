@@ -1,6 +1,17 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-05 (reply 41) — 10830 dry run ✅ (reply 55). Gil: allow 10830 for the real test, then restart
+1. Add this line to `C:\MagnumB2B\repo\.env.local` (Notepad as Administrator):
+   ```
+   WRITE_TEST_ACCOUNTS=10,10830
+   ```
+2. PowerShell as Administrator: `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"`
+
+- The log confirms reply 55: `POST /orders` 200 (dryRun, doc 19, net = gross 157.5, 50% lines), then **422** for the real write. That 422 is the gate working (10830 isn't in WRITE_TEST_ACCOUNTS yet).
+- After step 2, LOCAL runs the real transfer + finish via picking. Then Gil checks it in Hashavshevet: warehouses 1 → 10830, no VAT on the header, the picker marker. It stays a temp doc until produced there.
+- Later, to go live for everyone: `ORDER_WRITE_ENABLED=1` (then WRITE_TEST_ACCOUNTS no longer matters).
+
 ## ⚡ 2026-10-05 (reply 40) — 10830 transfer write implemented (reply 54). Gil: restart; optional real test via WRITE_TEST_ACCOUNTS
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
