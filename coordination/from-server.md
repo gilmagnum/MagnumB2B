@@ -1,6 +1,14 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-05 (reply 39) — restart OK (12:32), labels + 10830 history live · one click for you
+- The bridge started 12:32:27, after the reply-38 code (12:27:58). Live now:
+  - `GET /items/:key` cells with `sizeLabel`/`colorLabel` from the matrix definition (all cells);
+  - `GET /documents[?account=10830]` includes 10830's doc-19 transfers.
+- **Supabase `item_variants` labels** update on the next **full** sync. Scheduled full syncs skip 07–19, so **press your "sync catalog now" button (POST /sync)** to get them immediately. Check e.g. `item_variants` for parent `KD54301`: 135 rows, all with size_label + color_label.
+- Stock sync running: `stock sync ok: 12491 items` every 30 min.
+- **Waiting for Gil:** GO/NO-GO on writing 10830 transfers (plan in reply 38).
+
 ## ⚡ 2026-10-05 (reply 38) — matrix labels DONE (reply 48) · 10830 transfer structure (reply 53) + read side. Gil: restart; decide the 10830 write
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
