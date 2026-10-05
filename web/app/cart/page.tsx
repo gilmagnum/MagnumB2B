@@ -123,7 +123,9 @@ export default function CartPage() {
                     onChange={(e) => setQty(l.itemkey, l.unit, Number(e.target.value), l.sizeLabel)}
                     style={{ width: 56 }} />
                 </td>
-                <td style={{ fontWeight: 600 }}>{unitsOf(l).toLocaleString("he-IL")}</td>
+                <td style={{ fontWeight: 600 }}>{unitsOf(l).toLocaleString("he-IL")}
+                  {l.stock != null && unitsOf(l) > l.stock && <div style={{ fontSize: 11, color: "var(--danger)", fontWeight: 400 }}>מלאי {l.stock} — חוסר</div>}
+                </td>
                 <td>{p != null ? `${p.toFixed(2)} ₪` : "—"}</td>
                 <td>{p != null ? `${(p * unitsOf(l)).toFixed(2)} ₪` : "—"}</td>
                 <td><button onClick={() => remove(l.itemkey, l.unit, l.sizeLabel)} style={{ color: "#b00", border: 0, background: "none", cursor: "pointer" }}>הסר</button></td>

@@ -10,8 +10,8 @@ export type Item = {
   brand?: string; categoryMain?: string; categorySub?: string; season?: string;
   rulerCode?: string; color?: string;
   perCarton?: number; perBundle?: number;
-  shownOnSite: boolean; ignoreStock: boolean; isMatrix: boolean;
-  imageUrl?: string; cells?: MatrixCell[];
+  shownOnSite: boolean; ignoreStock: boolean; isMatrix: boolean; isCartonSizeItem?: boolean;
+  stock?: number; imageUrl?: string; cells?: MatrixCell[];
 };
 export type MatrixCell = {
   itemkey: string; sizeLabel?: string; colorLabel?: string;

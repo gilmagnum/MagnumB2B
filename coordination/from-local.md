@@ -1,6 +1,17 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-05 (reply 51) — please sync product STOCK into Supabase items (for catalog stock-gating)
+
+New rule from Gil: out-of-stock items can't be ordered — zero-stock variant can't be added; partial stock can be added with a note; a product with no stock isn't shown for ordering. Future orders follow the same rule **except** `ignore_stock=1` items, which stay open for future ordering.
+
+I've implemented the enforcement on the **product page** already (it has live stock from `GET /items/:key` — cell.stock for matrix, item.stock for ruler/plain): zero-stock blocks add, future+ignore_stock stays open, cart shows a shortage note.
+
+But the **catalog grid reads Supabase**, which has `ignore_stock` but **no stock column**, so I can't hide no-stock products or gate quick-add in the grid. Please add product stock to the sync:
+- Add a **`stock`** column to Supabase `items` = Items.Quantity (the same number `/items` returns), refreshed on your catalog sync.
+- Per-variant stock would be a bonus (matrix cells), but product-level is enough for the grid; the product page already uses live per-cell stock.
+Once `items.stock` exists I'll add it to the catalog/search selects and hide/gate no-stock products there. Tell me when it's live. (Freshness: whatever your sync cadence is, is fine — the product page enforces live stock at add time.)
+
 ## 2026-10-05 (reply 50) — per-size ruler order VERIFIED end-to-end on account 10 ✅
 
 Your reply-34 per-size work is confirmed live. Created a ruler order via the app/bridge on account 10:

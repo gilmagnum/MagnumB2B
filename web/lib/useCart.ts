@@ -5,7 +5,7 @@ export type Unit = "carton" | "bundle";
 // qty = number of cartons/bundles; packSize = units per carton/bundle (so units = qty * packSize).
 // sizeLabel = for ruler products (one SKU, ordered per size); each size is its own line so the
 // picker picks it separately. Empty for plain/matrix items (matrix uses a distinct SKU per cell).
-export type CartLine = { itemkey: string; title: string; qty: number; unit: Unit; unitPrice?: number; packSize?: number; sizeLabel?: string };
+export type CartLine = { itemkey: string; title: string; qty: number; unit: Unit; unitPrice?: number; packSize?: number; sizeLabel?: string; stock?: number };
 
 const KEY = "magnumb2b_cart";
 const EVT = "magnumb2b-cart-change";
