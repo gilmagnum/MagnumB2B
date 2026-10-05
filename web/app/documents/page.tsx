@@ -28,6 +28,8 @@ export default function DocumentsPage() {
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const [tab, setTab] = useState<"hash" | "app">("hash");
+  const [datePreset, setDatePreset] = useState<DatePreset>("month");
+  const [dateCustom, setDateCustom] = useState({ from: isoDay(new Date(Date.now() - 30 * 864e5)), to: isoDay(new Date()) });
 
   // Inside a customer: show their open balance (best-effort; hidden if the bridge endpoint isn't up).
   useEffect(() => {
@@ -90,7 +92,7 @@ export default function DocumentsPage() {
     setLoading(true); setErr(""); setExpanded(new Set());
     const effectiveQ = (ctx && onlyCustomer) ? ctx.accountKey : (q.trim() || undefined);
     try {
-      setDocs(await bridge.documents(agentId, { status: status === "all" ? undefined : status, q: effectiveQ, limit: 100 }));
+      setDocs(await bridge.documents(agentId, { status: status === "all" ? undefined : status, q: effectiveQ, limit: 200 }));
     } catch {
       setErr("הגשר עדיין לא מחובר — רשימת המסמכים תיטען כשהגשר יעלה.");
       setDocs([]);
@@ -103,7 +105,10 @@ export default function DocumentsPage() {
 
   const colCount = (ctx && onlyCustomer) ? 8 : 9;
   // Inside a customer, the bridge q is a LIKE match — enforce the exact accountKey here.
-  const visible = (ctx && onlyCustomer) ? docs.filter((d) => String(d.accountKey) === String(ctx.accountKey)) : docs;
+  const byCustomer = (ctx && onlyCustomer) ? docs.filter((d) => String(d.accountKey) === String(ctx.accountKey)) : docs;
+  // Date range filter (client-side; default "this month").
+  const dr = dateRangeFor(datePreset, dateCustom);
+  const visible = dr ? byCustomer.filter((d) => d.date && d.date.slice(0, 10) >= dr.from && d.date.slice(0, 10) <= dr.to) : byCustomer;
 
   const tabBtn = (active: boolean) => ({
     background: active ? "#1e2a78" : "#fff", color: active ? "#fff" : "#1e2a78",
@@ -144,6 +149,22 @@ export default function DocumentsPage() {
           <option value="produced">הופק</option>
         </select>
         <button onClick={load} className="btn btn-primary">רענון</button>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, margin: "0 0 12px", flexWrap: "wrap", alignItems: "center" }}>
+        {([["today", "היום"], ["month", "החודש"], ["quarter", "הרבעון"], ["year", "השנה"], ["custom", "טווח"], ["all", "הכל"]] as [DatePreset, string][]).map(([p, label]) => (
+          <button key={p} onClick={() => setDatePreset(p)} className="btn btn-sm"
+            style={{ background: datePreset === p ? "var(--brand)" : "var(--surface)", color: datePreset === p ? "#fff" : "var(--brand)", border: "1px solid var(--brand)" }}>
+            {label}
+          </button>
+        ))}
+        {datePreset === "custom" && (
+          <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+            <input type="date" value={dateCustom.from} max={dateCustom.to} onChange={(e) => setDateCustom({ ...dateCustom, from: e.target.value })} className="input" style={{ width: 150 }} />
+            <span>—</span>
+            <input type="date" value={dateCustom.to} min={dateCustom.from} onChange={(e) => setDateCustom({ ...dateCustom, to: e.target.value })} className="input" style={{ width: 150 }} />
+          </span>
+        )}
       </div>
 
       {err && <p className="chip chip-warn">{err}</p>}
@@ -233,3 +254,16 @@ export default function DocumentsPage() {
 const linkBtn = {
   background: "none", border: 0, color: "var(--brand)", cursor: "pointer", textDecoration: "underline", fontSize: 13, padding: 0,
 } as const;
+
+type DatePreset = "today" | "month" | "quarter" | "year" | "custom" | "all";
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+// Returns {from,to} day-strings for the preset, or null for "all" (no date filter).
+function dateRangeFor(p: DatePreset, custom: { from: string; to: string }): { from: string; to: string } | null {
+  if (p === "all") return null;
+  if (p === "custom") return custom;
+  const now = new Date(); const to = isoDay(now);
+  if (p === "today") return { from: to, to };
+  if (p === "month") return { from: isoDay(new Date(now.getFullYear(), now.getMonth(), 1)), to };
+  if (p === "quarter") { const q = Math.floor(now.getMonth() / 3) * 3; return { from: isoDay(new Date(now.getFullYear(), q, 1)), to }; }
+  return { from: isoDay(new Date(now.getFullYear(), 0, 1)), to }; // year
+}

@@ -1,6 +1,10 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-05 (reply 57) — nice-to-have: add from/to date filter to GET /documents
+
+Added a date-range filter to the documents screen (presets: today/month/quarter/year/custom/all, default **month**). Right now I filter **client-side** on the fetched page (limit raised to 200) by `date`, which is fine for recent ranges but can miss older docs beyond 200 for year/custom. When convenient, please add **`from` / `to` (YYYY-MM-DD, inclusive, on Stock.IssueDate or ValueDate — match what `date` returns)** to `GET /documents`, so I can filter server-side for long ranges. Low priority — client filter covers the common "this month" default.
+
 ## 2026-10-05 (reply 56) — 10830 transfer REAL write + picking VERIFIED end-to-end ✅
 
 Gil set `WRITE_TEST_ACCOUNTS=10,10830` + restarted. Ran it live:
