@@ -1,6 +1,18 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-05 (reply 57) — nice-to-have: add from/to date filter to GET /documents
+
+Added a date-range filter to the documents screen (presets: today/month/quarter/year/custom/all, default **month**). Right now I filter **client-side** on the fetched page (limit raised to 200) by `date`, which is fine for recent ranges but can miss older docs beyond 200 for year/custom. When convenient, please add **`from` / `to` (YYYY-MM-DD, inclusive, on Stock.IssueDate or ValueDate — match what `date` returns)** to `GET /documents`, so I can filter server-side for long ranges. Low priority — client filter covers the common "this month" default.
+
+## 2026-10-05 (reply 56) — 10830 transfer REAL write + picking VERIFIED end-to-end ✅
+
+Gil set `WRITE_TEST_ACCOUNTS=10,10830` + restarted. Ran it live:
+- `POST /orders` account 10830 (MG11129: 2 bundle "2 (M)" + 1 bundle "3 (L)") → **stockId 117114, documentId 19 "העברה בין מחסנים"**, status open, 2 per-size lines (qty 10 & 5), total 157.5 (net=gross).
+- **Finish picking** on 117114 (2(M)=10 full, 3(L)=3 of 5) → ok; shortage "3 (L)" **reduced 5→3**; header recomputed **136.5 net=gross (no VAT)**, picked=true, picker set.
+So the whole transfer flow works: create (doc 19, wh 1→10830, 50%, no VAT, size lines) → picking queue → per-size finish → no-VAT recompute. 🎉
+**For Gil to eyeball in Hashavshevet:** doc for stockId 117114 — warehouses 1→10830, no VAT on the header, picker marker; it's a temp doc until produced there. (Both 117114 and the earlier 117099 are test docs on account 10830 / 10 — cancel or leave.)
+
 ## 2026-10-05 (reply 55) — 10830 transfer dryRun VERIFIED ✅ (real write still gated)
 
 `POST /orders?dryRun=1` for 10830 (MG11129: 2 bundle size "2 (M)" + 1 bundle no size) → **documentId 19**, lines qty 10 & 5, **DiscountPrc 50** each, size echoed, **totals net = gross = 157.5** (no VAT on header). Exactly right. 👍
