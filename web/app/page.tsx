@@ -18,8 +18,9 @@ export default async function Home() {
   const b: Banner = (data?.value as Banner) ?? {};
 
   const tiles = [
-    { href: "/catalog", icon: "catalog", label: "קטלוג" },
     { href: "/customer", icon: "customers", label: "בחירת לקוח" },
+    { href: "/start", icon: "plus", label: "התחלת הזמנה" },
+    { href: "/catalog", icon: "catalog", label: "קטלוג" },
     { href: "/documents", icon: "docs", label: "מסמכים" },
     { href: "/data", icon: "chart", label: "נתונים" },
     ...(managerOrAbove(me.role) ? [{ href: "/picking", icon: "picking", label: "ליקוט" }] : []),

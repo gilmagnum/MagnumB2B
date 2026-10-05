@@ -39,6 +39,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
     : [
         { href: "/", label: "בית", icon: "home" },
         { href: "/customer", label: "בחירת לקוח", icon: "customers" },
+        { href: "/start", label: "התחלת הזמנה", icon: "plus" },
         { href: "/catalog", label: "קטלוג", icon: "catalog" },
         { href: "/documents", label: "מסמכים", icon: "docs" },
         { href: "/data", label: "נתונים", icon: "chart" },
