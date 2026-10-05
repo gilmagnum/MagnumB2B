@@ -50,7 +50,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       if ("takenOver" in sess && sess.takenOver) setTookOver(true);
       const prog = ("progress" in sess ? sess.progress : undefined) ?? {};
       const init: Record<string, number> = {};
-      for (const l of d.lines ?? []) if (!l.isShipping) init[lineKey(l)] = prog[lineKey(l)] ?? 0; // start from 0
+      // Fresh pick starts from 0 (or a saved draft). A REOPENED (already-picked) order starts
+      // from the current line quantities, so a manager review that finishes unchanged keeps them.
+      for (const l of d.lines ?? []) if (!l.isShipping) init[lineKey(l)] = d.picked ? l.qty : (prog[lineKey(l)] ?? 0);
       setPicked(init);
       if ("notes" in sess && sess.notes) setNotes(sess.notes);
     })();
