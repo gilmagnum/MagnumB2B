@@ -24,6 +24,12 @@ export default function AddToCart({
       <a href="/customer" className="btn btn-sm" style={{ marginTop: 10, color: "var(--ink-muted)" }}>בחר לקוח להזמנה</a>
     );
   }
+  // Customer chosen but no order kind yet → must start the order first.
+  if (!ctx.orderKind) {
+    return (
+      <a href="/start" className="btn btn-sm" style={{ marginTop: 10, color: "var(--ink-muted)" }}>התחל הזמנה (בחר סוג)</a>
+    );
+  }
 
   const label = (u: Unit) => (u === "carton" ? "קרטון" : "חבילה");
   const packOf = (u: Unit) => (u === "carton" ? (perCarton ?? undefined) : (perBundle ?? undefined)) ?? undefined;

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { bridge, type Customer, type OrderKind } from "../../lib/bridge";
+import { bridge, type Customer } from "../../lib/bridge";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { useCart } from "../../lib/useCart";
 import { supabaseBrowser } from "../../lib/supabase/browser";
@@ -22,7 +22,6 @@ export default function CustomerPage() {
   const [results, setResults] = useState<Customer[]>([]); // admin search results
   const [bridgeErr, setBridgeErr] = useState<string>("");
   const [manual, setManual] = useState({ accountKey: "", name: "" });
-  const [kind, setKind] = useState<OrderKind>("picking");
   const [q, setQ] = useState("");
   const [searching, setSearching] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,25 +72,22 @@ export default function CustomerPage() {
     return list;
   }, [role, results, all, q]);
 
-  const choose = (accountKey: string, customerName: string) => select({ accountKey, customerName, orderKind: kind });
+  // Pick a customer only; the order kind is chosen on the next screen ("התחלת הזמנה").
+  const choose = (accountKey: string, customerName: string) => {
+    select({ accountKey, customerName }); // no orderKind yet — chosen on /start
+    router.push("/start");
+  };
 
   return (
     <>
       <h1>בחירת לקוח</h1>
       {ctx && (
         <p className="card card-pad" style={{ background: "var(--brand-soft)", borderColor: "var(--brand-soft)", padding: "10px 14px" }}>
-          לקוח נבחר: <b>{ctx.customerName}</b> ({ctx.accountKey}) · {ctx.orderKind === "picking" ? "לליקוט" : "עתידי"}{" "}
+          לקוח נבחר: <b>{ctx.customerName}</b> ({ctx.accountKey}){" "}
+          <a href="/start" className="btn btn-primary btn-sm" style={{ marginInlineStart: 8 }}>התחלת הזמנה ←</a>
           <button onClick={exitCustomer} className="btn btn-sm" style={{ marginInlineStart: 8 }}>יציאה מהלקוח</button>
         </p>
       )}
-
-      <label style={{ display: "block", margin: "12px 0" }}>
-        סוג הזמנה:{" "}
-        <select value={kind} onChange={(e) => setKind(e.target.value as OrderKind)} className="select" style={{ maxWidth: 220, display: "inline-block" }}>
-          <option value="picking">לליקוט (הזמנת סוכן)</option>
-          <option value="future">עתידי (הזמנה)</option>
-        </select>
-      </label>
 
       <input placeholder="חיפוש לקוח (שם או מפתח)…" value={q} onChange={(e) => setQ(e.target.value)}
         className="input" style={{ maxWidth: 360, margin: "4px 0 14px" }} />

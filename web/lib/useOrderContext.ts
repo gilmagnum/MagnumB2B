@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import type { OrderKind } from "./bridge";
 
 // The agent "enters" a customer: all ordering happens in this context.
-export type OrderContext = { accountKey: string; customerName: string; orderKind: OrderKind };
+// orderKind is chosen on the "start order" screen — until then it's undefined and ordering is blocked.
+export type OrderContext = { accountKey: string; customerName: string; orderKind?: OrderKind };
 
 const KEY = "magnumb2b_ctx";
 const EVT = "magnumb2b_ctx_change";
@@ -35,10 +36,16 @@ export function useOrderContext() {
     setCtx(next);
     window.dispatchEvent(new Event(EVT));
   };
+  // Change only the order kind on the already-selected customer (the "start order" step).
+  const setKind = (orderKind: OrderKind) => {
+    const cur = read();
+    if (!cur) return;
+    select({ ...cur, orderKind });
+  };
   const exit = () => {
     try { localStorage.removeItem(KEY); } catch { /* ignore */ }
     setCtx(null);
     window.dispatchEvent(new Event(EVT));
   };
-  return { ctx, select, exit };
+  return { ctx, select, setKind, exit };
 }

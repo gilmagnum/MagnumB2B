@@ -41,13 +41,21 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
     return () => { cancelled = true; };
   }, [ctx, items]);
 
+  // Hide no-stock products for ordering (single-SKU items only; matrix stock lives on cells so
+  // the parent is ~0 and is gated on the product page). Guarded: only when stock looks synced.
+  const stockSynced = useMemo(() => items.some((i) => (i.stock ?? 0) > 0), [items]);
+  const noStock = (i: CatalogItem) =>
+    !!ctx && stockSynced && !i.matrix_flag && !i.is_carton_size_item && (i.stock ?? 0) <= 0
+    && !(ctx.orderKind === "future" && i.ignore_stock);
+
   const shown = useMemo(() => items.filter((i) =>
     (!sub || i.category_sub === sub) &&
     (!brand || i.brand === brand) &&
     (!season || i.season === season) &&
     (!group || i.group_name === group) &&
-    (!q || i.item_name?.includes(q) || i.itemkey?.toLowerCase().includes(q.toLowerCase()))
-  ), [items, sub, brand, season, group, q]);
+    (!q || i.item_name?.includes(q) || i.itemkey?.toLowerCase().includes(q.toLowerCase())) &&
+    !noStock(i)
+  ), [items, sub, brand, season, group, q, ctx, stockSynced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const priceOf = (it: CatalogItem) => (ctx && priceMap[it.itemkey] != null ? priceMap[it.itemkey] : it.price);
 
