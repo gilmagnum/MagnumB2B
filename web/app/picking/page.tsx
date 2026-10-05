@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { bridge, type Document } from "../../lib/bridge";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import { managerOrAbove } from "../../lib/roles";
+import { getActiveLocks } from "../picking-actions";
 
 // Picking queue. Warehouse screen (role picker/admin). Read-only for now —
 // "finish picking" (marking Hashavshevet) is deferred until Gil examines a live pick.
@@ -14,6 +15,7 @@ export default function PickingPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [locks, setLocks] = useState<Record<number, string>>({});
 
   useEffect(() => {
     (async () => {
@@ -29,7 +31,9 @@ export default function PickingPage() {
     if (!allowed) return;
     setLoading(true); setErr("");
     try {
-      setRows(await bridge.pickingQueue(0, { state, q: q.trim() || undefined }));
+      const r = await bridge.pickingQueue(0, { state, q: q.trim() || undefined });
+      setRows(r);
+      getActiveLocks(r.map((d) => d.stockId)).then(setLocks).catch(() => {});
     } catch {
       setErr("הגשר עדיין לא מחובר — תור הליקוט ייטען כשהגשר יעלה.");
       setRows([]);
@@ -71,12 +75,13 @@ export default function PickingPage() {
                   <td>{d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""}</td>
                   <td>{d.total != null ? `${d.total.toFixed(2)} ₪` : ""}</td>
                   {state === "picked" && <td>{d.picker ?? "—"}</td>}
-                  <td>
+                  <td style={{ whiteSpace: "nowrap" }}>
                     {state === "waiting"
                       ? <a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>ליקוט ←</a>
                       : managerOrAbove(role)
                         ? <a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>פתח מחדש ←</a>
                         : <span style={{ color: "#888" }}>לוקט</span>}
+                    {locks[d.stockId] && <span className="chip chip-warn" style={{ marginInlineStart: 6 }} title="בליקוט כעת">🔒 {locks[d.stockId]}</span>}
                   </td>
                 </tr>
               ))}
