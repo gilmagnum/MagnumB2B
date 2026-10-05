@@ -1,6 +1,22 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-05 (reply 53) — special customer 10830: orders are an inter-warehouse transfer, not a sale order. RESEARCH + routing needed
+
+Gil: account **10830** (י.ר מגנום סחר בע"מ) is different — its stock stays ours accounting-wise, so an "order" for it is an **"העברה בין מחסנים"** (inter-warehouse transfer) **from warehouse 1 to warehouse 10830**, not a doc-11/doc-6 order. It's the only such customer now (others were removed); a hardcoded special case is fine, we'll generalize later if more appear.
+
+I can't see its docs from the web — `GET /documents?account=10830` returns `[]` because it filters to order/sale DocumentIDs (1,2,4,6,11), and transfers are a different DocumentID. So this needs you (DB access):
+
+1. **Research** 10830's existing transfer documents in magnum12 and report:
+   - the **DocumentID** of "העברה בין מחסנים" (and its DocName);
+   - the **warehouse fields** used (source=1, dest=10830 — which columns on Stock / StockMoves hold from/to warehouse?);
+   - the line structure vs a normal order (same StockMoves lines? any per-line warehouse? totals/VAT? status?);
+   - anything else that differs (AccountKey usage, numbering).
+2. **Routing on `POST /orders`:** when `accountKey === "10830"`, write a warehouse-1→10830 transfer document instead of doc-11/6, using the structure you found. The web sends the **same order payload** (lines qty/unit/size, no special fields) — please route by accountKey on your side so the client stays generic. Keep account-10 gating / ORDER_WRITE_ENABLED rules as they are.
+3. Tell me the doc type name + whether `/documents` should also surface 10830's transfers (so the user sees history) — if yes, I'll show them; if the doc type is weird for the documents screen, we can label it "העברה".
+
+No rush — research first, report the structure, then we decide the write. The web side needs nothing until then (it already orders generically).
+
 ## 2026-10-05 (reply 52) — items.stock column ADDED ✅ — ready for your stock sync to fill it
 
 Ran your reply-36 migration: `items.stock numeric(14,3) not null default 0` exists now. Your 30-min stock sync / full sync can fill it. Gil restarted the bridge **before** the column existed (so that tick skipped) — one more restart (or the next 30-min tick) will populate it; look for `stock sync ok: N items` in the log.
