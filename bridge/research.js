@@ -38,3 +38,62 @@ export async function matrixResearch(model) {
   }
   return sections;
 }
+
+// Reply 53: how inter-warehouse transfers ("העברה בין מחסנים") are stored, for account 10830.
+export async function transferResearch(account) {
+  const k = key(account);
+  return {
+    docTypes: await query(
+      `SELECT DocumentID, DocName FROM DocumentsDef WHERE DocName LIKE N'%העברה%' OR DocumentID = 19 ORDER BY DocumentID`,
+    ),
+    account: await query('SELECT AccountKey, FullName, SortGroup, Agent, Dumi FROM Accounts WHERE AccountKey = @k', { k }),
+    docsByType: await query(
+      `SELECT s.DocumentID, d.DocName, COUNT(*) AS docs, MAX(s.ID) AS lastId, MAX(s.ValueDate) AS lastDate
+       FROM Stock s LEFT JOIN DocumentsDef d ON d.DocumentID = s.DocumentID
+       WHERE s.AccountKey = @k GROUP BY s.DocumentID, d.DocName ORDER BY docs DESC`,
+      { k },
+    ),
+    warehouseColumns: await query(
+      `SELECT OBJECT_NAME(c.object_id) AS tbl, c.name FROM sys.columns c
+       WHERE OBJECT_NAME(c.object_id) IN ('Stock', 'StockMoves')
+         AND (c.name LIKE '%Ware%' OR c.name LIKE '%Store%' OR c.name LIKE '%Trans%' OR c.name LIKE '%Branch%')
+       ORDER BY 1, 2`,
+    ),
+    // The latest transfer-type documents overall (any account), headers only.
+    latestTransfers: await query(
+      `SELECT TOP 5 s.* FROM Stock s WHERE s.DocumentID IN
+         (SELECT DocumentID FROM DocumentsDef WHERE DocName LIKE N'%העברה%' OR DocumentID = 19)
+       ORDER BY s.ID DESC`,
+    ),
+    // The newest document of this account (whatever type), full header + lines.
+    latestForAccount: await (async () => {
+      const [h] = await query('SELECT TOP 1 * FROM Stock WHERE AccountKey = @k ORDER BY ID DESC', { k });
+      if (!h) return null;
+      const lines = await query('SELECT TOP 10 * FROM StockMoves WHERE StockID = @id ORDER BY LineNoForSorting, ID', { id: h.ID });
+      return { header: h, lines };
+    })(),
+  };
+}
+
+// One-shot research at bridge start-up (read-only): writes logs/research-<name>.json once, so the
+// Claude session can read it without anyone relaying output. Skips files that already exist.
+export async function runStartupResearch(logsDir, { log = console } = {}) {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const jobs = [
+    ['matrix-KD54301', () => matrixResearch('KD54301')],
+    ['transfer-10830', () => transferResearch('10830')],
+  ];
+  for (const [name, run] of jobs) {
+    const file = path.join(logsDir, `research-${name}.json`);
+    if (fs.existsSync(file)) continue;
+    let out;
+    try {
+      out = { ok: true, at: new Date().toISOString(), result: await run() };
+    } catch (err) {
+      out = { ok: false, at: new Date().toISOString(), error: err.message };
+    }
+    fs.writeFileSync(file, JSON.stringify(out, null, 1), 'utf8');
+    log.log(`research written: ${file} (${out.ok ? 'ok' : `error: ${out.error}`})`);
+  }
+}

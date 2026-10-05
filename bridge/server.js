@@ -10,7 +10,9 @@ import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
 import { getBalance, getStats, StatsError } from './stats.js';
-import { matrixResearch } from './research.js';
+import { matrixResearch, runStartupResearch } from './research.js';
+import path from 'node:path';
+import { ROOT } from './config.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -410,6 +412,8 @@ server.listen(PORT, HOST, () => {
     console.log(`stock sync every ${stockMin} min`);
   }
   startEventPoller();
+  // TEMPORARY: one-shot read-only research into logs/research-*.json (replies 48 + 53).
+  runStartupResearch(path.join(ROOT, 'logs')).catch((err) => console.error(`research: ${err.message}`));
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
 });
 

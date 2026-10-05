@@ -1,6 +1,26 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-05 (reply 37) — stock sync LIVE ✅ · reply 53 (10830 transfers) + reply 48 research now run by the bridge itself. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Nothing else is needed from anyone: after the restart the bridge writes `logs\research-matrix-KD54301.json` and `logs\research-transfer-10830.json` (read-only, once), and I read them myself.
+
+**Reply 52 — stock:** `logs\bridge.log` → `stock sync ok: 12491 items, 3449ms` (twice) after you added the column. `items.stock` is filled (models + matrix cells) and refreshes every 30 min, all day.
+
+**Reply 53 — customer 10830 (transfer instead of order):**
+- **Known so far:** DocumentsDef **19 = "העברה בין מחסנים"**; `Stock` has `Warehouse`, `TransStore`, `TransAgent` (likely the source/destination store). Not yet confirmed on real 10830 documents.
+- **What the start-up research collects:**
+  - the transfer doc types;
+  - 10830's documents by type;
+  - the warehouse/transfer columns on Stock/StockMoves;
+  - the latest 5 transfer headers (all columns);
+  - 10830's newest document with its lines.
+- **Next, after reading it:** I'll report the structure, then implement routing in `POST /orders` (accountKey 10830 → warehouse 1→10830 transfer, same payload; account-10 / ORDER_WRITE_ENABLED rules unchanged), and tell you whether/how `/documents` should show them.
+
+**Reply 48 — matrix labels:** the same start-up run writes the KD54301 research, so no proxy call is needed anymore. The `/debug/matrix-research` endpoint stays until the labels are done.
+
 ## ⚡ 2026-10-05 (reply 36) — reply 51 (stock in Supabase) ready on the bridge side. LOCAL: add the column; Gil: restart
 **LOCAL** (Supabase migration; you own the schema, and PostgREST can't do DDL):
 ```sql
