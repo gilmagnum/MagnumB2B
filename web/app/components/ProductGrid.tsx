@@ -1,13 +1,20 @@
 "use client";
 import type { CatalogItem } from "../../lib/supabase";
+import { useOrderContext } from "../../lib/useOrderContext";
 import AddToCart from "./AddToCart";
 
 // Shared product grid (used by search results; the category page has its own layout).
 export default function ProductGrid({ items }: { items: CatalogItem[] }) {
-  if (!items.length) return <p style={{ color: "#888" }}>לא נמצאו מוצרים.</p>;
+  const { ctx } = useOrderContext();
+  const stockSynced = items.some((i) => (i.stock ?? 0) > 0);
+  const visible = items.filter((i) => !(
+    !!ctx && stockSynced && !i.matrix_flag && !i.is_carton_size_item && (i.stock ?? 0) <= 0
+    && !(ctx.orderKind === "future" && i.ignore_stock)
+  ));
+  if (!visible.length) return <p style={{ color: "#888" }}>לא נמצאו מוצרים.</p>;
   return (
     <div className="card-grid">
-      {items.map((it) => (
+      {visible.map((it) => (
         <article key={it.itemkey} className="product-card">
           <a href={`/product/${encodeURIComponent(it.itemkey)}`} style={{ textDecoration: "none", color: "inherit" }}>
             {it.image_url

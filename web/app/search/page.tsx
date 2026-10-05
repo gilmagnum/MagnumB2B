@@ -20,7 +20,7 @@ function SearchView() {
     // Dynamic search across name, SKU, brand, barcode.
     const { data } = await supabaseBrowser()
       .from("items")
-      .select("itemkey,item_name,category_main,category_sub,brand,season,group_name,price,per_carton,per_bundle,image_url,shown_on_site,matrix_flag,is_carton_size_item,ruler_code")
+      .select("itemkey,item_name,category_main,category_sub,brand,season,group_name,price,per_carton,per_bundle,image_url,shown_on_site,matrix_flag,is_carton_size_item,ruler_code,stock,ignore_stock")
       .eq("shown_on_site", true)
       .or(`item_name.ilike.%${term}%,itemkey.ilike.%${term}%,brand.ilike.%${term}%,barcode.ilike.%${term}%`)
       .order("item_seq", { ascending: false, nullsFirst: false })
