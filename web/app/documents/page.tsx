@@ -6,6 +6,7 @@ import { exportExcel, exportPdf } from "../../lib/docExport";
 import { fetchImages } from "../../lib/images";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { managerOrAbove } from "../../lib/roles";
+import AppOrdersList from "../components/AppOrdersList";
 
 // Documents screen. Admin sees ALL; an agent sees only their customers'. A "+" per
 // row expands the document's lines (with product images) inline. When a customer is
@@ -26,6 +27,7 @@ export default function DocumentsPage() {
   const [images, setImages] = useState<Record<string, string>>({});
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
+  const [tab, setTab] = useState<"hash" | "app">("hash");
 
   // Inside a customer: show their open balance (best-effort; hidden if the bridge endpoint isn't up).
   useEffect(() => {
@@ -103,9 +105,20 @@ export default function DocumentsPage() {
   // Inside a customer, the bridge q is a LIKE match — enforce the exact accountKey here.
   const visible = (ctx && onlyCustomer) ? docs.filter((d) => String(d.accountKey) === String(ctx.accountKey)) : docs;
 
+  const tabBtn = (active: boolean) => ({
+    background: active ? "#1e2a78" : "#fff", color: active ? "#fff" : "#1e2a78",
+    border: "1px solid #1e2a78", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 14,
+  });
+
   return (
     <>
       <h1>היסטוריית מסמכים</h1>
+      <div style={{ display: "flex", gap: 8, margin: "4px 0 14px", flexWrap: "wrap" }}>
+        <button onClick={() => setTab("hash")} style={tabBtn(tab === "hash")}>מסמכי חשבשבת</button>
+        <button onClick={() => setTab("app")} style={tabBtn(tab === "app")}>מסמכי אפליקציה</button>
+      </div>
+
+      {tab === "app" ? <AppOrdersList /> : (<>
       {ctx && onlyCustomer
         ? <p style={{ color: "var(--brand-strong)", fontSize: 14 }}>מסמכי <b>{ctx.customerName}</b> ({ctx.accountKey})
             {balance != null && (() => {
@@ -212,6 +225,7 @@ export default function DocumentsPage() {
           </table>
         </div>
       )}
+      </>)}
     </>
   );
 }

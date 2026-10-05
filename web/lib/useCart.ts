@@ -48,8 +48,9 @@ export function useCart() {
   const remove = (itemkey: string, unit: Unit, sizeLabel?: string) =>
     persist(read().filter((l) => !same(l, itemkey, unit, sizeLabel)));
   const clear = () => persist([]);
+  const setAll = (next: CartLine[]) => persist(next); // replace the whole cart (e.g. load a draft)
 
   const count = lines.reduce((s, l) => s + l.qty, 0);
   const qtyOf = (itemkey: string, unit: Unit, sizeLabel?: string) => lines.find((l) => same(l, itemkey, unit, sizeLabel))?.qty ?? 0;
-  return { lines, add, setQty, remove, clear, count, qtyOf };
+  return { lines, add, setQty, remove, clear, setAll, count, qtyOf };
 }
