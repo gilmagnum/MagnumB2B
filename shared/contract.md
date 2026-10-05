@@ -137,6 +137,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   the DocNumber of a document produced from it. `status`: open = Stock.Status 0, produced = anything else.
 - `POST /sync` → full catalog refresh Hashavshevet → Supabase (`items`, `item_variants`, ruler codes); returns
   `{ items, shown, variants, rulers, deactivated, ms }` (also runs at start + every `SYNC_INTERVAL_MIN`).
+  Supabase `items.item_seq` = Items.ID (identity = creation order; newest = highest), written on the full sync.
   Supabase `items.stock` = Items.Quantity (models and matrix cells alike) is refreshed by a light stock sync every
   `STOCK_SYNC_MIN` (30) min, all day, plus on every full sync; written only once the `stock` column exists.
   `GET /sync` → `{ running, last }`. Images/colors/categories are app-layer and never touched.

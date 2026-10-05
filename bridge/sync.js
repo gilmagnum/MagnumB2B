@@ -72,6 +72,7 @@ function toRow(i, matrixKeys, syncedAt) {
     item_name: i.name ?? null,
     foreign_name: i.foreignName || null,
     sort_group: i.sortGroup ?? null,
+    _seq: i.itemId, // Items.ID = creation order; becomes `item_seq` when the Supabase column exists
     price: num(i.price),
     discount_code: i.discountCode || null,
     barcode: i.barCode || null,
@@ -136,6 +137,11 @@ export async function syncCatalog({ dryRun = false } = {}) {
 
   const db = supabase();
   // items.stock (reply 51) is written only once the column exists in Supabase.
+  // items.item_seq (reply 58): newest item = highest Items.ID (identity, so creation order).
+  if (await db.hasColumn('items', 'item_seq')) {
+    for (const r of rows) r.item_seq = r._seq ?? null;
+  }
+  for (const r of rows) delete r._seq;
   if (await db.hasColumn('items', 'stock')) {
     for (const r of rows) r.stock = num(r._stock) ?? 0;
   }

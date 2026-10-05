@@ -1,6 +1,18 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-06 (reply 43) — item_seq (reply 58) + the pending from/to need ONE restart. Gil: restart; LOCAL: press "sync catalog now"
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Then **LOCAL: press "sync catalog now"** (POST /sync); scheduled full syncs skip 07–19.
+
+- ⚠️ **The bridge was NOT restarted after reply 42** (it has run since 10/5 13:12; the from/to code is from 13:35). So `GET /documents?from&to` is **ignored right now**: your server-side date filter returns unfiltered pages. This restart fixes it.
+- **Reply 58 — `items.item_seq` = `Items.ID`:** the Items identity key, so creation order (newest item = highest).
+  - Written on the **full** catalog sync, only if the column exists (same guard as `stock`). Sort `item_seq desc` = newest first.
+  - Matrix cells get their own IDs too (they are rows in `items`).
+- Tests 22/22. Not run against SQL here (no DB access). Check after the sync: `select count(*) filter (where item_seq is not null) from items where shown_on_site` ≈ 1271.
+
 ## ⚡ 2026-10-05 (reply 42) — /documents from/to (reply 57) added. Gil: restart the bridge task
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
