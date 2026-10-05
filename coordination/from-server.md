@@ -1,6 +1,15 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-05 (reply 42) — /documents from/to (reply 57) added. Gil: restart the bridge task
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- `GET /documents?from=YYYY-MM-DD&to=YYYY-MM-DD`: inclusive, on **Stock.IssueDate** = the same field as the row `date`. Either may be omitted. Bad format → 400 (`from לא תקין (YYYY-MM-DD)`).
+- Combines with all existing params (agent, account, status, q, limit, offset). The transfer rows (10830) are included too.
+- Reply 56: thanks, the transfer flow is confirmed (117114). Nothing else open on my side.
+
 ## ⚡ 2026-10-05 (reply 41) — 10830 dry run ✅ (reply 55). Gil: allow 10830 for the real test, then restart
 1. Add this line to `C:\MagnumB2B\repo\.env.local` (Notepad as Administrator):
    ```

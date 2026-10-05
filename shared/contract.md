@@ -131,6 +131,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /documents/:stockId[?agent=:id]` → `DocumentDetail` (404 if not a customer document, or not that agent's customer)
 - `GET /documents?account=<exact accountKey>` filters to one customer exactly (wins over `q`; with `agent`, another agent's
   customer returns []). `GET /picking/queue?account=` works the same.
+- `GET /documents?…&from=YYYY-MM-DD&to=YYYY-MM-DD` filters by `date` (Stock.IssueDate), inclusive; either may be omitted; bad format → 400.
 - `GET /documents?agent=&status=all|open|produced&q=&limit=50&offset=0` → `Document[]`, newest first (limit max 200).
   `agent=0`/missing = all (admin). `q` = customer name/accountKey, or a number = order Stock.ID / its DocNumber /
   the DocNumber of a document produced from it. `status`: open = Stock.Status 0, produced = anything else.

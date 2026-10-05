@@ -337,7 +337,7 @@ async function ordersProducing(docNumber, orderDocIds) {
 // levels are followed (order -> delivery note -> invoice). Receipts (31) pay invoices through
 // payment matching, not order lines, so they never appear here.
 export async function getDocuments({
-  agent, account, status = 'all', q, limit = 50, offset = 0, orderDocIds = [6, 11], picked, oldestFirst = false,
+  agent, account, status = 'all', q, limit = 50, offset = 0, orderDocIds = [6, 11], picked, oldestFirst = false, from, to,
 } = {}) {
   const params = {
     limit: Math.min(Math.max(Number(limit) || 50, 1), 200),
@@ -358,6 +358,15 @@ export async function getDocuments({
     where += ' AND s.AccountKey = @account';
     params.account = key(account);
     q = undefined;
+  }
+  // Date range on Stock.IssueDate (the row's `date`), inclusive. from/to are Date objects.
+  if (from) {
+    where += ' AND s.IssueDate >= @from';
+    params.from = { type: sql.Date, value: from };
+  }
+  if (to) {
+    where += ' AND s.IssueDate < DATEADD(day, 1, @to)';
+    params.to = { type: sql.Date, value: to };
   }
   if (status === 'open') where += ' AND s.Status = 0';
   // picked = the warehouse app's marker ExtraText2 = 'לוקט - <picker>'

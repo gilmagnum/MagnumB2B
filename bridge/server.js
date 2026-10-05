@@ -89,6 +89,14 @@ const toPriceResult = (itemkey, accountKey, qty, p) => ({
   source: p.source === 'discount' || p.source === 'base' ? 'pricelist' : p.source,
 });
 
+// Optional YYYY-MM-DD query parameter -> Date (UTC midnight), or 400.
+function parseDayParam(value, name) {
+  if (!value) return undefined;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00Z`) : null;
+  if (!d || Number.isNaN(d.getTime())) throw new HttpError(400, 'BAD_REQUEST', `${name} לא תקין (YYYY-MM-DD)`);
+  return d;
+}
+
 // --- routes ------------------------------------------------------------------------
 const routes = [
   ['GET', /^\/health$/, async () => ({ ok: true }), { public: true }],
@@ -175,6 +183,8 @@ const routes = [
     return read.getDocuments({
       agent: Number(query.get('agent') || 0),
       account: query.get('account')?.trim() || undefined, // exact customer, wins over q
+      from: parseDayParam(query.get('from'), 'from'),
+      to: parseDayParam(query.get('to'), 'to'),
       status,
       q: query.get('q')?.trim() || undefined,
       limit: query.get('limit') ?? 50,
