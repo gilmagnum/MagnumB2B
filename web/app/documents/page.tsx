@@ -7,6 +7,7 @@ import { fetchImages } from "../../lib/images";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { managerOrAbove } from "../../lib/roles";
 import AppOrdersList from "../components/AppOrdersList";
+import PickingLogsList from "../components/PickingLogsList";
 
 // Documents screen. Admin sees ALL; an agent sees only their customers'. A "+" per
 // row expands the document's lines (with product images) inline. When a customer is
@@ -27,7 +28,7 @@ export default function DocumentsPage() {
   const [images, setImages] = useState<Record<string, string>>({});
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
-  const [tab, setTab] = useState<"hash" | "app">("hash");
+  const [tab, setTab] = useState<"hash" | "app" | "picks">("hash");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateCustom, setDateCustom] = useState({ from: isoDay(new Date(Date.now() - 30 * 864e5)), to: isoDay(new Date()) });
 
@@ -122,9 +123,10 @@ export default function DocumentsPage() {
       <div style={{ display: "flex", gap: 8, margin: "4px 0 14px", flexWrap: "wrap" }}>
         <button onClick={() => setTab("hash")} style={tabBtn(tab === "hash")}>מסמכי חשבשבת</button>
         <button onClick={() => setTab("app")} style={tabBtn(tab === "app")}>מסמכי אפליקציה</button>
+        <button onClick={() => setTab("picks")} style={tabBtn(tab === "picks")}>ליקוטים</button>
       </div>
 
-      {tab === "app" ? <AppOrdersList /> : (<>
+      {tab === "app" ? <AppOrdersList /> : tab === "picks" ? <PickingLogsList /> : (<>
       {ctx && onlyCustomer
         ? <p style={{ color: "var(--brand-strong)", fontSize: 14 }}>מסמכי <b>{ctx.customerName}</b> ({ctx.accountKey})
             {balance != null && (() => {
