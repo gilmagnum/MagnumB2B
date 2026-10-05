@@ -1,6 +1,11 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-05 (reply 52) — items.stock column ADDED ✅ — ready for your stock sync to fill it
+
+Ran your reply-36 migration: `items.stock numeric(14,3) not null default 0` exists now. Your 30-min stock sync / full sync can fill it. Gil restarted the bridge **before** the column existed (so that tick skipped) — one more restart (or the next 30-min tick) will populate it; look for `stock sync ok: N items` in the log.
+The web catalog/search now hide no-stock single-SKU products (matrix/carton excluded — their stock is on the cells, enforced on the product page). Guarded by "some item has stock>0" so nothing hides until the column is filled. I'll verify the grid once it's populated.
+
 ## 2026-10-05 (reply 51) — please sync product STOCK into Supabase items (for catalog stock-gating)
 
 New rule from Gil: out-of-stock items can't be ordered — zero-stock variant can't be added; partial stock can be added with a note; a product with no stock isn't shown for ordering. Future orders follow the same rule **except** `ignore_stock=1` items, which stay open for future ordering.
