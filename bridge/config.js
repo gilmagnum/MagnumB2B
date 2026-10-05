@@ -94,6 +94,10 @@ export const LINE_DEFAULTS = {
 };
 
 export const orderWriteEnabled = () => env.ORDER_WRITE_ENABLED === '1';
+// Accounts that may be written before ORDER_WRITE_ENABLED=1 (tests). Default: the test account only.
+export const writeTestAccounts = () => new Set((env.WRITE_TEST_ACCOUNTS || TEST_ACCOUNT_KEY).split(',').map((a) => a.trim()).filter(Boolean));
+// True when writes for this account are allowed right now.
+export const writeAllowed = (accountKey) => orderWriteEnabled() || writeTestAccounts().has(String(accountKey).trim());
 
 // ExtraNotes.NoteID -> app field
 export const NOTE_FIELDS = {

@@ -8,7 +8,7 @@
 // The document is never produced here - Hashavshevet users produce it manually.
 // Needs on magnumapp: UPDATE on Stock, UPDATE + DELETE on StockMoves.
 import { sql, getPool } from './db.js';
-import { ORDER_DOCUMENT_IDS, SHIPPING_ITEMS, VAT_PRC, TEST_ACCOUNT_KEY, orderWriteEnabled } from './config.js';
+import { ORDER_DOCUMENT_IDS, SHIPPING_ITEMS, VAT_PRC, TRANSFER_ACCOUNTS, writeAllowed } from './config.js';
 
 // Header field for the picker's notes (varchar(250), unused on site orders). Whitelisted: it goes into SQL.
 const NOTES_FIELDS = ['ExtraRemarks', 'Details'];
@@ -99,11 +99,14 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
        FROM Stock WITH (UPDLOCK, ROWLOCK) WHERE ID = @id`,
     )).recordset;
     if (!order) throw new PickingError(404, 'DOC_NOT_FOUND', `הזמנה ${id} לא נמצאה`);
-    if (order.DocumentID !== ORDER_DOCUMENT_IDS.picking || order.Status !== 0) {
+    // Open agent order (doc 11), or an open transfer (doc 19) of a transfer customer such as 10830.
+    const transfer = TRANSFER_ACCOUNTS[trim(order.AccountKey)];
+    const pickable = order.DocumentID === ORDER_DOCUMENT_IDS.picking || (transfer && order.DocumentID === transfer.documentId);
+    if (!pickable || order.Status !== 0) {
       throw new PickingError(409, 'NOT_OPEN', `הזמנה ${id} אינה הזמנת סוכן פתוחה (כבר הופקה או סוג אחר)`);
     }
     // Same safety switch as order writes: real customers only once ORDER_WRITE_ENABLED=1.
-    if (trim(order.AccountKey) !== TEST_ACCOUNT_KEY && !orderWriteEnabled()) {
+    if (!writeAllowed(order.AccountKey)) {
       throw new PickingError(403, 'WRITE_DISABLED', 'כתיבת ליקוט ללקוחות אמיתיים אינה מופעלת עדיין (ORDER_WRITE_ENABLED)');
     }
     const lines = (await req().query(
@@ -144,7 +147,8 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
        FROM StockMoves WHERE StockID = @id AND Tree IN (0, 1)`,
     )).recordset;
     const net = round2(sum.net);
-    const gross = round2(sum.net * (1 - (order.DiscountPrc ?? 0) / 100) * vat);
+    // Transfers carry no VAT on the header (TFtal = TFtalVat).
+    const gross = round2(sum.net * (1 - (order.DiscountPrc ?? 0) / 100) * (transfer ? 1 : vat));
     const marker = `לוקט - ${picker}`.slice(0, MARKER_MAX);
     const noteText = notes ? mergePickNotes(order.notes, notes) : null;
     const upd = req()

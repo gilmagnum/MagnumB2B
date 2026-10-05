@@ -104,7 +104,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /price?account=&item=&qty=` → `PriceResult`
 - `POST /prices` `{ account, items: [{ itemkey, qty? }] }` (max 500) → `PriceResult[]` (bulk, for the catalog grid)
 - `GET /picking/queue[?agent=][&q=][&state=waiting|picked][&limit=200][&offset=0]` → `Document[]` (read-only), **oldest first**.
-  Open agent orders only (doc 11, Status 0). `waiting` (default) = no picker marker; `picked` = ExtraText2 `לוקט - <name>`
+  Open agent orders (doc 11, Status 0) + open transfers (doc 19) of transfer customers (10830). `waiting` (default) = no picker marker; `picked` = ExtraText2 `לוקט - <name>`
   (picked, waiting for production in Hashavshevet). Same row shape as /documents incl. `picked`, `picker`, `pickedMarker`.
 - `POST /picking/:stockId/finish[?dryRun=1]` **(WRITES to Hashavshevet)** body `{ picker, notes?, lines: [{ itemkey, size?, pickedQty }] }` (`size` targets only that size's line)
   → `{ ok, stockId, dryRun, picker, notesField, notes, shortages: [{ itemkey, ordered, picked, action: 'reduced'|'deleted' }], totals: { net, gross } }`.
@@ -159,6 +159,10 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   - `qty` is in cartons/bundles; the bridge writes units (qty × perCarton / perBundle).
   - `size` (ruler products, ≤ 20 chars): each line stays its own StockMoves line (never merged); size → `StockMoves.Details`
     and appended to the line name as ` - מידה <size>`. Response lines echo `size`.
+  - **Transfer customers (10830):** the same payload is written as a temp **doc 19 "העברה בין מחסנים"** (warehouse 1 → 10830:
+    header `TransStore 1` / `Warehouse 10830`, lines `Warehouse 10830`), header **TFtal = TFtalVat = net** (no VAT), **no
+    M1001/M1002**, whatever `orderKind` is. Response adds `transfer: { from, to }`, `documentId: 19`.
+  - Writes are allowed for accounts in `WRITE_TEST_ACCOUNTS` (default `10`) until `ORDER_WRITE_ENABLED=1`.
   - Omit `price` → the bridge prices it (same as /price). If sent, `price` (+ `discountPct`) is written as-is.
   - Matrix: one line per cell SKU (`cells[].itemkey`); the cell inherits shownOnSite/pack sizes/ignoreStock from its parent.
   - Errors: 422 `ApiError` with codes `NO_ACCOUNT, ACCOUNT_NOT_FOUND, ACCOUNT_INACTIVE, BAD_KIND, NO_LINES, BAD_LINE,

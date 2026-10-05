@@ -5,13 +5,13 @@ import {
   ORDER_DOCUMENT_IDS,
   ORDER_WAREHOUSE,
   VAT_PRC,
-  TEST_ACCOUNT_KEY,
+  TRANSFER_ACCOUNTS,
+  writeAllowed,
   SHIPPING_ITEMS,
   TREE_FLAT,
   DEFAULT_UNIT,
   HEADER_DEFAULTS,
   LINE_DEFAULTS,
-  orderWriteEnabled,
 } from './config.js';
 
 export class OrderError extends Error {
@@ -140,8 +140,11 @@ export async function writeOrder(order, { commit = false } = {}) {
   validate(order);
   const accountKey = String(order.accountKey).trim();
   const orderKind = order.orderKind ?? 'picking';
-  const documentId = ORDER_DOCUMENT_IDS[orderKind];
-  if (commit && accountKey !== TEST_ACCOUNT_KEY && !orderWriteEnabled()) {
+  // Transfer customers (10830): an inter-warehouse transfer (doc 19) instead of an order, whatever the kind.
+  const transfer = TRANSFER_ACCOUNTS[accountKey];
+  const documentId = transfer ? transfer.documentId : ORDER_DOCUMENT_IDS[orderKind];
+  const lineWarehouse = transfer ? transfer.toWarehouse : ORDER_WAREHOUSE;
+  if (commit && !writeAllowed(accountKey)) {
     throw new OrderError('WRITE_DISABLED', 'כתיבת הזמנות ללקוחות אמיתיים אינה מופעלת (ORDER_WRITE_ENABLED)');
   }
 
@@ -217,7 +220,7 @@ export async function writeOrder(order, { commit = false } = {}) {
 
   // Like the app: picking orders always carry both shipping lines (qty 0 when unused,
   // price 0 - priced manually in Hashavshevet). Future orders never get shipping lines.
-  const shippingLines = orderKind !== 'picking' ? [] : Object.entries(SHIPPING_ITEMS).map(([kind, s]) => ({
+  const shippingLines = orderKind !== 'picking' || transfer ? [] : Object.entries(SHIPPING_ITEMS).map(([kind, s]) => ({
     itemKey: s.itemKey,
     quantity: order.shipping?.[kind] ?? 0,
     price: 0,
@@ -275,7 +278,7 @@ export async function writeOrder(order, { commit = false } = {}) {
         DiscountPrc: line.discountPrc,
         TFtal: total,
         LineNoForSorting: (i + 1) * 100,
-        Warehouse: ORDER_WAREHOUSE,
+        Warehouse: lineWarehouse,
       },
       optional,
     };
@@ -290,7 +293,8 @@ export async function writeOrder(order, { commit = false } = {}) {
     orderDiscountPct,
     netAfterDiscount: round2(net * (1 - orderDiscountPct / 100)),
     vatPrc: VAT_PRC,
-    gross: round2(net * (1 - orderDiscountPct / 100) * vat),
+    // Transfers carry no VAT on the header (TFtal = TFtalVat = net), as on Hashavshevet's doc 19.
+    gross: round2(net * (1 - orderDiscountPct / 100) * (transfer ? 1 : vat)),
   };
 
   const header = fitRow('Stock', columns.Stock, {
@@ -301,14 +305,15 @@ export async function writeOrder(order, { commit = false } = {}) {
       CloseType: 0,
       AccountKey: key(trim(account.AccountKey)),
       TFtal: totals.gross, // incl. VAT
-      TFtalVat: totals.net, // lines, before the order discount
+      TFtalVat: transfer ? totals.gross : totals.net, // lines, before the order discount (transfer: = TFtal)
       DiscountPrc: orderDiscountPct,
       DiscountPrcR: orderDiscountPct,
       VatPrc: VAT_PRC,
-      Warehouse: ORDER_WAREHOUSE,
+      Warehouse: lineWarehouse, // transfer: destination warehouse
     },
     optional: {
       ...HEADER_DEFAULTS,
+      ...(transfer && { TransStore: transfer.fromWarehouse }), // transfer: source warehouse
       PrintStyle: printStyle,
       Remarks: order.remarks?.trim() || null,
       AccountName: trim(account.FullName),
@@ -347,6 +352,7 @@ export async function writeOrder(order, { commit = false } = {}) {
       documentId,
       accountKey,
       totals,
+      ...(transfer && { transfer: { from: transfer.fromWarehouse, to: transfer.toWarehouse } }),
       lines: allLines.map(({ itemKey, quantity, price, discountPrc, size, priceSource }) => ({
         itemKey, quantity, price, discountPrc, ...(size && { size }), priceSource,
       })),

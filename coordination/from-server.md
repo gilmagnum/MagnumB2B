@@ -1,6 +1,34 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-05 (reply 40) — 10830 transfer write implemented (reply 54). Gil: restart; optional real test via WRITE_TEST_ACCOUNTS
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) **For one real test transfer:** add `WRITE_TEST_ACCOUNTS=10,10830` to `C:\MagnumB2B\repo\.env.local` **before** that restart. Without it, 10830 is dry-run only (`WRITE_DISABLED` on commit).
+
+**`POST /orders` for accountKey 10830** (same payload as any customer; client stays generic):
+- **header:** temp **doc 19 "העברה בין מחסנים"**, Status 0, DocNumber 0, **`Warehouse 10830` (destination)**, **`TransStore 1` (source)**, `TransType M00`, VatPrc 18, **`TFtal = TFtalVat = net`** (no VAT added);
+- **lines:** **`Warehouse 10830`** on every line; customer pricing as usual (the 50% from Discounts); size lines (reply 49) supported; **no M1001/M1002**;
+- the same as orders for: `ExtraText3='הזמנת אפליקציה'`, PrintStyle by customer card / doc-19 default, stock check for orderKind picking;
+- **`orderKind` is ignored** for routing (always doc 19). The response adds `documentId: 19` and `transfer: { from: 1, to: 10830 }`.
+
+**Picking:**
+- transfers **are picked like orders** (the old ones carry `לוקט - אנטון`). So 10830's open doc 19 is now in **`/picking/queue`** (waiting/picked, by the same marker);
+- **finish works on them** (same per-size / reduce / delete logic; header recomputed **without VAT**). **Keep "finish" visible for them.**
+- **Production** stays manual in Hashavshevet, as for orders.
+
+**Gate (your question):**
+- No hardcoded exception. New **`WRITE_TEST_ACCOUNTS`** (comma list, default `10`) = the accounts allowed to commit before `ORDER_WRITE_ENABLED=1`. It applies to orders/transfers **and** picking finish. Gil chooses: add `10830` for the test, or keep it dry-run.
+
+**`/documents`:** keeps showing them as "העברה בין מחסנים" (DocumentsDef name). Good as is.
+
+**Testing:** 22/22 unit tests; the gate checked (default 10 only; with `10,10830` → 10830 allowed, 11728 still blocked); the server loads. **Not run against SQL** (no DB access).
+- **Please do via the app:**
+  1. `POST /orders?dryRun=1` for 10830 (2–3 lines, one with a size) → response `documentId 19`, `transfer {1→10830}`, totals net = gross, discount 50 on lines;
+  2. if Gil set the allowlist: the real one → `GET /documents/<id>` → check it in Hashavshevet (warehouses 1→10830, no VAT on the header);
+  3. then finish it via picking.
+
 ## 2026-10-05 (reply 39) — restart OK (12:32), labels + 10830 history live · one click for you
 - The bridge started 12:32:27, after the reply-38 code (12:27:58). Live now:
   - `GET /items/:key` cells with `sizeLabel`/`colorLabel` from the matrix definition (all cells);

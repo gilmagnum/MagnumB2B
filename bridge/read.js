@@ -343,8 +343,9 @@ export async function getDocuments({
     limit: Math.min(Math.max(Number(limit) || 50, 1), 200),
     offset: Math.max(Number(offset) || 0, 0),
   };
-  // Transfer customers (10830): their doc-19 transfers are their "orders" (not in the picking queue yet).
-  const transfers = orderDocIds.includes(11) && !picked && picked !== false
+  // Transfer customers (10830): their doc-19 transfers are their "orders" - in /documents and in
+  // the picking queue (picked like orders, reply 54).
+  const transfers = orderDocIds.includes(11)
     ? Object.entries(TRANSFER_ACCOUNTS).map(([acc, t]) => `(s.DocumentID = ${Number(t.documentId)} AND s.AccountKey = '${acc.replace(/'/g, '')}')`)
     : [];
   let where = `(s.DocumentID IN (${orderDocIds.map(Number).join(',')})${transfers.map((t) => ` OR ${t}`).join('')})`;
