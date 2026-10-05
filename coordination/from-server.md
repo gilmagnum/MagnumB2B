@@ -1,6 +1,40 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-05 (reply 38) — matrix labels DONE (reply 48) · 10830 transfer structure (reply 53) + read side. Gil: restart; decide the 10830 write
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) The start-up research ran fine; results are in `logs\research-*.json`. The temporary research code and the `/debug/matrix-research` endpoint are **removed** in this change.
+
+### Reply 48 — every matrix cell labelled ✅
+- **Source:** **`IDefMatrix`** (per model: `LineHead`/`ColHead`, e.g. "צבע"/"מידה", `NumOfLines`/`NumOfColumn`) + **`IDefMatrixTbl`** (named entries per model: `VorH 0` = lines, `VorH 1` = columns, ID order, with `Code`).
+- **Cell SKU = model + line code + column code** (KD54301 + 501 + 04 = KD5430150104), so labels are **matched by code**. Position is used only when it agrees with the codes; the cell's own NoteID 29/33 is the last resort. Colour vs size axis comes from the headers (default line = colour, column = size).
+- **Applied to:** `GET /items/:key` `cells[].sizeLabel/colorLabel` **and** the catalog sync (`item_variants.size_label/color_label`).
+- **Check on real KD54301 data:** labels 86/135 → 109/135 using a 15-row sample of the table. The service reads the full table, so expect 135/135. E.g. L10 = "תכלת 512", L14 = "כחול 523", sizes "04"…"18". Tests 22/22.
+
+### Reply 53 — customer 10830 (י.ר מגנום סחר): how its "orders" are stored
+- **DocumentID 19 "העברה בין מחסנים"**: **1,373 docs** for 10830 (plus 103 doc 43, 52 invoices, 2 credits). Other transfer types exist: 18 "…- יציאה", 55/56 agent variants.
+- They come from **the old site exactly like orders**: `ExtraText3='הזמנת אתר'`, ExtraText1 = site order no., `ExtraText2='לוקט - אנטון'` (picked), then **produced manually** (Status 1, DocNumber assigned, e.g. 4248).
+- **Header:**
+  - `DocumentID 19`, `AccountKey 10830`, AccountName snapshot;
+  - **`Warehouse = 10830` (destination)**, **`TransStore = 1` (source)**, `TransAgent 0`;
+  - `TransType M00`, `VatPrc 18`, PrintStyle 15, Osek874;
+  - **`TFtal = TFtalVat = Σ line TFtal` (no VAT added on the header)**, DiscountPrc 0, CloseType 0.
+- **Lines:** flat Tree 0, `DocumentID 19`, **`Warehouse 10830` on every line**, `Price` (e.g. 60) + **`DiscountPrc 50`** → TFtal = qty × price × 0.5.
+  - Line `TftalVat` = TFtal × 1.18 as usual; Supply/Base/PurchQuantity = qty; LineNum/LineNoForSorting as in orders.
+  - **No M1001/M1002.**
+  - `BurdonOn` on the produced lines links the paired move that production creates (not needed on a temp doc).
+- **Pricing:** our resolver already gives the customer's discount from `Discounts`, so the 50% should come out the same. Verify on the first test.
+
+**Proposed write (needs Gil's GO — a new document type):** in `POST /orders`, when `accountKey === '10830'` (config `TRANSFER_ACCOUNTS`), regardless of `orderKind`:
+- write a temp **doc 19** (Status 0, DocNumber 0) with `Warehouse 10830`, `TransStore 1`, header **TFtal = TFtalVat = net** (no VAT), line `Warehouse 10830`, **no shipping lines**;
+- everything else as orders (marker, PrintStyle by card/default, size lines, account-10 gate / ORDER_WRITE_ENABLED);
+- picking: include 10830's open doc 19 in `/picking/queue` and allow finish on doc 19 (same marker/shortage logic);
+- test first with a dry run, then one real transfer that Gil checks in Hashavshevet.
+
+**Read side — done now (in this restart):** `GET /documents` (and `?account=10830`) **includes 10830's doc-19 transfers** with `docTypeName` "העברה בין מחסנים", so history is visible. `GET /documents/:id` already works for them. Not in `/picking/queue` until the write is approved.
+
 ## ⚡ 2026-10-05 (reply 37) — stock sync LIVE ✅ · reply 53 (10830 transfers) + reply 48 research now run by the bridge itself. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

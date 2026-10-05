@@ -46,7 +46,12 @@ export const ORDER_WAREHOUSE = 1;
 export const VAT_PRC = 18;
 // Accounts.SortGroup of customers (all orders since 2025 come from these; the rest are ledger/supplier accounts).
 export const CUSTOMER_SORT_GROUPS = (env.CUSTOMER_SORT_GROUPS || '10,11,12').split(',');
-export const TEST_ACCOUNT_KEY = '10'; // "לקוחות שונים לא לליקוט"
+export const TEST_ACCOUNT_KEY = '10';
+
+// Customers whose "orders" are inter-warehouse transfers (reply 53, verified on 1,373 documents of 10830):
+// DocumentID 19 "העברה בין מחסנים", Stock.TransStore = source warehouse, Stock.Warehouse (and line
+// Warehouse) = destination, no VAT added on the header. Read side only for now (write pending Gil's OK).
+export const TRANSFER_ACCOUNTS = { '10830': { documentId: 19, fromWarehouse: 1, toWarehouse: 10830 } }; // "לקוחות שונים לא לליקוט"
 
 // Picking orders always get both lines (qty 0 when unused); price 0 (priced manually in Hashavshevet). API shipping.carton -> parcel line.
 export const SHIPPING_ITEMS = {

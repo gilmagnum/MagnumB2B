@@ -36,8 +36,8 @@ type Item = {
 
 type MatrixCell = {
   itemkey: string;            // real cell SKU - this is what goes on the order line
-  sizeLabel?: string;         // cell NoteID 33
-  colorLabel?: string;        // cell NoteID 29
+  sizeLabel?: string;         // from the matrix definition (IDefMatrixTbl, matched by SKU code), else cell NoteID 33
+  colorLabel?: string;        // from the matrix definition (IDefMatrixTbl), else cell NoteID 29
   line: number; col: number;  // IMatrixItems Line/Col (0-based); col=0 => 1D matrix
   stock: number;
 };
@@ -67,7 +67,7 @@ type ProducedDoc = { stockId: number; documentId: number; docTypeName: string; d
 type Document = {
   stockId: number;            // Stock.ID of the order (app order number)
   docNumber: number;          // Hashavshevet DocNumber (0 while it is a temp order)
-  documentId: number;         // 11 הזמנת סוכן | 6 הזמנה
+  documentId: number;         // 11 הזמנת סוכן | 6 הזמנה | 19 העברה בין מחסנים (transfer customers, e.g. 10830)
   docTypeName: string;        // DocumentsDef.DocName
   accountKey: string; customerName: string; agent?: number;
   date: string;               // Stock.IssueDate, YYYY-MM-DD

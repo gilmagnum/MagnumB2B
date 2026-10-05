@@ -1,6 +1,6 @@
 import { query, key, sql } from './db.js';
 import { PICK_NOTES_FIELD } from './picking.js';
-import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS, SHIPPING_ITEMS } from './config.js';
+import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS, SHIPPING_ITEMS, TRANSFER_ACCOUNTS } from './config.js';
 
 const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
 const ITEM_COLUMNS =
@@ -106,23 +106,79 @@ export function getMatrixChildren(fatherItemKey) {
 }
 
 // Matrix cells with stock and their size/color labels (ExtraNotes 33 "מידה למטריצה", 29 "צבע").
+// --- matrix labels (reply 48) ---------------------------------------------------------------
+// Hashavshevet's matrix definition: IDefMatrix (per model: LineHead/ColHead, e.g. "צבע"/"מידה") and
+// IDefMatrixTbl (per model: named entries, VorH 0 = lines, VorH 1 = columns, each in ID order).
+// A cell SKU is model + line code + column code (KD54301 + 501 + 04), so labels are matched by
+// code first and by position as a fallback. Cells' own NoteID 29/33 values are the last resort.
+export function matrixAxes(defRows, tblRows) {
+  const axes = new Map();
+  const get = (k) => {
+    if (!axes.has(k)) axes.set(k, { lineHead: null, colHead: null, lines: [], cols: [] });
+    return axes.get(k);
+  };
+  for (const d of defRows) Object.assign(get(trim(d.ItemKey)), { lineHead: trim(d.LineHead) || null, colHead: trim(d.ColHead) || null });
+  for (const t of [...tblRows].sort((a, b) => a.ID - b.ID)) {
+    const entry = { name: trim(t.Name) || trim(t.ItemName) || null, code: trim(t.Code) || '' };
+    (Number(t.VorH) === 1 ? get(trim(t.ItemKey)).cols : get(trim(t.ItemKey)).lines).push(entry);
+  }
+  return axes;
+}
+
+export function labelCell(cell, axis) {
+  let line = axis?.lines[cell.line];
+  let col = axis?.cols[cell.col];
+  const suffix = cell.itemKey.startsWith(cell.fatherKey) ? cell.itemKey.slice(cell.fatherKey.length) : null;
+  if (axis && suffix != null && !(line && col && `${line.code}${col.code}` === suffix)) {
+    // Position and code disagree: resolve by code only - never guess by position here.
+    const hits = axis.lines.flatMap((l) => axis.cols.filter((c) => `${l.code}${c.code}` === suffix).map((c) => [l, c]));
+    if (hits.length === 1) {
+      [line, col] = hits[0];
+    } else {
+      const lineHits = axis.lines.filter((l) => l.code && suffix.startsWith(l.code));
+      const colHits = axis.cols.filter((c) => c.code && suffix.endsWith(c.code));
+      line = lineHits.length === 1 ? lineHits[0] : undefined;
+      col = colHits.length === 1 ? colHits[0] : undefined;
+    }
+  }
+  // Which axis is colour/size comes from the headers; default line = colour, column = size.
+  const lineIsSize = /מידה/.test(axis?.lineHead ?? '') || /צבע/.test(axis?.colHead ?? '');
+  const [colorEntry, sizeEntry] = lineIsSize ? [col, line] : [line, col];
+  return {
+    colorLabel: colorEntry?.name || cell.colorNote || undefined,
+    sizeLabel: sizeEntry?.name || cell.sizeNote || undefined,
+  };
+}
+
+async function loadAxes(fatherKey) {
+  const params = fatherKey ? { k: key(fatherKey) } : {};
+  const where = fatherKey ? ' WHERE ItemKey = @k' : '';
+  const [defs, tbl] = await Promise.all([
+    query(`SELECT ItemKey, LineHead, ColHead FROM IDefMatrix${where}`, params),
+    query(`SELECT ID, ItemKey, Name, ItemName, Code, VorH FROM IDefMatrixTbl${where}`, params),
+  ]);
+  return matrixAxes(defs, tbl);
+}
+
+// Matrix cells of one model with stock and size/colour labels.
 export async function getMatrixCells(fatherItemKey) {
-  const rows = await query(
-    `SELECT m.ItemKey, m.Line, m.Col, i.Quantity AS stock,
-       (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 33) AS sizeLabel,
-       (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 29) AS colorLabel
-     FROM IMatrixItems m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
-     WHERE m.FItemKey = @k ORDER BY m.Line, m.Col`,
-    { k: key(fatherItemKey) },
-  );
-  return rows.map((r) => ({
-    itemkey: trim(r.ItemKey),
-    sizeLabel: trim(r.sizeLabel) || undefined,
-    colorLabel: trim(r.colorLabel) || undefined,
-    line: r.Line,
-    col: r.Col,
-    stock: r.stock ?? 0,
-  }));
+  const [rows, axes] = await Promise.all([
+    query(
+      `SELECT m.ItemKey, m.Line, m.Col, i.Quantity AS stock,
+         (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 33) AS sizeNote,
+         (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 29) AS colorNote
+       FROM IMatrixItems m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
+       WHERE m.FItemKey = @k ORDER BY m.Line, m.Col`,
+      { k: key(fatherItemKey) },
+    ),
+    loadAxes(fatherItemKey),
+  ]);
+  const father = trim(fatherItemKey);
+  return rows.map((r) => {
+    const cell = { itemKey: trim(r.ItemKey), fatherKey: father, line: r.Line, col: r.Col,
+      sizeNote: trim(r.sizeNote) || null, colorNote: trim(r.colorNote) || null };
+    return { itemkey: cell.itemKey, ...labelCell(cell, axes.get(father)), line: r.Line, col: r.Col, stock: r.stock ?? 0 };
+  });
 }
 
 // Active accounts; pass agent to get only that agent's customers.
@@ -236,20 +292,21 @@ export async function getMatrixFathers(itemKeys) {
 
 // All matrix cells of all models, with size/color labels (for the catalog sync).
 export async function getAllMatrixCells() {
-  const rows = await query(
-    `SELECT m.ItemKey, m.FItemKey, m.Line, m.Col, sz.Note AS sizeLabel, cl.Note AS colorLabel
-     FROM IMatrixItems m
-     LEFT JOIN ExtraNotes sz ON sz.KeF = m.ItemKey AND sz.NoteID = 33
-     LEFT JOIN ExtraNotes cl ON cl.KeF = m.ItemKey AND cl.NoteID = 29`,
-  );
-  return rows.map((r) => ({
-    itemKey: trim(r.ItemKey),
-    fatherKey: trim(r.FItemKey),
-    line: r.Line,
-    col: r.Col,
-    sizeLabel: trim(r.sizeLabel) || null,
-    colorLabel: trim(r.colorLabel) || null,
-  }));
+  const [rows, axes] = await Promise.all([
+    query(
+      `SELECT m.ItemKey, m.FItemKey, m.Line, m.Col, sz.Note AS sizeNote, cl.Note AS colorNote
+       FROM IMatrixItems m
+       LEFT JOIN ExtraNotes sz ON sz.KeF = m.ItemKey AND sz.NoteID = 33
+       LEFT JOIN ExtraNotes cl ON cl.KeF = m.ItemKey AND cl.NoteID = 29`,
+    ),
+    loadAxes(),
+  ]);
+  return rows.map((r) => {
+    const cell = { itemKey: trim(r.ItemKey), fatherKey: trim(r.FItemKey), line: r.Line, col: r.Col,
+      sizeNote: trim(r.sizeNote) || null, colorNote: trim(r.colorNote) || null };
+    const labels = labelCell(cell, axes.get(cell.fatherKey));
+    return { ...cell, sizeLabel: labels.sizeLabel ?? null, colorLabel: labels.colorLabel ?? null };
+  });
 }
 
 // Orders a produced document (by its DocNumber) came from, walking BaseMoveID back up to two
@@ -286,7 +343,11 @@ export async function getDocuments({
     limit: Math.min(Math.max(Number(limit) || 50, 1), 200),
     offset: Math.max(Number(offset) || 0, 0),
   };
-  let where = `s.DocumentID IN (${orderDocIds.map(Number).join(',')})`;
+  // Transfer customers (10830): their doc-19 transfers are their "orders" (not in the picking queue yet).
+  const transfers = orderDocIds.includes(11) && !picked && picked !== false
+    ? Object.entries(TRANSFER_ACCOUNTS).map(([acc, t]) => `(s.DocumentID = ${Number(t.documentId)} AND s.AccountKey = '${acc.replace(/'/g, '')}')`)
+    : [];
+  let where = `(s.DocumentID IN (${orderDocIds.map(Number).join(',')})${transfers.map((t) => ` OR ${t}`).join('')})`;
   if (agent) {
     where += ' AND a.Agent = @agent';
     params.agent = Number(agent);
