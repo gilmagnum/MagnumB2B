@@ -3,12 +3,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOrderContext } from "../../lib/useOrderContext";
 import type { OrderKind } from "../../lib/bridge";
+import { isTransferAccount } from "../../lib/order";
 
 // Step 2 of the ordering flow: choose the order kind for the selected customer, then go to the catalog.
 export default function StartOrderPage() {
   const { ctx, setKind } = useOrderContext();
   const router = useRouter();
-  const [kind, setLocalKind] = useState<OrderKind>(ctx?.orderKind ?? "picking");
+  const [kind, setLocalKind] = useState<OrderKind>(isTransferAccount(ctx?.accountKey) ? "picking" : (ctx?.orderKind ?? "picking"));
 
   if (!ctx) {
     return (
@@ -41,8 +42,14 @@ export default function StartOrderPage() {
 
       <h3 style={{ color: "var(--brand-strong)", marginBottom: 8 }}>סוג הזמנה</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12, maxWidth: 520 }}>
-        <Option value="picking" title="לליקוט (הזמנת סוכן)" sub="הזמנה שנכנסת מיד לליקוט במחסן. נדרש מלאי." />
-        <Option value="future" title="עתידי (הזמנה)" sub="הזמנה עתידית ללא ליקוט מיידי. פריטי 'התעלם ממלאי' פתוחים גם ללא מלאי." />
+        {isTransferAccount(ctx.accountKey) ? (
+          <Option value="picking" title="ליקוט למחסן לקוח" sub="העברה בין מחסנים — נכנסת לליקוט ומועברת למחסן הלקוח. (ללקוח זה זו האפשרות היחידה.)" />
+        ) : (
+          <>
+            <Option value="picking" title="לליקוט (הזמנת סוכן)" sub="הזמנה שנכנסת מיד לליקוט במחסן. נדרש מלאי." />
+            <Option value="future" title="עתידי (הזמנה)" sub="הזמנה עתידית ללא ליקוט מיידי. פריטי 'התעלם ממלאי' פתוחים גם ללא מלאי." />
+          </>
+        )}
       </div>
 
       <div style={{ marginTop: 20 }}>

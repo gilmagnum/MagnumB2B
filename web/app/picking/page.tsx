@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { bridge, type Document } from "../../lib/bridge";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import { managerOrAbove } from "../../lib/roles";
+import { getActiveLocks } from "../picking-actions";
 
 // Picking queue. Warehouse screen (role picker/admin). Read-only for now —
 // "finish picking" (marking Hashavshevet) is deferred until Gil examines a live pick.
@@ -14,6 +15,7 @@ export default function PickingPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [locks, setLocks] = useState<Record<number, string>>({});
 
   useEffect(() => {
     (async () => {
@@ -29,7 +31,9 @@ export default function PickingPage() {
     if (!allowed) return;
     setLoading(true); setErr("");
     try {
-      setRows(await bridge.pickingQueue(0, { state, q: q.trim() || undefined }));
+      const r = await bridge.pickingQueue(0, { state, q: q.trim() || undefined });
+      setRows(r);
+      getActiveLocks(r.map((d) => d.stockId)).then(setLocks).catch(() => {});
     } catch {
       setErr("הגשר עדיין לא מחובר — תור הליקוט ייטען כשהגשר יעלה.");
       setRows([]);
@@ -53,35 +57,34 @@ export default function PickingPage() {
       </div>
 
       {err && <p style={{ color: "#a60", fontSize: 13 }}>{err}</p>}
-      {loading ? <p>טוען…</p> : (
-        <div className="table-wrap">
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 560 }}>
-            <thead>
-              <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
-                <th style={{ padding: 8 }}>הזמנה</th><th>לקוח</th><th>תאריך</th><th>סכום</th>
-                {state === "picked" && <th>לוקט ע״י</th>}<th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 && !err && <tr><td colSpan={6} style={{ padding: 16, color: "#888" }}>אין הזמנות {state === "waiting" ? "ממתינות לליקוט" : "שלוקטו"}.</td></tr>}
-              {rows.map((d) => (
-                <tr key={d.stockId} style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: 8 }}>{d.docTypeName} {d.docNumber ? `#${d.docNumber}` : `(זמני ${d.stockId})`}</td>
-                  <td>{d.customerName} <span style={{ color: "#888" }}>({d.accountKey})</span></td>
-                  <td>{d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""}</td>
-                  <td>{d.total != null ? `${d.total.toFixed(2)} ₪` : ""}</td>
-                  {state === "picked" && <td>{d.picker ?? "—"}</td>}
-                  <td>
-                    {state === "waiting"
-                      ? <a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>ליקוט ←</a>
-                      : managerOrAbove(role)
-                        ? <a href={`/picking/${d.stockId}`} style={{ color: "#1e2a78", fontWeight: 700 }}>פתח מחדש ←</a>
-                        : <span style={{ color: "#888" }}>לוקט</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {loading ? <p>טוען…</p> : rows.length === 0 && !err ? (
+        <p style={{ color: "#888", padding: 12 }}>אין הזמנות {state === "waiting" ? "ממתינות לליקוט" : "שלוקטו"}.</p>
+      ) : (
+        /* Responsive card list — no horizontal scroll on mobile/tablet. */
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 10 }}>
+          {rows.map((d) => {
+            const canOpen = state === "waiting" || managerOrAbove(role);
+            const href = `/picking/${d.stockId}`;
+            const inner = (
+              <div className="card card-pad" style={{ display: "grid", gap: 6, height: "100%" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                  <b style={{ color: "var(--brand-strong)" }}>{d.docNumber ? `#${d.docNumber}` : `זמני ${d.stockId}`}</b>
+                  <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>{d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""}</span>
+                </div>
+                <div style={{ fontWeight: 600 }}>{d.customerName} <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}>({d.accountKey})</span></div>
+                <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>{d.docTypeName}{d.total != null ? ` · ${d.total.toFixed(2)} ₪` : ""}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 2 }}>
+                  <span style={{ color: canOpen ? "var(--brand)" : "var(--ink-muted)", fontWeight: 700 }}>
+                    {state === "waiting" ? "ליקוט ←" : managerOrAbove(role) ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}
+                  </span>
+                  {locks[d.stockId] && <span className="chip chip-warn" title="בליקוט כעת">🔒 {locks[d.stockId]}</span>}
+                </div>
+              </div>
+            );
+            return canOpen
+              ? <a key={d.stockId} href={href} style={{ textDecoration: "none", color: "inherit" }}>{inner}</a>
+              : <div key={d.stockId}>{inner}</div>;
+          })}
         </div>
       )}
     </>

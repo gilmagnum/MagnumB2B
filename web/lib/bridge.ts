@@ -92,11 +92,13 @@ export const bridge = {
   createOrder: (order: NewOrder) =>
     call<{ stockId: number }>(`/orders`, { method: "POST", body: JSON.stringify(order) }),
   // Documents list. agentId 0 => all (admin); else the agent's customers.
-  documents: (agentId: number, opts: { status?: string; q?: string; limit?: number } = {}) => {
+  documents: (agentId: number, opts: { status?: string; q?: string; limit?: number; from?: string; to?: string } = {}) => {
     const p = new URLSearchParams({ agent: String(agentId) });
     if (opts.status) p.set("status", opts.status);
     if (opts.q) p.set("q", opts.q);
     if (opts.limit) p.set("limit", String(opts.limit));
+    if (opts.from) p.set("from", opts.from);
+    if (opts.to) p.set("to", opts.to);
     return call<Document[]>(`/documents?${p.toString()}`);
   },
   document: (stockId: number) => call<DocumentDetail>(`/documents/${stockId}`),

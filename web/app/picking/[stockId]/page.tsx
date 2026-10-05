@@ -1,18 +1,23 @@
 "use client";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { bridge, type DocumentDetail, type DocLine } from "../../../lib/bridge";
 import { fetchImages } from "../../../lib/images";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import { managerOrAbove } from "../../../lib/roles";
+import { openPickingSession, savePickingSession, releasePickingSession } from "../../picking-actions";
 
-// Per-order picking. Picker enters picked qty; shortages are flagged (full vs partial).
-// "סיום ליקוט" opens a confirmation of the shortages + a notes field, saves app
-// documentation, and (when the bridge endpoint is live) marks לוקט ע"י + applies shortages.
+// Per-order picking (mobile/tablet first). The order is locked to one picker; picking starts
+// from 0; each line can be marked full in one click or typed; progress can be saved & resumed,
+// or reset & released. "סיום ליקוט" writes the marker + shortages to Hashavshevet.
 export default function PickOrderPage({ params }: { params: Promise<{ stockId: string }> }) {
   const { stockId } = use(params);
   const id = Number(stockId);
+  const router = useRouter();
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [err, setErr] = useState("");
+  const [lockedBy, setLockedBy] = useState("");
+  const [tookOver, setTookOver] = useState(false);
   const [picked, setPicked] = useState<Record<string, number>>({});
   const [images, setImages] = useState<Record<string, string>>({});
   const [picker, setPicker] = useState("");
@@ -22,33 +27,53 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState("");
 
+  const lineKey = (l: DocLine) => String(l.lineId ?? `${l.itemkey}|${l.size ?? ""}`);
+  const pickedRef = useRef(picked); pickedRef.current = picked;
+  const notesRef = useRef(notes); notesRef.current = notes;
+
   useEffect(() => {
     (async () => {
+      let pn = "", rl = "";
       const { data: { user } } = await supabaseBrowser().auth.getUser();
       if (user) {
         const { data: prof } = await supabaseBrowser().from("profiles").select("full_name, role").eq("id", user.id).single();
-        setPicker(prof?.full_name ?? user.email ?? "");
-        setRole(prof?.role ?? "");
+        pn = prof?.full_name ?? user.email ?? ""; rl = prof?.role ?? "";
+        setPicker(pn); setRole(rl);
       }
+      let d: DocumentDetail;
+      try { d = await bridge.document(id); } catch { setErr("הגשר עדיין לא מחובר — פרטי ההזמנה ייטענו כשהגשר יעלה."); return; }
+      setDoc(d);
+      fetchImages((d.lines ?? []).map((l) => l.itemkey)).then(setImages).catch(() => {});
+      // Acquire the picking session (lock). Managers reopening a produced pick still lock it.
+      const sess = await openPickingSession(id, pn).catch(() => ({} as { lockedBy?: string }));
+      if (sess.lockedBy) { setLockedBy(sess.lockedBy); return; }
+      if ("takenOver" in sess && sess.takenOver) setTookOver(true);
+      const prog = ("progress" in sess ? sess.progress : undefined) ?? {};
+      const init: Record<string, number> = {};
+      // Fresh pick starts from 0 (or a saved draft). A REOPENED (already-picked) order starts
+      // from the current line quantities, so a manager review that finishes unchanged keeps them.
+      for (const l of d.lines ?? []) if (!l.isShipping) init[lineKey(l)] = d.picked ? l.qty : (prog[lineKey(l)] ?? 0);
+      setPicked(init);
+      if ("notes" in sess && sess.notes) setNotes(sess.notes);
     })();
-    bridge.document(id)
-      .then((d) => {
-        setDoc(d);
-        const init: Record<string, number> = {};
-        for (const l of d.lines ?? []) if (!l.isShipping) init[lineKey(l)] = l.qty;
-        setPicked(init);
-        fetchImages((d.lines ?? []).map((l) => l.itemkey)).then(setImages).catch(() => {});
-      })
-      .catch(() => setErr("הגשר עדיין לא מחובר — פרטי ההזמנה ייטענו כשהגשר יעלה."));
-  }, [id]);
-
-  // A line key must distinguish same-SKU lines that differ only by size (ruler products).
-  const lineKey = (l: DocLine) => String(l.lineId ?? `${l.itemkey}|${l.size ?? ""}`);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = useMemo(
     () => (doc?.lines ?? []).filter((l) => !l.isShipping).sort((a, b) => (a.itemkey.localeCompare(b.itemkey) || (a.size ?? "").localeCompare(b.size ?? ""))),
     [doc],
   );
+
+  const alreadyPicked = doc?.picked === true;
+  const isAdmin = managerOrAbove(role);
+  const readOnly = !!doc && alreadyPicked && !isAdmin;
+  const reopened = !!doc && alreadyPicked && isAdmin;
+
+  // Heartbeat: keep the lock alive + autosave progress while picking.
+  useEffect(() => {
+    if (!doc || lockedBy || readOnly || done) return;
+    const t = setInterval(() => { savePickingSession(id, pickedRef.current, notesRef.current).catch(() => {}); }, 120000);
+    return () => clearInterval(t);
+  }, [doc, lockedBy, readOnly, done, id]);
 
   const shortageOf = (l: DocLine): "none" | "full" | "partial" => {
     const p = picked[lineKey(l)] ?? 0;
@@ -56,13 +81,23 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     return p <= 0 ? "full" : "partial";
   };
   const shortages = lines.filter((l) => shortageOf(l) !== "none");
+  const setQty = (l: DocLine, v: number) => setPicked((p) => ({ ...p, [lineKey(l)]: Math.max(0, Math.min(l.qty, v)) }));
+  const fillAll = () => setPicked(Object.fromEntries(lines.map((l) => [lineKey(l), l.qty])));
+
+  const saveAndBack = async () => {
+    setSaving(true); await savePickingSession(id, picked, notes).catch(() => {}); setSaving(false);
+    router.push("/picking");
+  };
+  const resetRelease = async () => {
+    if (!window.confirm("לאפס את הליקוט ולשחרר את ההזמנה למלקטים אחרים?")) return;
+    setSaving(true); await releasePickingSession(id).catch(() => {}); setSaving(false);
+    router.push("/picking");
+  };
 
   const confirmFinish = async () => {
     if (!doc) return;
     setSaving(true);
     const shortageRows = shortages.map((l) => ({ itemkey: l.itemkey, size: l.size, name: l.name, ordered: l.qty, picked: picked[lineKey(l)] ?? 0, kind: shortageOf(l) }));
-    // 1) App documentation — always saved.
-    let hashavshevetOk = false;
     try {
       const { data: { user } } = await supabaseBrowser().auth.getUser();
       await supabaseBrowser().from("picking_logs").insert({
@@ -72,15 +107,13 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         shortages: shortageRows, created_by: user?.id ?? null,
       });
     } catch { /* log best-effort */ }
-    // 2) Hashavshevet write (marker + shortages + notes).
-    let note = "";
+    let hashavshevetOk = false, note = "";
     try {
       await bridge.finishPicking(doc.stockId, {
         picker, notes: notes.trim() || undefined,
         lines: lines.map((l) => ({ itemkey: l.itemkey, size: l.size, pickedQty: picked[lineKey(l)] ?? 0 })),
       });
       hashavshevetOk = true;
-      // Fire push events: pick finished (admins) + the customer's agent — best-effort.
       fetch("/api/push/event", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: "pick_finished", body: `${doc.customerName} · ${doc.docNumber ? "#" + doc.docNumber : doc.stockId}`, url: "/documents" }) }).catch(() => {});
       if (doc.agent != null) fetch("/api/push/event", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -94,6 +127,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         : /ITEM_NOT_IN_ORDER|422/.test(m) ? "פריט שאינו בהזמנה."
         : "הגשר לא זמין כרגע.";
     }
+    await releasePickingSession(id).catch(() => {}); // picking done → release the lock
     setSaving(false); setConfirm(false);
     setDone(hashavshevetOk
       ? `הליקוט הושלם ונכתב לחשבשבת ✓ · לוקט ע״י ${picker}`
@@ -102,76 +136,80 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
 
   if (err) return <p className="chip chip-warn">{err} <a href="/picking">← לתור</a></p>;
   if (!doc) return <p>טוען…</p>;
-
-  const alreadyPicked = doc.picked === true;
-  const isAdmin = managerOrAbove(role);
-  const readOnly = alreadyPicked && !isAdmin; // picker can't touch a closed pick
-  const reopened = alreadyPicked && isAdmin;  // admin re-opening a closed pick
+  if (lockedBy) return (
+    <>
+      <p><a href="/picking" style={{ color: "var(--brand)" }}>← תור הליקוט</a></p>
+      <p className="chip chip-warn" style={{ display: "block", padding: 14, fontSize: 15 }}>
+        ההזמנה בליקוט כעת אצל <b>{lockedBy}</b> — נעולה למלקטים אחרים. נסה שוב מאוחר יותר.
+      </p>
+    </>
+  );
 
   return (
     <>
       <p><a href="/picking" style={{ color: "var(--brand)" }}>← תור הליקוט</a></p>
-      <h1>ליקוט: {doc.docTypeName} {doc.docNumber ? `#${doc.docNumber}` : `(זמני ${doc.stockId})`}</h1>
-      <p style={{ color: "var(--ink-muted)" }}>לקוח: <b>{doc.customerName}</b> ({doc.accountKey}){doc.customer?.address ? ` · ${doc.customer.address}` : ""}{picker ? ` · מלקט: ${picker}` : ""}</p>
+      <h1 style={{ marginBottom: 4 }}>ליקוט {doc.docNumber ? `#${doc.docNumber}` : `(זמני ${doc.stockId})`}</h1>
+      <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>
+        <b>{doc.customerName}</b> ({doc.accountKey}){doc.customer?.address ? ` · ${doc.customer.address}` : ""}{picker ? ` · מלקט: ${picker}` : ""}
+      </p>
 
-      {readOnly && (
-        <p className="chip chip-warn" style={{ display: "block", padding: 12 }}>
-          הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""}. פתיחה מחדש לעדכון מתאפשרת למנהל בלבד.
-        </p>
-      )}
-      {reopened && !done && (
-        <p className="chip chip-info" style={{ display: "block", padding: 12 }}>
-          הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""} ונפתחה מחדש לעדכון. שינוי יעדכן את הליקוט בחשבשבת.
-          <br />שים לב: שורה שנמחקה בליקוט קודם (חוסר מלא) לא חוזרת — יש להוסיף אותה מחדש בחשבשבת.
-        </p>
-      )}
-
+      {tookOver && <p className="chip chip-info" style={{ display: "block", padding: 10 }}>הליקוט נלקח מהמלקט הקודם (לא היה פעיל) — המשך מהמצב השמור.</p>}
+      {readOnly && <p className="chip chip-warn" style={{ display: "block", padding: 12 }}>הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""}. פתיחה מחדש לעדכון מתאפשרת למנהל בלבד.</p>}
+      {reopened && !done && <p className="chip chip-info" style={{ display: "block", padding: 12 }}>הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""} ונפתחה מחדש. שינוי יעדכן את הליקוט בחשבשבת. (שורה שנמחקה בעבר לא חוזרת.)</p>}
       {done && <p className="chip chip-ok" style={{ display: "block", padding: 12 }}>{done} <a href="/picking" style={{ color: "inherit", textDecoration: "underline" }}>לתור</a></p>}
 
-      <div className="table-wrap">
-        <table className="data-table" style={{ minWidth: 640 }}>
-          <thead>
-            <tr><th style={{ width: 54 }}>תמונה</th><th>מק״ט</th><th>תיאור</th><th>מלאי</th><th>הוזמן</th><th>לוקט</th><th>סטטוס</th></tr>
-          </thead>
-          <tbody>
-            {lines.map((l) => {
-              const sh = shortageOf(l);
-              return (
-                <tr key={lineKey(l)} style={{ background: sh === "full" ? "var(--danger-soft)" : sh === "partial" ? "var(--warn-soft)" : undefined }}>
-                  <td style={{ padding: 6 }}>{images[l.itemkey] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={images[l.itemkey]} alt="" style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 6, background: "var(--surface-muted)" }} />
-                  ) : (
-                    <div style={{ width: 44, height: 44, borderRadius: 6, background: "var(--surface-muted)" }} />
-                  )}</td>
-                  <td style={{ fontWeight: 700 }}>{l.itemkey}{l.size ? <div><span className="chip chip-info" style={{ marginTop: 2 }}>מידה {l.size}</span></div> : null}</td>
-                  <td>{l.name}</td>
-                  <td style={{ color: (l.onHand ?? 0) < l.qty ? "var(--danger)" : "var(--ok)" }}>{l.onHand ?? "—"}</td>
-                  <td>{l.qty}{l.unit ? ` ${l.unit}` : ""}</td>
-                  <td>
-                    <input type="number" min={0} max={l.qty} value={picked[lineKey(l)] ?? 0} disabled={readOnly}
-                      onChange={(e) => setPicked({ ...picked, [lineKey(l)]: Math.max(0, Math.min(l.qty, Number(e.target.value))) })}
-                      style={{ width: 64 }} />
-                  </td>
-                  <td>
-                    {sh === "none" && <span className="chip chip-ok">✓ מלא</span>}
-                    {sh === "partial" && <span className="chip chip-warn">חוסר ({l.qty - (picked[lineKey(l)] ?? 0)})</span>}
-                    {sh === "full" && <span className="chip chip-danger">חסר לגמרי</span>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {!done && !readOnly && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "12px 0 8px" }}>
+          <span style={{ color: "var(--ink-muted)", fontSize: 13 }}>{lines.length} שורות · {shortages.length ? `${shortages.length} עם חוסר` : "הכל מלא"}</span>
+          <button onClick={fillAll} className="btn btn-sm">סמן הכל מלא ✓</button>
+        </div>
+      )}
 
-      <div className="card card-pad" style={{ marginTop: 16, background: "var(--surface-muted)" }}>
-        <b>סיכום:</b> {lines.length} שורות · {shortages.length ? `${shortages.length} עם חוסר` : "ללא חוסרים"}
+      {/* Responsive card list — no horizontal scroll on mobile/tablet. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 10 }}>
+        {lines.map((l) => {
+          const sh = shortageOf(l);
+          const q = picked[lineKey(l)] ?? 0;
+          const overStock = (l.onHand ?? Infinity) < l.qty;
+          return (
+            <div key={lineKey(l)} className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)"}` }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                {images[l.itemkey]
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={images[l.itemkey]} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />
+                  : <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontWeight: 700 }}>{l.itemkey}{l.size ? <span className="chip chip-info" style={{ marginInlineStart: 6 }}>מידה {l.size}</span> : null}</div>
+                  <div style={{ fontSize: 13, color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 14 }}>הוזמן: <b>{l.qty}</b>{l.unit ? ` ${l.unit}` : ""}</span>
+                <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <input type="number" inputMode="numeric" min={0} max={l.qty} value={q} disabled={readOnly}
+                    onChange={(e) => setQty(l, Number(e.target.value))}
+                    style={{ width: 72, padding: "8px", fontSize: 16, textAlign: "center", borderRadius: 8, border: "1px solid var(--border)" }} />
+                  <button onClick={() => setQty(l, l.qty)} disabled={readOnly} className="btn btn-primary btn-sm" style={{ padding: "8px 12px" }}>מלא</button>
+                </span>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {sh === "none" && <span className="chip chip-ok">✓ לוקט במלואו</span>}
+                {sh === "partial" && <span className="chip chip-warn">חוסר: {l.qty - q}</span>}
+                {sh === "full" && <span className="chip chip-danger">טרם לוקט</span>}
+                {overStock && <span className="chip chip-danger">⚠ הוזמן יותר מהמלאי</span>}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {!done && !readOnly && (
-        <div style={{ marginTop: 16 }}>
-          <button onClick={() => setConfirm(true)} className="btn btn-primary" style={{ padding: "10px 20px" }}>{reopened ? "עדכון ליקוט" : "סיום ליקוט"}</button>
+        <div style={{ position: "sticky", bottom: 0, background: "var(--surface)", borderTop: "1px solid var(--border)", padding: "12px 0", marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", zIndex: 10 }}>
+          <button onClick={() => setConfirm(true)} className="btn btn-primary" style={{ padding: "12px 20px", fontSize: 16 }}>{reopened ? "עדכון ליקוט" : "סיום ליקוט"}</button>
+          <button onClick={saveAndBack} disabled={saving} className="btn" style={{ padding: "12px 18px" }}>שמור וחזור</button>
+          <button onClick={resetRelease} disabled={saving} className="btn" style={{ padding: "12px 18px", color: "var(--danger)" }}>אפס ושחרר</button>
         </div>
       )}
 
@@ -190,7 +228,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                     {shortages.map((l) => (
                       <li key={lineKey(l)} style={{ marginBottom: 4 }}>
                         <b>{l.itemkey}</b>{l.size ? ` (מידה ${l.size})` : ""} — {shortageOf(l) === "full"
-                          ? <span style={{ color: "var(--danger)" }}>חסר לגמרי (השורה תימחק)</span>
+                          ? <span style={{ color: "var(--danger)" }}>לא לוקט (השורה תימחק)</span>
                           : <span style={{ color: "var(--warn)" }}>לוקטו {picked[lineKey(l)]} מתוך {l.qty} (השורה תעודכן)</span>}
                       </li>
                     ))}

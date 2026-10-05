@@ -91,17 +91,18 @@ export default function DocumentsPage() {
     if (agentId == null) { setLoading(false); if (role && !managerOrAbove(role)) setErr("למשתמש לא משויך קוד סוכן"); return; }
     setLoading(true); setErr(""); setExpanded(new Set());
     const effectiveQ = (ctx && onlyCustomer) ? ctx.accountKey : (q.trim() || undefined);
+    const r = dateRangeFor(datePreset, dateCustom); // server-side date filter when the bridge supports it
     try {
-      setDocs(await bridge.documents(agentId, { status: status === "all" ? undefined : status, q: effectiveQ, limit: 200 }));
+      setDocs(await bridge.documents(agentId, { status: status === "all" ? undefined : status, q: effectiveQ, limit: 200, from: r?.from, to: r?.to }));
     } catch {
       setErr("הגשר עדיין לא מחובר — רשימת המסמכים תיטען כשהגשר יעלה.");
       setDocs([]);
     } finally {
       setLoading(false);
     }
-  }, [agentId, role, status, q, ctx, onlyCustomer]);
+  }, [agentId, role, status, q, ctx, onlyCustomer, datePreset, dateCustom]);
 
-  useEffect(() => { void load(); }, [agentId, status, onlyCustomer]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(); }, [agentId, status, onlyCustomer, datePreset, dateCustom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const colCount = (ctx && onlyCustomer) ? 8 : 9;
   // Inside a customer, the bridge q is a LIKE match — enforce the exact accountKey here.
