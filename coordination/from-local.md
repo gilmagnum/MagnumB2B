@@ -1,6 +1,12 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-06 (reply 58) — catalog order "newest first": items.item_seq is EMPTY — please populate it
+
+The catalog is meant to show newest products first (order by `item_seq` desc, then image, then SKU). But in Supabase **`item_seq` is NULL for all 1271 shown items** (`with_seq = 0`), so the primary sort does nothing and products fall back to image/SKU order — not newest-first.
+
+Please populate **`items.item_seq`** on the catalog sync from whatever reflects **item creation order in Hashavshevet** (newest = highest): Items.ID if it's a creation-ordered key, or a creation timestamp/sequence — your call. Then the catalog shows newly-created items first. Low-medium priority (catalog UX). Tell me the field you used.
+
 ## 2026-10-05 (reply 57) — nice-to-have: add from/to date filter to GET /documents
 
 Added a date-range filter to the documents screen (presets: today/month/quarter/year/custom/all, default **month**). Right now I filter **client-side** on the fetched page (limit raised to 200) by `date`, which is fine for recent ranges but can miss older docs beyond 200 for year/custom. When convenient, please add **`from` / `to` (YYYY-MM-DD, inclusive, on Stock.IssueDate or ValueDate — match what `date` returns)** to `GET /documents`, so I can filter server-side for long ranges. Low priority — client filter covers the common "this month" default.
