@@ -112,6 +112,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   // Stock gating: out-of-stock can't be ordered — except a future order of an "ignore stock" item.
   const canIgnoreStock = ctx?.orderKind === "future" && !!item?.ignoreStock;
   const soldOut = (s?: number | null) => s != null && !canIgnoreStock && s <= 0;
+  const canOrder = !!ctx?.orderKind; // customer chosen AND order kind picked
   const gallery = (cat.images && cat.images.length ? cat.images : (cat.image_url ? [cat.image_url] : []));
   const mainImg = gallery[activeImg] ?? gallery[0];
 
@@ -173,6 +174,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
         </div>
 
         {!ctx && <p className="chip chip-warn" style={{ marginBottom: 12 }}>בחר לקוח לפני הזמנה — <a href="/customer" style={{ color: "inherit", textDecoration: "underline" }}>בחירת לקוח</a></p>}
+        {ctx && !ctx.orderKind && <p className="chip chip-warn" style={{ marginBottom: 12 }}>בחר סוג הזמנה לפני הוספה לסל — <a href="/start" style={{ color: "inherit", textDecoration: "underline" }}>התחלת הזמנה</a></p>}
 
         {(isMatrix || isRuler) && (perCarton > 0 || perBundle > 0) && (
           <label style={{ display: "block", margin: "8px 0" }}>
@@ -209,7 +211,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
                             <div style={{ display: "flex", justifyContent: "center", marginTop: 2 }}>
                               {soldOut(cell.stock)
                                 ? <span className="chip chip-danger">אזל</span>
-                                : <Stepper itemkey={cell.itemkey} unit={unit} title={`${name} ${label}`.trim()} packSize={unit === "carton" ? perCarton : perBundle} price={effPrice} disabled={!ctx} stock={cell.stock} />}
+                                : <Stepper itemkey={cell.itemkey} unit={unit} title={`${name} ${label}`.trim()} packSize={unit === "carton" ? perCarton : perBundle} price={effPrice} disabled={!canOrder} stock={cell.stock} />}
                             </div>
                           </td>
                         );
@@ -234,14 +236,14 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
                   <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
                   <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>חבילה{perBundle ? ` (${perBundle} יח׳)` : ""}</span>
                   <span style={{ marginInlineStart: "auto" }}>
-                    <Stepper itemkey={key} unit="bundle" sizeLabel={size} title={name} packSize={perBundle} price={effPrice} disabled={!ctx} addLabel="חבילה" stock={item?.stock} />
+                    <Stepper itemkey={key} unit="bundle" sizeLabel={size} title={name} packSize={perBundle} price={effPrice} disabled={!canOrder} addLabel="חבילה" stock={item?.stock} />
                   </span>
                 </div>
               ))}
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <Stepper itemkey={key} unit="carton" title={name} packSize={perCarton} price={effPrice} disabled={!ctx} addLabel={`קרטון${perCarton ? ` (${perCarton})` : ""}`} stock={item?.stock} />
+              <Stepper itemkey={key} unit="carton" title={name} packSize={perCarton} price={effPrice} disabled={!canOrder} addLabel={`קרטון${perCarton ? ` (${perCarton})` : ""}`} stock={item?.stock} />
               <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>קרטון מעורב — לפירוט לפי מידה בחר "חבילה"</span>
             </div>
           )

@@ -74,7 +74,7 @@ export default function CustomerPage() {
 
   // Pick a customer only; the order kind is chosen on the next screen ("התחלת הזמנה").
   const choose = (accountKey: string, customerName: string) => {
-    select({ accountKey, customerName, orderKind: ctx?.orderKind ?? "picking" });
+    select({ accountKey, customerName }); // no orderKind yet — chosen on /start
     router.push("/start");
   };
 

@@ -47,6 +47,7 @@ export default function CartPage() {
   }, [ctx, lines]);
 
   if (!ctx) return <p>יש לבחור לקוח לפני הזמנה. <a href="/customer">← בחירת לקוח</a></p>;
+  if (!ctx.orderKind) return <p>יש לבחור סוג הזמנה. <a href="/start">← התחלת הזמנה</a></p>;
   if (!lines.length) return (
     <>
       {msg && <p style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: msg.includes("✓") ? "#e8f7ee" : "#fdecea" }}>{msg}</p>}
