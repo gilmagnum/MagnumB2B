@@ -6,6 +6,7 @@ import EnableNotifications from "../components/EnableNotifications";
 import NotificationPrefs from "../components/NotificationPrefs";
 import EmailTestButton from "../components/EmailTestButton";
 import DriveImages from "../components/DriveImages";
+import CatalogSyncButton from "../components/CatalogSyncButton";
 import Icon from "../components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,9 @@ export default async function SettingsPage() {
 
           <h4 style={{ margin: "20px 0 0", color: "var(--brand-strong)" }}>תמונות מוצרים</h4>
           <DriveImages url={driveUrl} canEdit={canManageUsers(me.role)} />
+
+          <h4 style={{ margin: "20px 0 0", color: "var(--brand-strong)" }}>סנכרון קטלוג</h4>
+          <CatalogSyncButton />
         </section>
       )}
     </>
