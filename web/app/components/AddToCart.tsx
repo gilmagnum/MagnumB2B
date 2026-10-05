@@ -3,11 +3,12 @@ import { useCart, type Unit } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
 
 export default function AddToCart({
-  itemkey, title, perCarton, perBundle, price, only,
+  itemkey, title, perCarton, perBundle, price, only, stock,
 }: {
   itemkey: string; title: string;
   perCarton?: number | null; perBundle?: number | null; price?: number | null;
   only?: Unit; // restrict to a single order unit (e.g. carton only, for ruler cards in the grid)
+  stock?: number | null;
 }) {
   const { add, setQty, remove, qtyOf } = useCart();
   const { ctx } = useOrderContext();
@@ -26,7 +27,7 @@ export default function AddToCart({
 
   const label = (u: Unit) => (u === "carton" ? "קרטון" : "חבילה");
   const packOf = (u: Unit) => (u === "carton" ? (perCarton ?? undefined) : (perBundle ?? undefined)) ?? undefined;
-  const inc = (u: Unit) => add({ itemkey, title, qty: 1, unit: u, unitPrice: price ?? undefined, packSize: packOf(u) });
+  const inc = (u: Unit) => add({ itemkey, title, qty: 1, unit: u, unitPrice: price ?? undefined, packSize: packOf(u), stock: stock ?? undefined });
   const dec = (u: Unit) => {
     const cur = qtyOf(itemkey, u);
     if (cur <= 1) remove(itemkey, u);

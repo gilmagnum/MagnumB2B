@@ -108,6 +108,10 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const isMatrix = (item?.isMatrix ?? (cat.matrix_flag || cat.is_carton_size_item)) || false;
   // Ruler product: single SKU, order per size (bundle) via the in-app ruler, or a whole carton (mixed).
   const isRuler = !isMatrix && rulerSizes.length > 0;
+
+  // Stock gating: out-of-stock can't be ordered — except a future order of an "ignore stock" item.
+  const canIgnoreStock = ctx?.orderKind === "future" && !!item?.ignoreStock;
+  const soldOut = (s?: number | null) => s != null && !canIgnoreStock && s <= 0;
   const gallery = (cat.images && cat.images.length ? cat.images : (cat.image_url ? [cat.image_url] : []));
   const mainImg = gallery[activeImg] ?? gallery[0];
 
@@ -203,7 +207,9 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
                           <td key={s.i} style={td}>
                             <div style={{ fontSize: 11, color: low ? "var(--danger)" : "var(--ink-muted)" }}>מלאי: {cell.stock ?? "-"}</div>
                             <div style={{ display: "flex", justifyContent: "center", marginTop: 2 }}>
-                              <Stepper itemkey={cell.itemkey} unit={unit} title={`${name} ${label}`.trim()} packSize={unit === "carton" ? perCarton : perBundle} price={effPrice} disabled={!ctx} />
+                              {soldOut(cell.stock)
+                                ? <span className="chip chip-danger">אזל</span>
+                                : <Stepper itemkey={cell.itemkey} unit={unit} title={`${name} ${label}`.trim()} packSize={unit === "carton" ? perCarton : perBundle} price={effPrice} disabled={!ctx} stock={cell.stock} />}
                             </div>
                           </td>
                         );
@@ -217,27 +223,32 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
             ? <p className="chip chip-warn">גריד המידות והמלאי ייטענו כשהגשר יחובר.</p>
             : <p>טוען מידות…</p>
         ) : isRuler ? (
-          unit === "bundle" ? (
+          soldOut(item?.stock) ? (
+            <p className="chip chip-danger">אזל מהמלאי{ctx?.orderKind === "picking" ? " — לא ניתן להזמין לליקוט" : ""}</p>
+          ) : unit === "bundle" ? (
             <div style={{ display: "grid", gap: 8 }}>
               {!ctx && <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>בחר לקוח כדי להזמין.</span>}
+              {(item?.stock != null && item.stock > 0) && <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>מלאי כולל: {item.stock}</span>}
               {rulerSizes.map((size) => (
                 <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
                   <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
                   <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>חבילה{perBundle ? ` (${perBundle} יח׳)` : ""}</span>
                   <span style={{ marginInlineStart: "auto" }}>
-                    <Stepper itemkey={key} unit="bundle" sizeLabel={size} title={name} packSize={perBundle} price={effPrice} disabled={!ctx} addLabel="חבילה" />
+                    <Stepper itemkey={key} unit="bundle" sizeLabel={size} title={name} packSize={perBundle} price={effPrice} disabled={!ctx} addLabel="חבילה" stock={item?.stock} />
                   </span>
                 </div>
               ))}
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <Stepper itemkey={key} unit="carton" title={name} packSize={perCarton} price={effPrice} disabled={!ctx} addLabel={`קרטון${perCarton ? ` (${perCarton})` : ""}`} />
+              <Stepper itemkey={key} unit="carton" title={name} packSize={perCarton} price={effPrice} disabled={!ctx} addLabel={`קרטון${perCarton ? ` (${perCarton})` : ""}`} stock={item?.stock} />
               <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>קרטון מעורב — לפירוט לפי מידה בחר "חבילה"</span>
             </div>
           )
+        ) : soldOut(item?.stock) ? (
+          <p className="chip chip-danger">אזל מהמלאי{ctx?.orderKind === "picking" ? " — לא ניתן להזמין לליקוט" : ""}</p>
         ) : (
-          <AddToCart itemkey={cat.itemkey} title={name} perCarton={perCarton} perBundle={perBundle} price={effPrice} />
+          <AddToCart itemkey={cat.itemkey} title={name} perCarton={perCarton} perBundle={perBundle} price={effPrice} stock={item?.stock} />
         )}
       </div>
     </div>
@@ -245,12 +256,12 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
 }
 
 // One-click stepper: every +/- changes the cart immediately (no separate qty box).
-function Stepper({ itemkey, unit, title, packSize, price, sizeLabel, disabled, addLabel }: {
-  itemkey: string; unit: Unit; title: string; packSize?: number; price?: number | null; sizeLabel?: string; disabled?: boolean; addLabel?: string;
+function Stepper({ itemkey, unit, title, packSize, price, sizeLabel, disabled, addLabel, stock }: {
+  itemkey: string; unit: Unit; title: string; packSize?: number; price?: number | null; sizeLabel?: string; disabled?: boolean; addLabel?: string; stock?: number;
 }) {
   const { add, setQty, remove, qtyOf } = useCart();
   const q = qtyOf(itemkey, unit, sizeLabel);
-  const inc = () => add({ itemkey, title, qty: 1, unit, unitPrice: price ?? undefined, packSize: packSize || undefined, sizeLabel });
+  const inc = () => add({ itemkey, title, qty: 1, unit, unitPrice: price ?? undefined, packSize: packSize || undefined, sizeLabel, stock });
   const dec = () => { if (q <= 1) remove(itemkey, unit, sizeLabel); else setQty(itemkey, unit, q - 1, sizeLabel); };
   if (q > 0) {
     return (
