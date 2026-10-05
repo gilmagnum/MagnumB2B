@@ -1,14 +1,37 @@
 "use client";
 import { Fragment, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { listAppOrders, type AppOrderRow } from "../order-actions";
+import { useCart, type CartLine, type Unit } from "../../lib/useCart";
+import { useOrderContext } from "../../lib/useOrderContext";
+
+// Copy intent carried to /customer when copying an order to a DIFFERENT customer.
+const COPY_KEY = "magnumb2b_copy";
+type CopyLine = { itemkey: string; title?: string; qty: number; unit: string; sizeLabel?: string; packSize?: number; unitPrice?: number };
+const toCartLine = (l: CopyLine): CartLine => ({ itemkey: l.itemkey, title: l.title || l.itemkey, qty: l.qty, unit: (l.unit === "carton" ? "carton" : "bundle") as Unit, unitPrice: l.unitPrice, packSize: l.packSize, sizeLabel: l.sizeLabel });
 
 // "App documents" — the backup copies of submitted orders (the original, as ordered).
 export default function AppOrdersList() {
   const [rows, setRows] = useState<AppOrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
+  const router = useRouter();
+  const { setAll } = useCart();
+  const { select } = useOrderContext();
 
   useEffect(() => { listAppOrders().then((r) => { setRows(r); setLoading(false); }).catch(() => setLoading(false)); }, []);
+
+  // Copy to the SAME customer: load the lines into the cart and go review.
+  const copySame = (r: AppOrderRow) => {
+    select({ accountKey: r.account_key, customerName: r.customer_name ?? r.account_key, orderKind: (r.order_kind as "picking" | "future") || "picking" });
+    setAll((r.lines as CopyLine[]).map(toCartLine));
+    router.push("/cart");
+  };
+  // Copy to ANOTHER customer: stash the lines, pick a customer; prices resolve for them in the cart.
+  const copyOther = (r: AppOrderRow) => {
+    try { localStorage.setItem(COPY_KEY, JSON.stringify({ lines: r.lines, orderKind: r.order_kind })); } catch { /* ignore */ }
+    router.push("/customer");
+  };
 
   const dt = (s: string) => new Date(s).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
   const kind = (k: string | null) => (k === "future" ? "עתידי" : k === "picking" ? "לליקוט" : k ?? "");
@@ -54,6 +77,10 @@ export default function AppOrdersList() {
                         ))}
                       </tbody>
                     </table>
+                    <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                      <button onClick={() => copySame(r)} className="btn btn-primary btn-sm">העתק הזמנה לאותו לקוח</button>
+                      <button onClick={() => copyOther(r)} className="btn btn-sm">העתק ללקוח אחר</button>
+                    </div>
                   </td></tr>
                 )}
               </Fragment>

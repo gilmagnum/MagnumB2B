@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { bridge, type Customer } from "../../lib/bridge";
 import { useOrderContext } from "../../lib/useOrderContext";
-import { useCart } from "../../lib/useCart";
+import { useCart, type CartLine } from "../../lib/useCart";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import { managerOrAbove } from "../../lib/roles";
 
@@ -11,7 +11,7 @@ import { managerOrAbove } from "../../lib/roles";
 // admin searches ALL. Search is dynamic (updates as you type).
 export default function CustomerPage() {
   const { ctx, select, exit } = useOrderContext();
-  const { count, clear } = useCart();
+  const { count, clear, setAll: setCartLines } = useCart();
   const router = useRouter();
   const exitCustomer = () => {
     if (count > 0 && !window.confirm(`יציאה מהלקוח תרוקן את סל ההזמנה (${count} פריטים) ותחזור למחירון הכללי. להמשיך?`)) return;
@@ -73,7 +73,17 @@ export default function CustomerPage() {
   }, [role, results, all, q]);
 
   // Pick a customer only; the order kind is chosen on the next screen ("התחלת הזמנה").
+  // Exception: when copying an order to another customer, load its lines into the cart and review.
   const choose = (accountKey: string, customerName: string) => {
+    let copy: { lines?: unknown[]; orderKind?: string } | null = null;
+    try { const raw = localStorage.getItem("magnumb2b_copy"); if (raw) copy = JSON.parse(raw); } catch { /* ignore */ }
+    if (copy?.lines?.length) {
+      select({ accountKey, customerName, orderKind: (copy.orderKind as "picking" | "future") || "picking" });
+      setCartLines((copy.lines as CartLine[]).map((l) => ({ ...l, title: l.title || l.itemkey })));
+      try { localStorage.removeItem("magnumb2b_copy"); } catch { /* ignore */ }
+      router.push("/cart");
+      return;
+    }
     select({ accountKey, customerName }); // no orderKind yet — chosen on /start
     router.push("/start");
   };
