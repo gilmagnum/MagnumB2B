@@ -1,15 +1,18 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useCart } from "../../lib/useCart";
+import { useCart, type CartLine } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { bridge } from "../../lib/bridge";
 import { fetchImages } from "../../lib/images";
+import { saveAppOrder, saveDraft, getDraft, deleteDraft } from "../order-actions";
 
 export default function CartPage() {
-  const { lines, setQty, remove, clear } = useCart();
+  const { lines, setQty, remove, clear, setAll } = useCart();
   const { ctx } = useOrderContext();
   const [msg, setMsg] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [draft, setDraft] = useState<{ lines: unknown[]; updated_at: string } | null>(null);
+  const [draftMsg, setDraftMsg] = useState("");
   // Final per-unit price for each line, resolved for the entered customer.
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [priceErr, setPriceErr] = useState(false);
@@ -46,11 +49,35 @@ export default function CartPage() {
     return () => { cancelled = true; };
   }, [ctx, lines]);
 
+  // Load a saved draft for this customer (if any) so the user can resume it.
+  useEffect(() => {
+    if (!ctx?.accountKey) { setDraft(null); return; }
+    let alive = true;
+    getDraft(ctx.accountKey).then((d) => { if (alive) setDraft(d); }).catch(() => {});
+    return () => { alive = false; };
+  }, [ctx?.accountKey]);
+
+  const saveDraftNow = async () => {
+    if (!ctx) return;
+    const r = await saveDraft({ accountKey: ctx.accountKey, customerName: ctx.customerName, orderKind: ctx.orderKind, lines });
+    setDraftMsg(r.ok ? "טיוטה נשמרה ✓" : (r.error ?? "שגיאה")); setTimeout(() => setDraftMsg(""), 2500);
+    if (r.ok) setDraft({ lines, updated_at: new Date().toISOString() });
+  };
+  const loadDraft = () => { if (draft) setAll(draft.lines as CartLine[]); };
+  const removeDraft = async () => { if (!ctx) return; await deleteDraft(ctx.accountKey); setDraft(null); };
+
   if (!ctx) return <p>יש לבחור לקוח לפני הזמנה. <a href="/customer">← בחירת לקוח</a></p>;
   if (!ctx.orderKind) return <p>יש לבחור סוג הזמנה. <a href="/start">← התחלת הזמנה</a></p>;
   if (!lines.length) return (
     <>
       {msg && <p style={{ marginBottom: 16, padding: 12, borderRadius: 8, background: msg.includes("✓") ? "#e8f7ee" : "#fdecea" }}>{msg}</p>}
+      {draft && (draft.lines?.length ?? 0) > 0 && (
+        <p className="card card-pad" style={{ background: "var(--brand-soft)" }}>
+          יש טיוטה שמורה ל{ctx.customerName} ({draft.lines.length} שורות, {new Date(draft.updated_at).toLocaleString("he-IL")}){" "}
+          <button onClick={loadDraft} className="btn btn-primary btn-sm" style={{ marginInlineStart: 8 }}>טען טיוטה</button>
+          <button onClick={removeDraft} className="btn btn-sm" style={{ marginInlineStart: 6 }}>מחק טיוטה</button>
+        </p>
+      )}
       <p>הסל ריק. <a href="/catalog">← לקטלוג</a></p>
     </>
   );
@@ -74,6 +101,13 @@ export default function CartPage() {
         lines: lines.map((l) => ({ itemkey: l.itemkey, qty: l.qty, unit: l.unit, price: priceOf(l.itemkey, l.unit, l.unitPrice), size: l.sizeLabel || undefined })),
       });
       setMsg(`ההזמנה נשלחה ✓ מספר הזמנה: ${res.stockId}`);
+      // Save a backup copy of the order (the original, as ordered) + clear any draft.
+      saveAppOrder({
+        accountKey: ctx.accountKey, customerName: ctx.customerName, orderKind: ctx.orderKind, stockId: res.stockId,
+        lines: lines.map((l) => ({ itemkey: l.itemkey, title: l.title, qty: l.qty, unit: l.unit, sizeLabel: l.sizeLabel, packSize: l.packSize, unitPrice: priceOf(l.itemkey, l.unit, l.unitPrice) })),
+        totals: { total },
+      }).catch(() => {});
+      deleteDraft(ctx.accountKey).catch(() => {});
       // Fire a push event (new order) — best-effort.
       fetch("/api/push/event", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -82,7 +116,7 @@ export default function CartPage() {
           body: `${ctx.customerName} · הזמנה ${res.stockId}`, url: "/picking",
         }),
       }).catch(() => {});
-      clear();
+      clear(); setDraft(null);
     } catch (e) {
       setMsg("שגיאה בשליחה (ייתכן שהגשר עדיין לא מחובר): " + (e as Error).message);
     } finally {
@@ -142,9 +176,11 @@ export default function CartPage() {
         </tfoot>
       </table>
       </div>
-      <div style={{ marginTop: 16, display: "flex", gap: 10 }}>
+      <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={submit} disabled={busy} style={{ background: "#1e2a78", color: "#fff", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "שולח…" : "שלח הזמנה"}</button>
+        <button onClick={saveDraftNow} className="btn">שמירת טיוטה</button>
         <button onClick={clear} style={{ border: "1px solid #ccc", borderRadius: 8, padding: "10px 18px", cursor: "pointer", background: "#fff" }}>רוקן סל</button>
+        {draftMsg && <span className="chip chip-ok">{draftMsg}</span>}
       </div>
       {msg && <p style={{ marginTop: 16, padding: 12, borderRadius: 8, background: msg.includes("✓") ? "#e8f7ee" : "#fdecea" }}>{msg}</p>}
     </>
