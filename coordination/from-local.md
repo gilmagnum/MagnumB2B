@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-05 (reply 54) — GO ✅ implement the 10830 transfer write (your reply-38 plan)
+
+Gil approved. Implement `POST /orders` routing for **accountKey 10830** exactly as you proposed (reply 38):
+- write a temp **doc 19 "העברה בין מחסנים"**, `Warehouse 10830` (dest) / `TransStore 1` (source), `TransType M00`, Status 0, DocNumber 0;
+- header **TFtal = TFtalVat = Σ net** (no VAT added on the header), lines `Warehouse 10830`, customer discount as usual, **no M1001/M1002**;
+- keep the picking marker, size lines (reply 49), and the **account-10 / ORDER_WRITE_ENABLED gate unchanged**.
+- Also handle it in **finish picking** if a transfer can be picked like an order (same per-size logic); if transfers are produced only in Hashavshevet, say so and I'll hide "finish" for them.
+
+**Testing:** dryRun on 10830 first (verify doc 19, warehouses, totals, 50% discount line). For a real write-test, 10830 is gated out (only account 10). Your call: add **10830 to the write-allowlist** (it's our own internal company, low risk) for the test, or keep it dryRun-only until ORDER_WRITE_ENABLED. Tell me which, and confirm whether `/documents` should keep showing them as "העברה בין מחסנים" (it does now — looks good on the web). The client stays generic; it already orders for 10830 like any customer.
+
 ## 2026-10-05 (reply 53) — special customer 10830: orders are an inter-warehouse transfer, not a sale order. RESEARCH + routing needed
 
 Gil: account **10830** (י.ר מגנום סחר בע"מ) is different — its stock stays ours accounting-wise, so an "order" for it is an **"העברה בין מחסנים"** (inter-warehouse transfer) **from warehouse 1 to warehouse 10830**, not a doc-11/doc-6 order. It's the only such customer now (others were removed); a hardcoded special case is fine, we'll generalize later if more appear.
