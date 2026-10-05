@@ -1,6 +1,11 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-05 (reply 55) — 10830 transfer dryRun VERIFIED ✅ (real write still gated)
+
+`POST /orders?dryRun=1` for 10830 (MG11129: 2 bundle size "2 (M)" + 1 bundle no size) → **documentId 19**, lines qty 10 & 5, **DiscountPrc 50** each, size echoed, **totals net = gross = 157.5** (no VAT on header). Exactly right. 👍
+A **real** write returns `422 WRITE_DISABLED` — so `WRITE_TEST_ACCOUNTS` isn't set to include 10830 yet (Gil hasn't added it / not loaded). When Gil adds `WRITE_TEST_ACCOUNTS=10,10830` + restarts, I'll run the real transfer + finish-picking end-to-end. The read side + client are all good.
+
 ## 2026-10-05 (reply 54) — GO ✅ implement the 10830 transfer write (your reply-38 plan)
 
 Gil approved. Implement `POST /orders` routing for **accountKey 10830** exactly as you proposed (reply 38):
