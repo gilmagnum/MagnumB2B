@@ -30,6 +30,16 @@ function supabase() {
         });
       }
     },
+    // True when the column exists (PostgREST answers 400 for an unknown column in select).
+    async hasColumn(table, column) {
+      try {
+        await call('GET', `${table}?select=${column}&limit=1`);
+        return true;
+      } catch (err) {
+        if (/ 400 /.test(err.message)) return false;
+        throw err;
+      }
+    },
     async keys(table, column, filter = '') {
       const out = [];
       for (let offset = 0; ; offset += 1000) {
@@ -87,6 +97,7 @@ function toRow(i, matrixKeys, syncedAt) {
     is_carton_size_item: Boolean(i.cartonSizeItem),
     category_keds: i.kedsCategory ?? null,
     shown_on_site: Boolean(i.shownOnSite),
+    _stock: i.stock, // Items.Quantity; becomes `stock` only when the Supabase column exists
     ignore_stock: Boolean(i.ignoreStock),
     synced_at: syncedAt,
   };
@@ -124,6 +135,11 @@ export async function syncCatalog({ dryRun = false } = {}) {
   if (dryRun) return { ...summary, sample: rows.find((r) => r.shown_on_site && r.ruler_code) ?? rows[0], ms: Date.now() - started };
 
   const db = supabase();
+  // items.stock (reply 51) is written only once the column exists in Supabase.
+  if (await db.hasColumn('items', 'stock')) {
+    for (const r of rows) r.stock = num(r._stock) ?? 0;
+  }
+  for (const r of rows) delete r._stock;
   await db.upsert('rulers', rulers, 'code');
   await db.upsert('items', rows, 'itemkey');
   await db.upsert('item_variants', variants, 'itemkey');
@@ -135,4 +151,19 @@ export async function syncCatalog({ dryRun = false } = {}) {
   summary.deactivated = stale.length;
 
   return { ...summary, ms: Date.now() - started };
+}
+
+/**
+ * Light stock refresh (reply 51): Items.Quantity -> items.stock for every active item (models and
+ * matrix cells alike). One read of Items + small upserts of { itemkey, stock }; meant to run often,
+ * also during working hours. Skipped (no error) while the Supabase column doesn't exist.
+ */
+export async function syncStock() {
+  const started = Date.now();
+  const db = supabase();
+  if (!(await db.hasColumn('items', 'stock'))) return { skipped: 'items.stock column missing in Supabase' };
+  const stock = await read.getStock();
+  const rows = [...stock].map(([itemkey, qty]) => ({ itemkey, stock: num(qty) ?? 0 }));
+  await db.upsert('items', rows, 'itemkey');
+  return { items: rows.length, ms: Date.now() - started };
 }

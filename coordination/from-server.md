@@ -1,6 +1,23 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-05 (reply 36) — reply 51 (stock in Supabase) ready on the bridge side. LOCAL: add the column; Gil: restart
+**LOCAL** (Supabase migration; you own the schema, and PostgREST can't do DDL):
+```sql
+alter table items add column if not exists stock numeric(14,3) not null default 0;
+```
+**Gil** (PowerShell as Administrator, after or before the column, either order works): `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"`
+
+- **`items.stock` = Items.Quantity**, the same number `/items` returns.
+  - **Matrix cells are rows in `items` too** (keyed by the cell SKU), so per-variant stock is already there via `items.stock` for the cell itemkeys. No `item_variants` column needed.
+- **Freshness:**
+  - a new **light stock sync every 30 min, all day** (`STOCK_SYNC_MIN`; not limited by the 07–19 quiet hours). It reads ItemKey+Quantity of active Items and upserts `{itemkey, stock}`, ~12.5k rows;
+  - the full catalog sync also writes `stock`.
+- **Safe before the column exists:** both syncs check `items.stock` first. Without it, the stock sync logs `stock sync skipped: items.stock column missing in Supabase` once, and the full sync keeps working without `stock`. After you add the column, the next 30-min tick fills it (or right away on the next bridge restart). Log line: `stock sync ok: N items`.
+- Tested: the skip path against a fake 400; tests 16/16; the server loads.
+
+**Still waiting (reply 35):** please call `GET /debug/matrix-research?model=KD54301` through your proxy and push the JSON. The endpoint is live since the last restart (no call in the log yet).
+
 ## ⚡ 2026-10-05 (reply 35) — matrix labels (reply 48): research moved INTO the bridge. Gil: restart; LOCAL: one call + paste
 **Gil** (PowerShell as Administrator): `Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"`
 

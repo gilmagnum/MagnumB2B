@@ -6,7 +6,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
 import { ORDER_DOCUMENT_IDS } from './config.js';
-import { syncCatalog, lastSyncedAt } from './sync.js';
+import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
 import { getBalance, getStats, StatsError } from './stats.js';
@@ -381,6 +381,33 @@ server.listen(PORT, HOST, () => {
     console.log(`catalog sync every ${SYNC_INTERVAL_MIN} min, not between ${quietFrom}:00-${quietTo}:00`);
   } else {
     console.log('catalog sync schedule off (SYNC_INTERVAL_MIN=0 or Supabase env missing)');
+  }
+  // Stock refresh (reply 51): Items.Quantity -> Supabase items.stock, all day (cheap: one Items read).
+  const stockMin = Number(process.env.STOCK_SYNC_MIN ?? 30);
+  if (stockMin > 0 && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    let stockRunning = false;
+    let lastSkip;
+    const stockTick = async () => {
+      if (stockRunning) return;
+      stockRunning = true;
+      try {
+        const r = await syncStock();
+        if (r.skipped) {
+          if (lastSkip !== r.skipped) console.log(`stock sync skipped: ${r.skipped}`);
+          lastSkip = r.skipped;
+        } else {
+          lastSkip = undefined;
+          console.log(`stock sync ok: ${r.items} items, ${r.ms}ms`);
+        }
+      } catch (err) {
+        console.error(`stock sync failed: ${err.message}`);
+      } finally {
+        stockRunning = false;
+      }
+    };
+    stockTick();
+    setInterval(stockTick, stockMin * 60_000).unref();
+    console.log(`stock sync every ${stockMin} min`);
   }
   startEventPoller();
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
