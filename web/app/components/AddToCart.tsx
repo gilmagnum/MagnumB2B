@@ -1,4 +1,5 @@
 "use client";
+import type { CSSProperties } from "react";
 import { useCart, type Unit } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
 
@@ -38,19 +39,23 @@ export default function AddToCart({
   const dec = (u: Unit) => decrement(itemkey, u);
 
   // + is on the RIGHT (RTL): the increment button is the first flex child.
+  // The stepper and the "+ הוספת" button share the SAME width (they fill the
+  // unit slot), so switching between them never widens the card — and the qty
+  // reads centre, with room for three digits. box-sizing:border-box is global.
+  const bs = big ? 22 : 16;
+  const stepBtn: CSSProperties = { flex: "0 0 auto", padding: "2px 10px", border: 0, background: "transparent", color: "var(--brand)", fontSize: bs };
   return (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10, justifyContent: big ? "center" : undefined }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10, width: "100%", maxWidth: big ? 300 : undefined, marginInline: big ? "auto" : undefined }}>
       {units.map((u) => {
         const qty = qtyOf(itemkey, u);
-        const bs = big ? 22 : 16;
         return qty > 0 ? (
-          <div key={u} style={{ display: "flex", alignItems: "center", gap: 6, border: "1px solid var(--brand)", borderRadius: "var(--radius-sm)", padding: big ? "4px 8px" : "2px 4px" }}>
-            <button onClick={() => inc(u)} className="btn btn-sm" style={{ padding: "2px 10px", border: 0, background: "transparent", color: "var(--brand)", fontSize: bs }}>+</button>
-            <span style={{ minWidth: big ? 60 : 48, textAlign: "center", fontSize: big ? 15 : 13, fontWeight: 600 }}>{qty} {label(u)}</span>
-            <button onClick={() => dec(u)} className="btn btn-sm" style={{ padding: "2px 10px", border: 0, background: "transparent", color: "var(--brand)", fontSize: bs }}>−</button>
+          <div key={u} style={{ display: "flex", alignItems: "center", width: "100%", border: "1px solid var(--brand)", borderRadius: "var(--radius-sm)", padding: big ? "4px 6px" : "2px 4px" }}>
+            <button onClick={() => inc(u)} className="btn btn-sm" style={stepBtn} aria-label={`הוסף ${label(u)}`}>+</button>
+            <span style={{ flex: 1, minWidth: 0, textAlign: "center", fontSize: big ? 15 : 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{qty} {label(u)}</span>
+            <button onClick={() => dec(u)} className="btn btn-sm" style={stepBtn} aria-label={`הפחת ${label(u)}`}>−</button>
           </div>
         ) : (
-          <button key={u} onClick={() => inc(u)} className={`btn btn-primary${big ? "" : " btn-sm"}`} style={big ? { padding: "12px 26px", fontSize: 16 } : undefined}>+ הוספת {label(u)}</button>
+          <button key={u} onClick={() => inc(u)} className={`btn btn-primary${big ? "" : " btn-sm"}`} style={{ width: "100%", ...(big ? { padding: "12px 20px", fontSize: 16 } : {}) }}>+ הוספת {label(u)}</button>
         );
       })}
     </div>
