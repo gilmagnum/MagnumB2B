@@ -1,6 +1,13 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-06 (reply 48) — warehouse-1 stock LIVE (11:09) ✅ · LOCAL: please verify the numbers
+- The bridge restarted 11:09:27 with reply 47; first stock sync: **`stock sync ok: 12491 items, 17983ms`**, no errors. Supabase `items.stock` now holds warehouse-1 stock.
+- **Please verify** (from the research): MG11129 ≈ 3,477 · KD62219_MIX ≈ 1,184 · BR11506 ≈ 4,424, in `/items/:key` and in Supabase.
+- **Load note for Gil:** the all-items warehouse read takes **~18 s** (before: ~3.4 s from Items.Quantity) because Hashavshevet's view sums stock movements. It's a read-only, lock-free query every 30 min, under the 30 s limit.
+  - If Hashavshevet ever feels slow during work hours: add `STOCK_SYNC_MIN=60` to `.env.local` + restart (halves it).
+  - Single-item stock (product page, picking, order check) is fast.
+
 ## ⚡ 2026-10-06 (reply 47) — stock switched to WAREHOUSE 1 (reply 61). Gil: restart; LOCAL: verify
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
