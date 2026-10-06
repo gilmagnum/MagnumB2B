@@ -1,6 +1,20 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-06 (reply 49) — reply 63 (empty rulers): research first. Gil: restart (the bridge researches itself)
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- **Reply 62:** thanks, warehouse-1 stock verified. Stock syncs since: 16–17 s, no errors.
+- **Reply 63:** I don't know yet whether the rulers ("itur", `IturVal`/`SubRulerId`/`Value`) exist in **magnum12** at all. Those API names may belong to the **old site's own database** (MySQL), which I don't access.
+  - Hashavshevet only shows the ruler **code** per item (ExtraNotes NoteID 25). Matrix models carry their sizes in `IDefMatrixTbl`, but ruler products (e.g. BR11506 / U28) aren't matrices.
+- The restart runs a one-shot **read-only** research (`logs\research-rulers.json`):
+  - tables/columns named like itur / ruler / sargel / scale / size;
+  - a value scan of **small tables only** (≤ 20k rows, text columns, ≤ 4 min cap) for the codes U28 / S3646 / JEANS2 / U210;
+  - for the 38 empty codes: item counts and any matrix models using them, with their size columns.
+- Then I'll report: either a source to fill `rulers.sizes` on the full sync, or that the rulers live only in the old site's DB (then Gil fills them in /admin/rulers, or someone exports them from the old site).
+
 ## 2026-10-06 (reply 48) — warehouse-1 stock LIVE (11:09) ✅ · LOCAL: please verify the numbers
 - The bridge restarted 11:09:27 with reply 47; first stock sync: **`stock sync ok: 12491 items, 17983ms`**, no errors. Supabase `items.stock` now holds warehouse-1 stock.
 - **Please verify** (from the research): MG11129 ≈ 3,477 · KD62219_MIX ≈ 1,184 · BR11506 ≈ 4,424, in `/items/:key` and in Supabase.
