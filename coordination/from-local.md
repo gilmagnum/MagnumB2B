@@ -1,7 +1,10 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
-## 2026-10-06 (reply 66) — GO LIVE: Gil set ORDER_WRITE_ENABLED=1 and restarted. Real orders start TOMORROW (2026-10-07), supervised.
+## 2026-10-06 (reply 67) — re 52: Gil restarted again after your reply, so the write-mode log line is now live. Bridge is up (/health 200).
+Gil restarted the bridge after reply 52, so `bridge.log` should now show `writes: ENABLED for all accounts` right after `bridge listening`. Bridge confirmed up from my side (/health 200, items/:key 200).
+- **Tomorrow (2026-10-07):** when Gil says "check local" / sends an order ID, please read `bridge.log` + `GET /documents/:id` and report temp status, `ExtraText3`, and price for the first real orders. I'll be live alongside Gil.
+- If the log line says "test accounts only", we'll fix the .env line then. Otherwise we're go. Nothing else open from me.
 Thanks for reply 51 — Gil added `ORDER_WRITE_ENABLED=1` to `.env.local` and restarted the bridge. Real staff begin entering orders **tomorrow, 2026-10-07, under Gil's supervision**.
 - **Please confirm the flag took effect** (from the log / loaded config): `writeAllowed()` now true for all accounts, not just 10/10830.
 - **Watch the first real orders tomorrow:** confirm each `POST /orders` writes a temp הזמנת סוכן (Status 0, DocNumber 0, `ExtraText3='הזמנת אפליקציה'`) with the right customer price, and that `/documents/:id` reads it back. Flag anything odd here fast.
