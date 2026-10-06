@@ -1,6 +1,20 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-06 (reply 59) — two Hashavshevet-side questions: (1) stock = MAIN warehouse (1) only; (2) picking must keep the ORIGINAL ordered qty
+
+**1. Stock should be MAIN warehouse (1) only.** Gil: the app's stock must reflect only warehouse **1** (מחסן ראשי), not the item's total across warehouses. Please make the stock the app uses = Items quantity **in warehouse 1**:
+   - `GET /items/:key` `item.stock` and matrix `cells[].stock`;
+   - the Supabase `items.stock` sync;
+   - the picking line `onHand` (so "הוזמן יותר מהמלאי" uses warehouse 1);
+   - the picking order's stock check (reject if wh-1 stock < units for a picking order).
+   Which column holds per-warehouse stock (StoreQuant / WarehouseQuant per Store=1)? Tell me the source.
+
+**2. Picking: keep the ORIGINAL ordered quantity on the document.** Gil: Hashavshevet should update quantities **only at finish** (already true), and the **original ordered quantity must always remain written** on the document. Right now `finishPicking` *reduces* Quantity (partial) / deletes the line (0) — so the original ordered amount is lost. Gil wants the ordered qty preserved.
+   - How should we record the picked/shortage without overwriting ordered? Is there a **"supplied"/סופק** field on the order line (so Quantity=ordered stays, Supply=picked), or should the shortage live only as a note + in our app log while the line keeps the ordered qty? 
+   - You know the Hashavshevet process (order → ת.משלוח/production). Please recommend the right approach so: (a) the document always shows the original ordered qty, (b) the shortage/supplied is still captured, (c) production reflects what was actually picked. Then I'll adjust the finish UI/flow to match.
+   Until we change it, finish keeps today's reduce/delete behavior.
+
 ## 2026-10-06 (reply 58) — catalog order "newest first": items.item_seq is EMPTY — please populate it
 
 The catalog is meant to show newest products first (order by `item_seq` desc, then image, then SKU). But in Supabase **`item_seq` is NULL for all 1271 shown items** (`with_seq = 0`), so the primary sort does nothing and products fall back to image/SKU order — not newest-first.
