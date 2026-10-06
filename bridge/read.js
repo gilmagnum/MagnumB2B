@@ -60,16 +60,40 @@ function shapeItem(row, extra = {}) {
   };
 }
 
+// --- stock = warehouse 1 only (Gil, reply 61) --------------------------------------------------
+// Source: Hashavshevet's view vBalByStockWH (ItemKey, Warehouse, BALBYSTOCKWH); Σ over warehouses
+// = Items.Quantity. STOCK_WAREHOUSE (default 1 = מחסן ראשי). Single items read it directly; the
+// all-items map is cached 5 min (the view aggregates movements).
+export const STOCK_WAREHOUSE = Number(process.env.STOCK_WAREHOUSE || 1);
+const WH_STOCK_SQL = `(SELECT TOP 1 v.BALBYSTOCKWH FROM vBalByStockWH v WHERE v.ItemKey = %KEY% AND v.Warehouse = ${STOCK_WAREHOUSE})`;
+export const whStockSql = (keyExpr) => WH_STOCK_SQL.replace('%KEY%', keyExpr);
+let whStockCache;
+export async function getWarehouseStock() {
+  if (!whStockCache || Date.now() - whStockCache.at > 5 * 60_000) {
+    const map = query(
+      `SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`,
+    ).then((rows) => new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0])));
+    whStockCache = { at: Date.now(), map };
+    map.catch(() => (whStockCache = undefined));
+  }
+  return whStockCache.map;
+}
+
 // Active items with their "extra fields". shownOnly=true -> only "מוצג באתר"=1.
 export async function getItems({ shownOnly = false } = {}) {
-  const [rows, extras, fathers] = await Promise.all([
+  const [rows, extras, fathers, whStock] = await Promise.all([
     query(`SELECT ${ITEM_COLUMNS} FROM Items WHERE ${ACTIVE}`),
     loadExtras(),
     query('SELECT DISTINCT FItemKey FROM IMatrixItems'),
+    getWarehouseStock(),
   ]);
   const matrix = new Set(fathers.map((r) => trim(r.FItemKey)));
   const items = rows.map((row) =>
-    shapeItem(row, { ...extras.get(trim(row.ItemKey)), isMatrix: matrix.has(trim(row.ItemKey)) }),
+    shapeItem(row, {
+      ...extras.get(trim(row.ItemKey)),
+      isMatrix: matrix.has(trim(row.ItemKey)),
+      stock: whStock.get(trim(row.ItemKey)) ?? 0,
+    }),
   );
   return shownOnly ? items.filter((i) => i.shownOnSite) : items;
 }
@@ -77,7 +101,7 @@ export async function getItems({ shownOnly = false } = {}) {
 export async function getItem(itemKey) {
   const [rows, extras] = await Promise.all([
     query(
-      `SELECT ${ITEM_COLUMNS}, Dumi,
+      `SELECT ${ITEM_COLUMNS}, Dumi, ${whStockSql('Items.ItemKey')} AS whStock,
          CASE WHEN EXISTS (SELECT 1 FROM IMatrixItems WHERE FItemKey = @itemKey) THEN 1 ELSE 0 END AS hasCells
        FROM Items WHERE ItemKey = @itemKey`,
       { itemKey: key(itemKey) },
@@ -86,7 +110,7 @@ export async function getItem(itemKey) {
   ]);
   if (!rows.length) return null;
   const extra = { ...extras.get(trim(rows[0].ItemKey)), isMatrix: rows[0].hasCells === 1 };
-  return { ...shapeItem(rows[0], extra), active: Number(rows[0].Dumi) !== 1 };
+  return { ...shapeItem(rows[0], { ...extra, stock: rows[0].whStock ?? 0 }), active: Number(rows[0].Dumi) !== 1 };
 }
 
 // Raw Items rows for a list of keys (used by writeOrder for validation + name snapshot).
@@ -165,7 +189,7 @@ async function loadAxes(fatherKey) {
 export async function getMatrixCells(fatherItemKey) {
   const [rows, axes] = await Promise.all([
     query(
-      `SELECT m.ItemKey, m.Line, m.Col, i.Quantity AS stock,
+      `SELECT m.ItemKey, m.Line, m.Col, ${whStockSql('m.ItemKey')} AS stock,
          (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 33) AS sizeNote,
          (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 29) AS colorNote
        FROM IMatrixItems m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
@@ -220,8 +244,8 @@ export async function getAccount(accountKey) {
 
 // General stock (Items.Quantity) for all active items: Map<itemKey, quantity>
 export async function getStock() {
-  const rows = await query(`SELECT ItemKey, Quantity FROM Items WHERE ${ACTIVE}`);
-  return new Map(rows.map((r) => [trim(r.ItemKey), r.Quantity]));
+  const [rows, whStock] = await Promise.all([query(`SELECT ItemKey FROM Items WHERE ${ACTIVE}`), getWarehouseStock()]);
+  return new Map(rows.map((x) => [trim(x.ItemKey), whStock.get(trim(x.ItemKey)) ?? 0]));
 }
 
 export function getStockByWarehouse(itemKey) {
@@ -478,7 +502,7 @@ export async function getDocument(stockId) {
   if (!o) return null;
   const [lines, produced] = await Promise.all([
     query(
-      `SELECT m.ID, m.Details, m.ItemKey, m.ItemName, m.Quantity, m.Unit, m.Price, m.DiscountPrc, m.TFtal, m.Tree, i.Quantity AS onHand
+      `SELECT m.ID, m.Details, m.ItemKey, m.ItemName, m.Quantity, m.Unit, m.Price, m.DiscountPrc, m.TFtal, m.Tree, ${whStockSql('m.ItemKey')} AS onHand
        FROM StockMoves m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
        WHERE m.StockID = @id ORDER BY m.LineNoForSorting, m.ID`,
       { id: o.ID },

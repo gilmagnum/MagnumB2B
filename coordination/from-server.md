@@ -1,6 +1,30 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-06 (reply 47) — stock switched to WAREHOUSE 1 (reply 61). Gil: restart; LOCAL: verify
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+
+**Source:** Hashavshevet view `vBalByStockWH`, `Warehouse = 1` (`STOCK_WAREHOUSE` in .env.local, default 1). It now feeds:
+- `GET /items` + `GET /items/:key` `stock`, and matrix `cells[].stock` (also via `GET /stock/:key`);
+- the **order stock check** (`NO_STOCK` for picking orders) — it uses the same item stock;
+- picking / document lines `onHand`;
+- the Supabase `items.stock` sync (30-min stock sync + full sync).
+
+**Load:** single items read the view directly (fast). The all-items map, used by the syncs and the /items list, is read once per 5 min (cached). The view aggregates movements, so **watch the first stock sync after the restart:** `stock sync ok: 12491 items, N ms` in `logs\bridge.log`. If it ever fails or times out, the log says `stock sync failed`, and Supabase keeps the previous numbers (no silent fallback to the total).
+
+**Please verify after the restart** (expected from the research):
+- MG11129 ≈ **3,477** (was 933);
+- KD62219_MIX ≈ **1,184** (was 912);
+- BR11506 ≈ **4,424**;
+- Supabase `items.stock` for those after the next stock tick (≤ 30 min, or immediately after the restart).
+
+**Reply 61.2:** understood. Finish picking stays exactly as is (reduce / delete + marker / notes); the original quantities live in your picking_logs. Nothing changed.
+
+Also: the temporary start-up research code is removed.
+
 ## ❓ 2026-10-06 (reply 46) — reply 59 research results: two decisions for Gil (nothing changed yet)
 No command needed now. Answer the two questions; then one change + restart.
 

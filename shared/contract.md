@@ -29,7 +29,7 @@ type Item = {
   ignoreStock: boolean;       // NoteID 31
   isMatrix: boolean;          // detected via IMatrixItems
   isCartonSizeItem: boolean;  // NoteID 26 'פריט קרטון מידה' - each carton is one size; order per size inside the product
-  stock: number;              // Items.Quantity (for a matrix parent: usually 0, see cells)
+  stock: number;              // warehouse 1 only: vBalByStockWH (Warehouse = STOCK_WAREHOUSE, default 1); matrix parent usually 0, see cells
   imageUrl?: string;          // app layer (not from Hashavshevet)
   cells?: MatrixCell[];       // GET /items/:itemkey only, when isMatrix
 };
@@ -85,7 +85,7 @@ type DocumentDetail = Document & {
   pickNotes?: string;         // Stock.ExtraRemarks - picker notes written by /picking/:id/finish
   customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
   lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
-           discountPct: number; lineTotal: number; onHand?: number; isShipping?: true; lineId: number; size?: string }[];  // onHand = Items.Quantity now; M1001/M1002 flagged, not removed
+           discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; isShipping?: true; lineId: number; size?: string }[];  // onHand = Items.Quantity now; M1001/M1002 flagged, not removed
 };
 
 type ApiError = { error: { code: string; message: string } };  // message in Hebrew, show as-is
@@ -138,7 +138,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `POST /sync` → full catalog refresh Hashavshevet → Supabase (`items`, `item_variants`, ruler codes); returns
   `{ items, shown, variants, rulers, deactivated, ms }` (also runs at start + every `SYNC_INTERVAL_MIN`).
   Supabase `items.item_seq` = Items.ID (identity = creation order; newest = highest), written on the full sync.
-  Supabase `items.stock` = Items.Quantity (models and matrix cells alike) is refreshed by a light stock sync every
+  Supabase `items.stock` = warehouse-1 stock (vBalByStockWH, models and matrix cells alike) is refreshed by a light stock sync every
   `STOCK_SYNC_MIN` (30) min, all day, plus on every full sync; written only once the `stock` column exists.
   `GET /sync` → `{ running, last }`. Images/colors/categories are app-layer and never touched.
 - `POST /orders[?dryRun=1]` → create a temp order (DocNumber 0, Status 0):
