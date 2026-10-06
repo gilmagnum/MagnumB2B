@@ -261,10 +261,10 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
 function Stepper({ itemkey, unit, title, packSize, price, sizeLabel, disabled, addLabel, stock }: {
   itemkey: string; unit: Unit; title: string; packSize?: number; price?: number | null; sizeLabel?: string; disabled?: boolean; addLabel?: string; stock?: number;
 }) {
-  const { add, setQty, remove, qtyOf } = useCart();
+  const { add, decrement, qtyOf } = useCart();
   const q = qtyOf(itemkey, unit, sizeLabel);
   const inc = () => add({ itemkey, title, qty: 1, unit, unitPrice: price ?? undefined, packSize: packSize || undefined, sizeLabel, stock });
-  const dec = () => { if (q <= 1) remove(itemkey, unit, sizeLabel); else setQty(itemkey, unit, q - 1, sizeLabel); };
+  const dec = () => decrement(itemkey, unit, sizeLabel);
   if (q > 0) {
     return (
       <div style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid var(--brand)", borderRadius: "var(--radius-sm)", padding: "2px 4px" }}>

@@ -11,7 +11,7 @@ export default function AddToCart({
   stock?: number | null;
   big?: boolean; // larger, centered add control (e.g. carton-only inside the product page)
 }) {
-  const { add, setQty, remove, qtyOf } = useCart();
+  const { add, decrement, qtyOf } = useCart();
   const { ctx } = useOrderContext();
 
   const units: Unit[] = [];
@@ -35,11 +35,7 @@ export default function AddToCart({
   const label = (u: Unit) => (u === "carton" ? "קרטון" : "חבילה");
   const packOf = (u: Unit) => (u === "carton" ? (perCarton ?? undefined) : (perBundle ?? undefined)) ?? undefined;
   const inc = (u: Unit) => add({ itemkey, title, qty: 1, unit: u, unitPrice: price ?? undefined, packSize: packOf(u), stock: stock ?? undefined });
-  const dec = (u: Unit) => {
-    const cur = qtyOf(itemkey, u);
-    if (cur <= 1) remove(itemkey, u);
-    else setQty(itemkey, u, cur - 1);
-  };
+  const dec = (u: Unit) => decrement(itemkey, u);
 
   // + is on the RIGHT (RTL): the increment button is the first flex child.
   return (

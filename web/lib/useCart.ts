@@ -47,10 +47,19 @@ export function useCart() {
     persist(read().map((l) => (same(l, itemkey, unit, sizeLabel) ? { ...l, qty: Math.max(1, qty) } : l)));
   const remove = (itemkey: string, unit: Unit, sizeLabel?: string) =>
     persist(read().filter((l) => !same(l, itemkey, unit, sizeLabel)));
+  // Decrement by one, reading the freshest localStorage (not the possibly-stale `lines`
+  // state) so a grid of many steppers can always step back down to 0. Removes the line at 1.
+  const decrement = (itemkey: string, unit: Unit, sizeLabel?: string) => {
+    const cur = read();
+    const i = cur.findIndex((l) => same(l, itemkey, unit, sizeLabel));
+    if (i < 0) return;
+    if (cur[i].qty <= 1) persist(cur.filter((_, j) => j !== i));
+    else { cur[i] = { ...cur[i], qty: cur[i].qty - 1 }; persist(cur); }
+  };
   const clear = () => persist([]);
   const setAll = (next: CartLine[]) => persist(next); // replace the whole cart (e.g. load a draft)
 
   const count = lines.reduce((s, l) => s + l.qty, 0);
   const qtyOf = (itemkey: string, unit: Unit, sizeLabel?: string) => lines.find((l) => same(l, itemkey, unit, sizeLabel))?.qty ?? 0;
-  return { lines, add, setQty, remove, clear, setAll, count, qtyOf };
+  return { lines, add, setQty, remove, decrement, clear, setAll, count, qtyOf };
 }
