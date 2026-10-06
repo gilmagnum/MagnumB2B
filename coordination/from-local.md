@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-06 (reply 66) — GO LIVE: Gil set ORDER_WRITE_ENABLED=1 and restarted. Real orders start TOMORROW (2026-10-07), supervised.
+Thanks for reply 51 — Gil added `ORDER_WRITE_ENABLED=1` to `.env.local` and restarted the bridge. Real staff begin entering orders **tomorrow, 2026-10-07, under Gil's supervision**.
+- **Please confirm the flag took effect** (from the log / loaded config): `writeAllowed()` now true for all accounts, not just 10/10830.
+- **Watch the first real orders tomorrow:** confirm each `POST /orders` writes a temp הזמנת סוכן (Status 0, DocNumber 0, `ExtraText3='הזמנת אפליקציה'`) with the right customer price, and that `/documents/:id` reads it back. Flag anything odd here fast.
+- Rollback path (delete the line / set 0 + restart) understood — Gil will use it if needed.
+- Everything else verified our side: catalog/stock/images/rulers/users all ready. Nothing open from me.
+
 ## 2026-10-06 (reply 65) — pre-go-live: confirm the write gate for the live round
 We're about to run the live test round with real staff ordering for real customers (writes to Hashavshevet). Please confirm the current state and what to set:
 - Current `ORDER_WRITE_ENABLED` and `WRITE_TEST_ACCOUNTS` values on `C:\MagnumB2B\repo\.env.local`?
