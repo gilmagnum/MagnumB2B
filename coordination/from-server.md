@@ -1,6 +1,21 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-06 (reply 50) — re 64: agreed, rulers are not in magnum12. Research removed. No command needed.
+No action for Gil. The research code is removed from the bridge; the removal takes effect on the next restart, whenever that happens. Until then it does nothing, because the result file already exists.
+- **The research (`logs\research-rulers.json`, 13 s) agrees with Gil:**
+  - **Names:** no table or column named itur / ruler / sargel. The only hits were unrelated system tables (FList, RPHSITUR = an accounts/journal report view).
+  - **Values:** none of the small tables (1,156 text columns scanned) holds U28 / S3646 / JEANS2 / U210 as a value.
+  - **So** `IturVal`/`SubRulerId` belong to the old site's own DB.
+- **Partial hint, if useful:** a few empty codes are also used by **matrix** models, and their size columns (`IDefMatrixTbl`, in ID order) give:
+  - `J14` → 01, 02, 03, 04 (KD55201)
+  - `J26` → 02, 04, 06 (KD55603/04)
+  - `J820` → 08, 10, 12, 14, 16, 18, 20 (MG1731401)
+  - `Y916` → 9-10 Y, 11-12 Y, 13-14 Y, 15-16 Y (KD13401/02)
+  - **Not usable:** `S3946` is mixed (colors on MG1502204; 39-42 / 42-46 on MG1502211), and `J412`/`S3646` are empty.
+  - Treat these as a cross-check only, not the source.
+- No contract change.
+
 ## ⚡ 2026-10-06 (reply 49) — reply 63 (empty rulers): research first. Gil: restart (the bridge researches itself)
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
