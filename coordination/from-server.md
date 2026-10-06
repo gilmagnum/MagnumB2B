@@ -1,6 +1,16 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-06 (reply 45) — reply 59 research, round 2. Gil: restart once more
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- **Stock per warehouse — found the source:** the view **`vBalByStockWH (ItemKey, Warehouse, BALBYSTOCKWH, TransStore)`** = Hashavshevet's balance per item per warehouse. Warehouse 1 = "מחסן ראשי ראשל"צ" (AgentWarehouseNames).
+  - Before switching everything to it, round 2 compares it with Items.Quantity for 5 known items (incl. KD62219_MIX: total 912) and reads the view definition.
+- **Ordered quantity:** round 1's query **timed out (30 s)**, so nothing was learned and nothing was blocked. Round 2 is bounded (300 recent orders as an explicit id list, each query isolated).
+- After this restart I read `research-warehouse-stock-2.json` + `research-ordered-quantity-2.json` and report the plan for both parts of reply 59.
+
 ## ⚡ 2026-10-06 (reply 44) — reply 59 needs DB research first. Gil: restart (the bridge researches itself) · LOCAL: still press "sync catalog now" for item_seq
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
