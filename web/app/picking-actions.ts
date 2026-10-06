@@ -45,6 +45,23 @@ export async function releasePickingSession(stockId: number): Promise<{ ok: bool
   return { ok: true };
 }
 
+// Manager hands a saved order to another picker: free the lock but KEEP the saved
+// progress + notes, so the next picker opening it resumes exactly where this one left off.
+// (Done by staling the heartbeat; the next opener takes over per openPickingSession.)
+export async function handoffPickingSession(stockId: number): Promise<{ ok?: boolean; error?: string; heldBy?: string }> {
+  const { data: { user } } = await (await supabaseServer()).auth.getUser();
+  if (!user) return { error: "unauthorized" };
+  const admin = supabaseAdmin();
+  const { data: prof } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  const role = (prof?.role as string) ?? "";
+  if (!(role === "admin" || role === "superadmin" || role === "manager")) return { error: "למנהל בלבד" };
+  const { data: s } = await admin.from("picking_sessions").select("picker_name").eq("stock_id", stockId).maybeSingle();
+  if (!s) return { error: "אין ליקוט פעיל להזמנה זו" };
+  // Stale the lock (keep picker_id/progress/notes) → the next picker takes over the saved state.
+  await admin.from("picking_sessions").update({ updated_at: new Date(0).toISOString() }).eq("stock_id", stockId);
+  return { ok: true, heldBy: (s.picker_name as string) || "" };
+}
+
 // For the queue: which of these orders are actively held, and by whom.
 export async function getActiveLocks(stockIds: number[]): Promise<Record<number, string>> {
   if (!stockIds.length) return {};

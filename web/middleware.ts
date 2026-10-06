@@ -48,7 +48,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Pickers are restricted to the picking screens (plus their notifications).
-  if (user && !path.startsWith("/picking") && !path.startsWith("/notifications")) {
+  // Only page navigations are redirected — never /api (the bridge proxy, push, etc.),
+  // which the picking screen fetches and which is already role-gated at the data layer.
+  // Without this, a picker's /api/bridge/picking/queue was redirected to /picking (HTML),
+  // so the fetch failed and the screen showed "הגשר לא מחובר" with no orders.
+  if (user && !path.startsWith("/picking") && !path.startsWith("/notifications") && !path.startsWith("/api")) {
     const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).single();
     if (prof?.role === "picker") {
       const url = request.nextUrl.clone();

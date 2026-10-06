@@ -18,6 +18,9 @@ export const canManageUsers = (r?: string | null) => r === "superadmin";
 export const canSeeAdminPanel = (r?: string | null) => r === "superadmin";
 export const managerOrAbove = (r?: string | null) => r === "admin" || r === "superadmin";
 export const canEditRulers = (r?: string | null) => r === "admin" || r === "superadmin";
+// Staff who may see available stock in the catalog (agents, managers, admins) — even
+// with no customer selected. Pickers (picking screen only) and any future customer role do not.
+export const canSeeStock = (r?: string | null) => r === "agent" || r === "admin" || r === "superadmin";
 
 // Roles that can be assigned/created from the user-management UI.
 export const ASSIGNABLE_ROLES: { value: string; label: string }[] = [

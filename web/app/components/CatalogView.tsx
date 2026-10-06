@@ -2,8 +2,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CatalogItem } from "../../lib/supabase";
 import { useOrderContext } from "../../lib/useOrderContext";
+import { useRole } from "../../lib/useRole";
+import { canSeeStock } from "../../lib/roles";
 import { bridge } from "../../lib/bridge";
 import AddToCart from "./AddToCart";
+import StockLine from "./StockLine";
 
 const uniq = (xs: (string | null)[]) => [...new Set(xs.filter(Boolean) as string[])].sort();
 
@@ -11,6 +14,7 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
   categoryMain: string; items: CatalogItem[]; allCategories?: string[];
 }) {
   const { ctx } = useOrderContext();
+  const showStock = canSeeStock(useRole());
   const [sub, setSub] = useState<string>("");
   const [brand, setBrand] = useState<string>("");
   const [season, setSeason] = useState<string>("");
@@ -118,6 +122,7 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
               <div style={{ marginTop: 6, fontWeight: 800, color: "var(--ink)" }}>
                 {p != null ? `${Number(p).toFixed(2)} ₪` : ""} {it.per_carton ? <span style={{ fontWeight: 400, color: "var(--ink-muted)", fontSize: 12 }}>· {it.per_carton} בקרטון</span> : ""}
               </div>
+              {showStock && <StockLine stock={it.stock} perSize={!!it.matrix_flag || !!it.is_carton_size_item} />}
               <div className="card-action">
                 {(it.matrix_flag || it.is_carton_size_item) ? (
                   <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-primary btn-sm" style={{ display: "block", textAlign: "center" }}>בחירת מידות ←</a>

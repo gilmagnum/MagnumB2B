@@ -5,7 +5,7 @@ import { bridge, type DocumentDetail, type DocLine } from "../../../lib/bridge";
 import { fetchImages } from "../../../lib/images";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import { managerOrAbove } from "../../../lib/roles";
-import { openPickingSession, savePickingSession, releasePickingSession } from "../../picking-actions";
+import { openPickingSession, savePickingSession, releasePickingSession, handoffPickingSession } from "../../picking-actions";
 
 // Per-order picking (mobile/tablet first). The order is locked to one picker; picking starts
 // from 0; each line can be marked full in one click or typed; progress can be saved & resumed,
@@ -26,6 +26,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [confirm, setConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState("");
+  const [handoff, setHandoff] = useState("");
 
   const lineKey = (l: DocLine) => String(l.lineId ?? `${l.itemkey}|${l.size ?? ""}`);
   const pickedRef = useRef(picked); pickedRef.current = picked;
@@ -132,6 +133,8 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     setDone(hashavshevetOk
       ? `הליקוט הושלם ונכתב לחשבשבת ✓ · לוקט ע״י ${picker}`
       : `התיעוד נשמר באפליקציה ✓ · לוקט ע״י ${picker}. (${note})`);
+    // Every exit from picking returns to the queue; a short pause lets the picker read the result.
+    setTimeout(() => router.push("/picking"), hashavshevetOk ? 1800 : 3500);
   };
 
   if (err) return <p className="chip chip-warn">{err} <a href="/picking">← לתור</a></p>;
@@ -140,8 +143,29 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     <>
       <p><a href="/picking" style={{ color: "var(--brand)" }}>← תור הליקוט</a></p>
       <p className="chip chip-warn" style={{ display: "block", padding: 14, fontSize: 15 }}>
-        ההזמנה בליקוט כעת אצל <b>{lockedBy}</b> — נעולה למלקטים אחרים. נסה שוב מאוחר יותר.
+        ההזמנה בליקוט כעת אצל <b>{lockedBy}</b> — נעולה למלקטים אחרים.{isAdmin ? "" : " נסה שוב מאוחר יותר."}
       </p>
+      {isAdmin && !handoff && (
+        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button className="btn btn-primary" disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              const r = await handoffPickingSession(id).catch(() => ({ error: "שגיאה" }));
+              setSaving(false);
+              if ("ok" in r && r.ok) setHandoff(`הנעילה שוחררה${lockedBy ? ` מ${lockedBy}` : ""} — מלקט אחר יכול להיכנס כעת ולהמשיך מהמצב השמור.`);
+              else window.alert(("error" in r && r.error) || "לא ניתן לשחרר");
+            }}>שחרר למלקט אחר (מנהל)</button>
+          <span style={{ fontSize: 13, color: "var(--ink-muted)", alignSelf: "center" }}>ההתקדמות שנשמרה תישמר — המלקט הבא ימשיך מאותו מצב.</span>
+        </div>
+      )}
+      {handoff && (
+        <p className="chip chip-ok" style={{ display: "block", padding: 12, marginTop: 12 }}>
+          {handoff}{" "}
+          <a href="/picking" style={{ color: "inherit", textDecoration: "underline" }}>לתור</a>
+          {" · "}
+          <a href={`/picking/${id}`} onClick={() => setTimeout(() => window.location.reload(), 0)} style={{ color: "inherit", textDecoration: "underline" }}>היכנס אתה והמשך</a>
+        </p>
+      )}
     </>
   );
 
