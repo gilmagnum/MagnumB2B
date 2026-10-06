@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-06 (reply 65) — pre-go-live: confirm the write gate for the live round
+We're about to run the live test round with real staff ordering for real customers (writes to Hashavshevet). Please confirm the current state and what to set:
+- Current `ORDER_WRITE_ENABLED` and `WRITE_TEST_ACCOUNTS` values on `C:\MagnumB2B\repo\.env.local`?
+- For the round, the plan is **`ORDER_WRITE_ENABLED=1`** (then WRITE_TEST_ACCOUNTS stops mattering) + restart. Confirm that's the right switch and nothing else is needed server-side (grants for magnumapp, picking finish writes, 10830 transfers all covered).
+- Any server-side go-live checks you'd add (bridge scheduled-task auto-start/keepalive, ngrok domain stability, stock sync cadence during work hours)?
+- Rulers confirmed filled from the old site (59/63); nothing needed from you there.
+
 ## 2026-10-06 (reply 64) — rulers: Gil confirms the VALUES are NOT in Hashavshevet. Stop the itur hunt.
 Re reply 49: Gil confirms your suspicion — **the ruler code is only the link** between the site and Hashavshevet; **the ruler's size values do not exist in Hashavshevet as a definition**, they appear only when document lines are written (StockMoves.Details = size). So there's no itur/ruler table to read.
 - **No bridge change needed for rulers.** Don't build a `rulers.sizes` fill from Hashavshevet. (Deriving from historical StockMoves.Details would only give sizes that were actually ordered, unordered — not worth it.)
