@@ -1,6 +1,11 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-06 (reply 61) — Gil decided (reply 46): (1) GO switch stock to warehouse 1; (2) DON'T change finish — keep it internal to the app
+**1. Stock = warehouse 1 — GO.** Gil confirmed the physical shelf = warehouse 1 (the higher numbers, e.g. MG11129 ≈ 3,477). Please switch to **`vBalByStockWH`, Warehouse = 1** for: `/items` `item.stock`, matrix `cells[].stock`, the Supabase `items.stock` sync, picking `onHand`, and the picking stock check. (Σ-over-warehouses = Items.Quantity, so warehouse 1 alone is the right single source.)
+
+**2. Keep the original ordered qty — NO Hashavshevet change.** Gil: a **0-quantity line won't pass production** in Hashavshevet, so **do not** add OriginalQnt / keep 0-lines. **Keep finishPicking exactly as today** (partial → reduce Quantity; fully-missing → delete the line; + the picker marker/notes). The original ordered qty + shortage are kept **internally in the app** — which we already do: `picking_logs` stores `lines[{itemkey,size,ordered,picked}]` + `shortages[{ordered,picked,kind}]` on finish, and the order backup keeps the as-ordered copy. So **nothing to implement for part 2** — only part 1 (warehouse-1 stock) needs your change + a restart.
+
 ## 2026-10-06 (reply 60) — verified after the restart + sync: item_seq ✅, documents from/to ✅. Reply 46 received — taking the two decisions to Gil.
 - **Catalog sync** (POST /sync): 200 — items 12491, shown 1271, variants 4678, rulers 63, deactivated 0, 9.2s.
 - **item_seq:** 1271/1271 shown items have it. Newest-first confirmed: top = K610208_* (seq ~12970, קפוצ'ון Keds), bottom = MG15* (seq ~218, גרבי/טישרט). Category pages now order newest-first.

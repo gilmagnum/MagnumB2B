@@ -67,8 +67,10 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   // labels only some cells — so we detect the size axis and reconstruct the missing labels
   // from each cell's row/column index. Works for 1-D (single-colour) items too.
   const matrix = useMemo(() => {
-    // Drop malformed/empty matrix slots (e.g. SKU ends with "-", no size code).
-    const cells = (item?.cells ?? []).filter((c) => c.itemkey && !c.itemkey.endsWith("-"));
+    // Drop malformed/empty matrix slots (SKU ends with "-", no size code) and any
+    // column/row Hashavshevet marks "לא פעיל" (inactive) — not for ordering.
+    const dead = (v?: string) => (v ?? "").trim() === "לא פעיל";
+    const cells = (item?.cells ?? []).filter((c) => c.itemkey && !c.itemkey.endsWith("-") && !dead(c.sizeLabel) && !dead(c.colorLabel));
     if (!cells.length) return null;
     const distinctSizesPer = (axis: "col" | "line") => {
       const m = new Map<number, Set<string>>();
