@@ -1,6 +1,38 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ❓ 2026-10-06 (reply 46) — reply 59 research results: two decisions for Gil (nothing changed yet)
+No command needed now. Answer the two questions; then one change + restart.
+
+### 1. Stock "warehouse 1 only" — source found, but the numbers need Gil's judgement
+- Hashavshevet's per-warehouse balance is the view **`vBalByStockWH (ItemKey, Warehouse, BALBYSTOCKWH)`**. **Σ over warehouses = Items.Quantity exactly** for all 5 test items, so it's the right source.
+- **But warehouse 1 alone is HIGHER than today's total**, because other warehouses carry **negative** balances:
+
+  | item | total (what the app shows now) | **warehouse 1** | negative warehouses |
+  |---|---|---|---|
+  | KD62219_MIX | 912 | **1,184** | 10830 −83, 10850 −189 |
+  | KD62220_MIX | 553 | **736** | 10830 −80, 10850 −103 |
+  | MG11129 | 933 | **3,477** | 13700 −2,544 |
+  | BR11506 | 940 | **4,424** | 0 −2,079, 10830 −855, 13700 −536, 10850 −14 |
+  | BB12103WH | 80 | **658** | 13700 −578 |
+- Negative warehouses (10830 = י.ר מגנום סחר, 10850, 13700, 0) sold or transferred out more than they received. That's typical when goods leave warehouse 1 physically but are booked against another warehouse.
+- **Gil, please check one item on the shelf** (e.g. MG11129: is it ~3,477 or ~933 in the main warehouse?).
+  - If **warehouse 1 (vBalByStockWH, Warehouse=1)** is the physical shelf stock, I switch `/items`, cells, `items.stock`, picking `onHand` and the picking stock check to it.
+  - If the total is closer to reality, we keep Items.Quantity.
+  - The switch itself is one small change.
+
+### 2. Keep the ORIGINAL ordered qty when picking short — Hashavshevet's own way
+- **How Hashavshevet does it** (recent orders): when a line ends up with less than was ordered, it keeps **`Quantity` = supplied** and **`OriginalQnt` = original ordered qty** on that line. E.g. doc 116840: KD13402WH04 Quantity 5 / OriginalQnt 10; KD437013 20 / 25. The source order line keeps the remainder in `SupplyQuantity`.
+  - 109 of 2,168 recent doc-11 lines carry OriginalQnt; our app lines don't.
+- **Recommendation (for finish picking):**
+  - **partial** → `Quantity = picked` (and its TFtal/TftalVat/Supply/Base/PurchQuantity, as now) **+ `OriginalQnt = ordered`** (and OriginalBaseQnt);
+  - **fully missing** → **keep the line**, with `Quantity = 0` + `OriginalQnt = ordered`, instead of deleting it;
+  - header totals still recomputed from Quantity, so they match what production will invoice.
+  - Result: (a) the ordered qty stays on the document (OriginalQnt, the "כמות מקורית" column in Hashavshevet), (b) picked/shortage = Quantity vs OriginalQnt, (c) production uses Quantity = what was picked.
+  - Re-runs stay correct: OriginalQnt is set once, from the first ordered value.
+- **Open point for Gil:** is a **0-quantity line** OK when the order is produced in Hashavshevet (it should produce a 0 line or skip it)? If not, we keep deleting fully-missing lines and record them only in the notes plus your picking_logs, and partial lines still get OriginalQnt.
+- **GO / adjust?** I'll implement as soon as Gil confirms. Until then finish keeps today's reduce/delete.
+
 ## ⚡ 2026-10-06 (reply 45) — reply 59 research, round 2. Gil: restart once more
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
