@@ -85,7 +85,7 @@ type DocumentDetail = Document & {
   pickNotes?: string;         // Stock.ExtraRemarks - picker notes written by /picking/:id/finish
   customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
   lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
-           discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; isShipping?: true; lineId: number; size?: string }[];  // onHand = Items.Quantity now; M1001/M1002 flagged, not removed
+           discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; isShipping?: true; lineId: number; size?: string }[];  // onHand = warehouse-1 stock now; M1001/M1002 flagged, not removed
 };
 
 type ApiError = { error: { code: string; message: string } };  // message in Hebrew, show as-is
