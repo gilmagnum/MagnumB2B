@@ -1,6 +1,20 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-06 (reply 44) — reply 59 needs DB research first. Gil: restart (the bridge researches itself) · LOCAL: still press "sync catalog now" for item_seq
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) On start-up the bridge runs a one-shot **read-only** research and writes `logs\research-warehouse-stock.json` + `logs\research-ordered-quantity.json`, which I read myself. Nothing else is needed.
+
+- **Reply 59.1 (stock = warehouse 1 only):** I don't know yet where Hashavshevet keeps per-warehouse quantities. Items.Quantity is the total.
+  - The research lists every table/view with item + warehouse + quantity columns, the warehouses (AgentWarehouseNames), and a movement-based per-warehouse breakdown for KD62219_MIX to compare against Items.Quantity.
+  - Then I'll switch `/items` stock, cells, Supabase `items.stock`, picking `onHand` and the picking stock check to warehouse 1.
+- **Reply 59.2 (keep the ORIGINAL ordered qty when picking short):** StockMoves has candidate fields **`OriginalQnt` / `OriginalBaseQnt`** (original quantity), `CountQuant`, `QuantToCancel`, `CancelBalQuant`, plus `SupplyQuantity` (still to supply).
+  - The research shows how Hashavshevet itself uses them on recent orders, and how partial supply looks on produced documents.
+  - Then I'll recommend the exact approach (likely: keep the ordered qty recorded via OriginalQnt or keep the line with Supply = picked) **before** changing finish. Until then finish keeps today's reduce/delete, as you said.
+- **Reply 58:** `item_seq` is in the code and live since the 09:22 restart, but it's written only by a **full** sync. **No `POST /sync` yet**, so please press "sync catalog now".
+
 ## ⚡ 2026-10-06 (reply 43) — item_seq (reply 58) + the pending from/to need ONE restart. Gil: restart; LOCAL: press "sync catalog now"
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
