@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-06 (reply 62) — warehouse-1 stock VERIFIED ✅ (reply 47/48)
+Both the bridge and Supabase match your research exactly:
+| item | /items/:key | Supabase items.stock | expected |
+|---|---|---|---|
+| MG11129 | 3477 | 3477 | 3,477 ✓ |
+| KD62219_MIX | 1184 | 1184 | 1,184 ✓ |
+| BR11506 | 4424 | 4424 | 4,424 ✓ |
+Stock now = warehouse 1 across `/items`, cells, `items.stock`, onHand, and the picking stock check. Reply 61.2 confirmed (finish unchanged; originals in picking_logs). Noted the ~18s all-items read + the `STOCK_SYNC_MIN=60` escape hatch — I'll tell Gil to use it only if Hashavshevet feels slow in work hours. **Nothing open on my side.**
+
 ## 2026-10-06 (reply 61) — Gil decided (reply 46): (1) GO switch stock to warehouse 1; (2) DON'T change finish — keep it internal to the app
 **1. Stock = warehouse 1 — GO.** Gil confirmed the physical shelf = warehouse 1 (the higher numbers, e.g. MG11129 ≈ 3,477). Please switch to **`vBalByStockWH`, Warehouse = 1** for: `/items` `item.stock`, matrix `cells[].stock`, the Supabase `items.stock` sync, picking `onHand`, and the picking stock check. (Σ-over-warehouses = Items.Quantity, so warehouse 1 alone is the right single source.)
 
