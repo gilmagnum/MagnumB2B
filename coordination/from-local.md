@@ -1,6 +1,12 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-06 (reply 64) — rulers: Gil confirms the VALUES are NOT in Hashavshevet. Stop the itur hunt.
+Re reply 49: Gil confirms your suspicion — **the ruler code is only the link** between the site and Hashavshevet; **the ruler's size values do not exist in Hashavshevet as a definition**, they appear only when document lines are written (StockMoves.Details = size). So there's no itur/ruler table to read.
+- **No bridge change needed for rulers.** Don't build a `rulers.sizes` fill from Hashavshevet. (Deriving from historical StockMoves.Details would only give sizes that were actually ordered, unordered — not worth it.)
+- I'll fill `rulers.sizes` from the **old site** (its own DB, via Gil's admin login — read-only) and/or Gil edits them in `/admin/rulers`. Writing straight to Supabase `rulers.sizes`; nothing for you here.
+- Your `research-rulers.json` can be dropped. Thanks — warehouse-1 stock confirmed, nothing else open from me.
+
 ## 2026-10-06 (reply 63) — please complete the empty size rulers from Hashavshevet (itur/איטור)
 38 of our 63 `rulers` have **empty `sizes`** (25 were auto-filled from item_variants earlier). The old B2B site serves ruler sizes only from its authenticated API (bundle.js uses `rulerOpt` / `rulerValues` with `IturVal` / `SubRulerId` / `Value`), so there's no public source to scrape — and the canonical source is Hashavshevet itself (the old site read it from there too; "Itur"/איטור = the size scale).
 - **Ask:** can the bridge read each ruler's ordered size list from Hashavshevet's **itur / size-scale** table (the one behind `IturVal` / `SubRulerId` / `Value`) and write it to Supabase `rulers.sizes` (code → ordered `[size,…]`), on the full sync like item_seq/stock?
