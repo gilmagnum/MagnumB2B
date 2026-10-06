@@ -94,6 +94,31 @@ export async function saveRulerAction(_prev: AdminState, formData: FormData): Pr
   return { ok: `נשמר (${clean.length} מידות)` };
 }
 
+// The products that carry a given ruler code — so a manager can see what a ruler drives
+// (and which are hidden) before deleting an old one.
+export type RulerItem = { itemkey: string; name: string | null; shown: boolean };
+export async function listRulerItemsAction(code: string): Promise<{ items?: RulerItem[]; error?: string }> {
+  const me = await getProfile().catch(() => null);
+  if (!me || !canEditRulers(me.role)) return { error: "אין הרשאה" };
+  const { data, error } = await supabaseAdmin()
+    .from("items").select("itemkey, item_name, shown_on_site").eq("ruler_code", code).order("itemkey");
+  if (error) return { error: error.message };
+  return { items: (data ?? []).map((r) => ({ itemkey: r.itemkey as string, name: (r.item_name as string) ?? null, shown: !!r.shown_on_site })) };
+}
+
+// Delete an old/unused ruler. Products keeping this code just lose the size list
+// (they fall back to a whole-carton order) — the manager confirms with the count in hand.
+export async function deleteRulerAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const me = await getProfile().catch(() => null);
+  if (!me || !canEditRulers(me.role)) return { error: "אין הרשאה" };
+  const code = String(formData.get("code") ?? "").trim();
+  if (!code) return { error: "קוד סרגל חסר" };
+  const { error } = await supabaseAdmin().from("rulers").delete().eq("code", code);
+  if (error) return { error: error.message };
+  revalidatePath("/settings/rulers");
+  return { ok: "נמחק" };
+}
+
 // Reset a user's password.
 export async function resetPasswordAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
   try { await requireSuperadmin(); } catch { return { error: "אין הרשאה" }; }

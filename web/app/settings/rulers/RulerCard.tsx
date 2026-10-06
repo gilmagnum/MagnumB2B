@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { saveRulerAction, type AdminState } from "../../admin/actions";
+import { saveRulerAction, deleteRulerAction, listRulerItemsAction, type AdminState, type RulerItem } from "../../admin/actions";
 
 export default function RulerCard({ code, name, itemCount, initialSizes }: {
   code: string; name: string | null; itemCount: number; initialSizes: string[];
@@ -10,6 +10,30 @@ export default function RulerCard({ code, name, itemCount, initialSizes }: {
   const [state, setState] = useState<AdminState>({});
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [items, setItems] = useState<RulerItem[] | null>(null); // product list (lazy)
+  const [showItems, setShowItems] = useState(false);
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  const toggleItems = async () => {
+    const next = !showItems;
+    setShowItems(next);
+    if (next && items === null) {
+      setLoadingItems(true);
+      const res = await listRulerItemsAction(code).catch(() => ({ error: "שגיאה" }));
+      setItems(("items" in res && res.items) ? res.items : []);
+      setLoadingItems(false);
+    }
+  };
+
+  const del = async () => {
+    if (!window.confirm(`למחוק את הסרגל "${code}"?${itemCount ? ` ${itemCount} פריטים משתמשים בו ויחזרו להזמנת קרטון שלם.` : " אין פריטים שמשתמשים בו."}`)) return;
+    setSaving(true);
+    const fd = new FormData(); fd.set("code", code);
+    const res = await deleteRulerAction({}, fd);
+    setSaving(false);
+    if (res.ok) setDeleted(true); else setState(res);
+  };
 
   const addVal = () => {
     const v = draft.trim();
@@ -31,12 +55,33 @@ export default function RulerCard({ code, name, itemCount, initialSizes }: {
     if (res.ok) setDirty(false);
   };
 
+  if (deleted) return null;
+
   return (
     <div className="card card-pad" style={{ display: "grid", gap: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
         <div><b style={{ color: "var(--brand-strong)" }}>{code}</b>{name ? <span style={{ color: "var(--ink-muted)", fontSize: 13 }}> · {name}</span> : null}</div>
-        <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>{itemCount} פריטים</span>
+        <button onClick={toggleItems} className="btn btn-sm" style={{ padding: "2px 8px", fontSize: 12 }} title="הצג את המוצרים שמשתמשים בסרגל">
+          {itemCount} פריטים {showItems ? "▲" : "▼"}
+        </button>
       </div>
+
+      {showItems && (
+        <div style={{ background: "var(--surface-muted)", borderRadius: "var(--radius-sm)", padding: "8px 10px", maxHeight: 200, overflow: "auto", fontSize: 13 }}>
+          {loadingItems ? <span style={{ color: "var(--ink-muted)" }}>טוען…</span>
+            : !items || items.length === 0 ? <span style={{ color: "var(--ink-muted)" }}>אין פריטים שמשתמשים בסרגל זה.</span>
+            : (
+              <ul style={{ margin: 0, paddingInlineStart: 16, display: "grid", gap: 3 }}>
+                {items.map((it) => (
+                  <li key={it.itemkey}>
+                    <b>{it.itemkey}</b>{it.name ? ` · ${it.name}` : ""}
+                    {!it.shown && <span className="chip chip-warn" style={{ marginInlineStart: 6, fontSize: 11 }}>מוסתר</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+        </div>
+      )}
 
       {sizes.length === 0 && <p style={{ color: "var(--ink-muted)", fontSize: 13, margin: 0 }}>אין מידות — הוסף למטה.</p>}
       <ol style={{ margin: 0, paddingInlineStart: 22, display: "grid", gap: 6 }}>
@@ -56,8 +101,9 @@ export default function RulerCard({ code, name, itemCount, initialSizes }: {
         <button onClick={addVal} className="btn">+ הוסף ערך</button>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <button onClick={save} disabled={saving || !dirty} className="btn btn-primary btn-sm">{saving ? "שומר…" : "שמירה"}</button>
+        <button onClick={del} disabled={saving} className="btn btn-sm" style={{ color: "var(--danger)", marginInlineStart: "auto" }} title="מחק סרגל">מחק סרגל</button>
         {state.ok && <span className="chip chip-ok">{state.ok}</span>}
         {state.error && <span className="chip chip-danger">{state.error}</span>}
         {dirty && !state.ok && <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>שינויים לא שמורים</span>}
