@@ -250,7 +250,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
         ) : soldOut(item?.stock) ? (
           <p className="chip chip-danger">אזל מהמלאי{ctx?.orderKind === "picking" ? " — לא ניתן להזמין לליקוט" : ""}</p>
         ) : (
-          <AddToCart itemkey={cat.itemkey} title={name} perCarton={perCarton} perBundle={perBundle} price={effPrice} stock={item?.stock} />
+          <AddToCart itemkey={cat.itemkey} title={name} perCarton={perCarton} perBundle={perBundle} price={effPrice} stock={item?.stock} big={(perBundle ?? 0) <= 0} />
         )}
       </div>
     </div>
@@ -268,9 +268,9 @@ function Stepper({ itemkey, unit, title, packSize, price, sizeLabel, disabled, a
   if (q > 0) {
     return (
       <div style={{ display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid var(--brand)", borderRadius: "var(--radius-sm)", padding: "2px 4px" }}>
-        <button onClick={dec} className="btn btn-sm" style={{ padding: "2px 9px", border: 0, background: "transparent", color: "var(--brand)", fontSize: 16 }}>−</button>
-        <span style={{ minWidth: 24, textAlign: "center", fontWeight: 700 }}>{q}</span>
         <button onClick={inc} className="btn btn-sm" style={{ padding: "2px 9px", border: 0, background: "transparent", color: "var(--brand)", fontSize: 16 }}>+</button>
+        <span style={{ minWidth: 24, textAlign: "center", fontWeight: 700 }}>{q}</span>
+        <button onClick={dec} className="btn btn-sm" style={{ padding: "2px 9px", border: 0, background: "transparent", color: "var(--brand)", fontSize: 16 }}>−</button>
       </div>
     );
   }

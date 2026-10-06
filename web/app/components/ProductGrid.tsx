@@ -28,19 +28,15 @@ export default function ProductGrid({ items }: { items: CatalogItem[] }) {
           <div style={{ marginTop: 6, fontWeight: 800 }}>
             {it.price != null ? `${it.price} ₪` : ""} {it.per_carton ? <span style={{ fontWeight: 400, color: "var(--ink-muted)", fontSize: 12 }}>· {it.per_carton} בקרטון</span> : ""}
           </div>
-          {(it.matrix_flag || it.is_carton_size_item) ? (
-            <div style={{ marginTop: 10 }}>
-              <span className="chip chip-info">{it.is_carton_size_item ? "קרטון לפי מידה" : "מטריצה"}</span>
-              <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-primary btn-sm" style={{ display: "block", marginTop: 8, textAlign: "center" }}>בחירת מידות ←</a>
-            </div>
-          ) : it.ruler_code ? (
-            <div style={{ marginTop: 6 }}>
+          <div className="card-action">
+            {(it.matrix_flag || it.is_carton_size_item) ? (
+              <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-primary btn-sm" style={{ display: "block", textAlign: "center" }}>בחירת מידות ←</a>
+            ) : it.ruler_code ? (
               <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={it.price} only="carton" />
-              <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-sm" style={{ display: "block", marginTop: 6, textAlign: "center" }}>בחירת מידות (חבילה לפי מידה) ←</a>
-            </div>
-          ) : (
-            <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={it.price} />
-          )}
+            ) : (
+              <AddToCart itemkey={it.itemkey} title={it.item_name} perCarton={it.per_carton} perBundle={it.per_bundle} price={it.price} />
+            )}
+          </div>
         </article>
       ))}
     </div>

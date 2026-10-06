@@ -61,6 +61,26 @@ export async function getDraft(accountKey: string): Promise<{ lines: Line[]; upd
   return data ? { lines: (data.lines as Line[]) ?? [], updated_at: data.updated_at as string } : null;
 }
 
+// --- Picking logs (picker notes + shortages, saved on finish) ---
+export type PickLogLine = { itemkey: string; size?: string; ordered: number; picked: number };
+export type PickShortage = { itemkey: string; size?: string; name?: string; ordered: number; picked: number; kind: "full" | "partial" };
+export type PickLogRow = {
+  id: string; stock_id: number | null; doc_number: number | null; account_key: string | null;
+  picker: string | null; notes: string | null; lines: PickLogLine[]; shortages: PickShortage[]; created_at: string;
+};
+export async function listPickingLogs(): Promise<PickLogRow[]> {
+  const me = await getProfile().catch(() => null);
+  if (!me) return [];
+  const { data: { user } } = await (await supabaseServer()).auth.getUser();
+  let qb = supabaseAdmin().from("picking_logs")
+    .select("id, stock_id, doc_number, account_key, picker, notes, lines, shortages, created_at")
+    .order("created_at", { ascending: false }).limit(200);
+  // Managers see all; a picker sees their own.
+  if (!managerOrAbove(me.role)) qb = qb.eq("created_by", user?.id ?? "");
+  const { data } = await qb;
+  return (data as PickLogRow[]) ?? [];
+}
+
 export async function deleteDraft(accountKey: string): Promise<{ ok?: boolean }> {
   const { data: { user } } = await (await supabaseServer()).auth.getUser();
   if (!user) return { ok: true };
