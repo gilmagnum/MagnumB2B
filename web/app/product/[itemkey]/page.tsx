@@ -3,15 +3,19 @@ import { use, useEffect, useMemo, useState } from "react";
 import { bridge, type Item, type MatrixCell } from "../../../lib/bridge";
 import { useCart, type Unit } from "../../../lib/useCart";
 import { useOrderContext } from "../../../lib/useOrderContext";
+import { useRole } from "../../../lib/useRole";
+import { canSeeStock } from "../../../lib/roles";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import type { CatalogItem } from "../../../lib/supabase";
 import AddToCart from "../../components/AddToCart";
+import StockLine from "../../components/StockLine";
 import ImageUploader from "../../components/ImageUploader";
 
 export default function ProductPage({ params }: { params: Promise<{ itemkey: string }> }) {
   const { itemkey } = use(params);
   const key = decodeURIComponent(itemkey);
   const { ctx } = useOrderContext();
+  const showStock = canSeeStock(useRole());
   const [cat, setCat] = useState<CatalogItem | null>(null);
   const [catLoading, setCatLoading] = useState(true);
   const [item, setItem] = useState<Item | null>(null);
@@ -209,7 +213,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
                         const low = (cell.stock ?? 0) <= 0;
                         return (
                           <td key={s.i} style={td}>
-                            <div style={{ fontSize: 11, color: low ? "var(--danger)" : "var(--ink-muted)" }}>מלאי: {cell.stock ?? "-"}</div>
+                            {showStock && <div style={{ fontSize: 11, color: low ? "var(--danger)" : "var(--ink-muted)" }}>מלאי: {cell.stock ?? "-"}</div>}
                             <div style={{ display: "flex", justifyContent: "center", marginTop: 2 }}>
                               {soldOut(cell.stock)
                                 ? <span className="chip chip-danger">אזל</span>
@@ -232,7 +236,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
           ) : unit === "bundle" ? (
             <div style={{ display: "grid", gap: 8 }}>
               {!ctx && <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>בחר לקוח כדי להזמין.</span>}
-              {(item?.stock != null && item.stock > 0) && <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>מלאי כולל: {item.stock}</span>}
+              {showStock && (item?.stock != null) && <span style={{ fontSize: 12, color: (item.stock > 0) ? "var(--ok)" : "var(--danger)", fontWeight: 600 }}>מלאי: {item.stock}</span>}
               {rulerSizes.map((size) => (
                 <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
                   <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
@@ -252,7 +256,10 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
         ) : soldOut(item?.stock) ? (
           <p className="chip chip-danger">אזל מהמלאי{ctx?.orderKind === "picking" ? " — לא ניתן להזמין לליקוט" : ""}</p>
         ) : (
-          <AddToCart itemkey={cat.itemkey} title={name} perCarton={perCarton} perBundle={perBundle} price={effPrice} stock={item?.stock} big={(perBundle ?? 0) <= 0} />
+          <div style={{ display: "grid", gap: 8 }}>
+            {showStock && (item?.stock != null) && <StockLine stock={item.stock} size="md" />}
+            <AddToCart itemkey={cat.itemkey} title={name} perCarton={perCarton} perBundle={perBundle} price={effPrice} stock={item?.stock} big={(perBundle ?? 0) <= 0} />
+          </div>
         )}
       </div>
     </div>

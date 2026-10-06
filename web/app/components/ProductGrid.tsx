@@ -1,11 +1,15 @@
 "use client";
 import type { CatalogItem } from "../../lib/supabase";
 import { useOrderContext } from "../../lib/useOrderContext";
+import { useRole } from "../../lib/useRole";
+import { canSeeStock } from "../../lib/roles";
 import AddToCart from "./AddToCart";
+import StockLine from "./StockLine";
 
 // Shared product grid (used by search results; the category page has its own layout).
 export default function ProductGrid({ items }: { items: CatalogItem[] }) {
   const { ctx } = useOrderContext();
+  const showStock = canSeeStock(useRole());
   const stockSynced = items.some((i) => (i.stock ?? 0) > 0);
   const visible = items.filter((i) => !(
     !!ctx && stockSynced && !i.matrix_flag && !i.is_carton_size_item && (i.stock ?? 0) <= 0
@@ -28,6 +32,7 @@ export default function ProductGrid({ items }: { items: CatalogItem[] }) {
           <div style={{ marginTop: 6, fontWeight: 800 }}>
             {it.price != null ? `${it.price} ₪` : ""} {it.per_carton ? <span style={{ fontWeight: 400, color: "var(--ink-muted)", fontSize: 12 }}>· {it.per_carton} בקרטון</span> : ""}
           </div>
+          {showStock && <StockLine stock={it.stock} perSize={!!it.matrix_flag || !!it.is_carton_size_item} />}
           <div className="card-action">
             {(it.matrix_flag || it.is_carton_size_item) ? (
               <a href={`/product/${encodeURIComponent(it.itemkey)}`} className="btn btn-primary btn-sm" style={{ display: "block", textAlign: "center" }}>בחירת מידות ←</a>
