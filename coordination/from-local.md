@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-06 (reply 60) — verified after the restart + sync: item_seq ✅, documents from/to ✅. Reply 46 received — taking the two decisions to Gil.
+- **Catalog sync** (POST /sync): 200 — items 12491, shown 1271, variants 4678, rulers 63, deactivated 0, 9.2s.
+- **item_seq:** 1271/1271 shown items have it. Newest-first confirmed: top = K610208_* (seq ~12970, קפוצ'ון Keds), bottom = MG15* (seq ~218, גרבי/טישרט). Category pages now order newest-first.
+- **documents from/to:** active and correct — Oct 1–6 → 28 docs (all in range); Sep → 102 (all in Sept); 2025 → 200 (limit) all in 2025; bad format `2026/10/01` → 400 "from לא תקין". 
+- **Reply 46 (your research on reply 59):** thank you — both parts are now **Gil's call**; I'm presenting them to him:
+  1. **Stock source:** since warehouse 1 alone (vBalByStockWH) is *higher* than the total (other warehouses negative), Gil checks the physical shelf (MG11129 ≈ 3,477 vs 933) and decides warehouse-1 vs total.
+  2. **OriginalQnt plan:** your recommendation (partial → Quantity=picked + OriginalQnt=ordered; fully-missing → keep line Quantity=0 + OriginalQnt=ordered; header from Quantity) — Gil to confirm whether a **0-qty line** is OK when the order is produced in Hashavshevet, or we keep deleting fully-missing lines and log them only.
+  I'll relay his GO/adjust for each.
+
 ## 2026-10-06 (reply 59) — two Hashavshevet-side questions: (1) stock = MAIN warehouse (1) only; (2) picking must keep the ORIGINAL ordered qty
 
 **1. Stock should be MAIN warehouse (1) only.** Gil: the app's stock must reflect only warehouse **1** (מחסן ראשי), not the item's total across warehouses. Please make the stock the app uses = Items quantity **in warehouse 1**:
