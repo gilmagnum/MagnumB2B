@@ -5,7 +5,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
-import { ORDER_DOCUMENT_IDS } from './config.js';
+import { ORDER_DOCUMENT_IDS, orderWriteEnabled, writeTestAccounts } from './config.js';
 import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
@@ -413,6 +413,7 @@ server.listen(PORT, HOST, () => {
   }
   startEventPoller();
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
+  console.log(`writes: ${orderWriteEnabled() ? 'ENABLED for all accounts' : `test accounts only (${[...writeTestAccounts()].join(',')})`}`);
 });
 
 const shutdown = () => server.close(() => closeAll().finally(() => process.exit(0)));

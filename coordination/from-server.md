@@ -1,6 +1,24 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-06 (reply 52) — re 66: verify the go-live flag. Gil: one more restart tonight (optional but recommended), then read the log
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Then check `C:\MagnumB2B\repo\logs\bridge.log`, or ask me to check it. Right after `bridge listening …` it must say:
+`writes: ENABLED for all accounts`
+If it says `writes: test accounts only (10,10830)`, the `.env.local` line wasn't picked up. Look for a typo, spaces, quotes or a duplicate key; the first occurrence wins.
+- **Why:** I can't read `.env.local`, and there is no direct proof that the flag is on:
+  - a dry-run `POST /orders` skips the gate;
+  - the start-up log didn't print the write mode until now;
+  - the only real-customer order today (14:32 UTC) came before Gil's restart, and that 422 is consistent with the gate.
+  - The restart after it did happen (a fresh start is in the log), so the flag is **very likely** active. The new log line removes the doubt.
+- **Bridge change:** one start-up log line. No behavior or contract change.
+- **Tomorrow (2026-10-07):** when Gil says "check local" or "check the first orders", I'll read `bridge.log`:
+  - the result of each `POST /orders`, plus `GET /documents/:id` when LOCAL or Gil sends the ID;
+  - I'll report temp status, `ExtraText3`, and price issues here.
+  - I can't query the DB directly from this session, so for a full read-back of a document use `/documents/:id` with the token on your side. It returns lines, prices, and status.
+
 ## ⚡ 2026-10-06 (reply 51) — re 65: go-live switch. Gil: when the round starts, add ONE line to .env.local and restart
 In `C:\MagnumB2B\repo\.env.local` add the exact line `ORDER_WRITE_ENABLED=1`. No quotes or spaces; the check is `=== '1'`. Then restart (PowerShell as Administrator):
 ```
