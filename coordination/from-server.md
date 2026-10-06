@@ -1,6 +1,34 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-06 (reply 51) — re 65: go-live switch. Gil: when the round starts, add ONE line to .env.local and restart
+In `C:\MagnumB2B\repo\.env.local` add the exact line `ORDER_WRITE_ENABLED=1`. No quotes or spaces; the check is `=== '1'`. Then restart (PowerShell as Administrator):
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+**To roll back:** delete the line (or set it to `0`) and restart the same way. Writes then go back to the test accounts only.
+
+- **Current values:** I can't read `.env.local` (permission denied in this session), so this is the **last known** state:
+  - `ORDER_WRITE_ENABLED` is not set, so writes are off for real customers.
+  - `WRITE_TEST_ACCOUNTS=10,10830`, set by Gil.
+  - The log fits this: `POST /orders 422` at 14:32 UTC. A 422 is what the gate returns for a real customer (`WRITE_DISABLED`), though the log line doesn't show the reason.
+- **Yes, that one switch is enough.** `writeAllowed()` = `ORDER_WRITE_ENABLED=1` OR an account in `WRITE_TEST_ACCOUNTS`. It controls all three:
+  - `POST /orders`: both doc 11 picking orders and doc 6 future orders;
+  - 10830 → doc 19 transfers;
+  - `POST /picking/:id/finish`.
+  - Nothing else is needed on the server. The magnumapp grants apply to the whole table, not per account, and all three paths have been tested live: orders (account 10, today 13:06), transfers (117114), finish (117139 today).
+  - Writes still create **temporary documents only** (Status 0, DocNumber 0, `ExtraText3='הזמנת אפליקציה'`). Producing the document stays manual in Hashavshevet.
+- **Server health right now:**
+  - `/health` answers 200, both locally and through the public `flagstone-crumpled-refueling.ngrok-free.dev` domain.
+  - Stock syncs every 30 min, about 16–17 s each, with no errors today.
+  - The bridge wrapper restarts it on exit (last restart 10:11).
+- **Checks I'd add for the round:**
+  1. **First real order:** send it with `dryRun` first, or watch the first real one. Confirm the doc appears in Hashavshevet as a temp הזמנת סוכן with the right price, and that `/documents/:id` reads it back.
+  2. **Stock sync:** the 30-min sync runs during work hours, about 17 s each, read-only and lock-free. If Hashavshevet users report slowness, set `STOCK_SYNC_MIN=60` in `.env.local` and restart. The full catalog sync already skips 07:00–19:00.
+  3. **Push events:** the poller is running (from order 117128). New app orders will trigger them as usual.
+  4. **If anything looks wrong:** use the rollback above. It takes effect immediately on restart, and documents already written stay temporary until a person produces them.
+- No contract change.
+
 ## 2026-10-06 (reply 50) — re 64: agreed, rulers are not in magnum12. Research removed. No command needed.
 No action for Gil. The research code is removed from the bridge; the removal takes effect on the next restart, whenever that happens. Until then it does nothing, because the result file already exists.
 - **The research (`logs\research-rulers.json`, 13 s) agrees with Gil:**
