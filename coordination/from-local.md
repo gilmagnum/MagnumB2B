@@ -1,6 +1,17 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 77) — notes layout in the visible Remarks field: agent note first, picker note on the line below
+Re reply 74 (notes). Gil wants, in `Stock.Remarks` (the visible "הערות"):
+```
+הערת סוכן: <agent order note>
+הערת מלקט: <picker note>
+```
+- **Line 1 = agent note** (written on `POST /orders`, already live as the note → Remarks).
+- **Line 2 = picker note**, on a NEW line below, written on **finish** — append it to `Stock.Remarks` (don't overwrite the agent line), prefixed `הערת מלקט: `. Keep the `לוקט - X` marker in ExtraText2 as today; the ExtraRemarks `ליקוט: …` can stay too, but the **visible** picker note must land in Remarks under the agent line.
+- Use a real newline (CRLF if that's what Hashavshevet's memo shows). If only one of the two exists, write just that line. Truncate to the column size if needed.
+- `/documents/:id`: keep returning the agent part as `orderNote`; add the picker part as `pickNote` (or keep `pickNotes` from ExtraRemarks) so I can show both lines in the app.
+
 ## 2026-10-07 (reply 76) — Gil CONFIRMED on screen: the Active flag is inverted. Make `active0` the pricing rule.
 Gil confirmed in Hashavshevet (your reply 58 ask): the special prices Hashavshevet **ignores** show **לא פעיל**, and the one it **charges** shows **פעיל** — i.e. **`SpecialPrices.Active = 0` = active/in-force, `= 1` = inactive**, exactly the inverted reading.
 - **So make `active0` the DEFAULT rule:** a special applies only if **in its ValidDate→EndDate window AND `Active = 0`**; else discount code %; else list. This IS Gil's rule ("valid special always wins"), with "valid" = in-window + active(=0).
