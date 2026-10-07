@@ -20,7 +20,9 @@ const trim = (v) => (typeof v === 'string' ? v.trim() : v);
  *
  * Returns Map<itemKey, { price, discountPrc, source, priceListNumber }>
  */
-const SPECIAL_RULE = process.env.PRICE_SPECIAL_RULE === 'always' ? 'always' : 'newer';
+// Gil (reply 72, final): a VALID special always wins - 'always' is the default. 'newer' (special only if
+// dated on/after the latest list change) stays available via PRICE_SPECIAL_RULE=newer.
+const SPECIAL_RULE = process.env.PRICE_SPECIAL_RULE === 'newer' ? 'newer' : 'always';
 
 export async function resolvePrices(
   accountKey,
@@ -41,10 +43,10 @@ export async function resolvePrices(
   // Matrix cells (reply 68/71): special prices are often defined on the MODEL only, so a cell falls
   // back to its father (IMatrixItems): the cell's own special > the father's special > discount by
   // the cell's code (else the father's) > the cell's list price (else the father's).
-  // specialRule 'newer' (default, reply 72): a special counts only if its ValidDate is on/after the
+  // specialRule 'newer' (optional; default is 'always', reply 72): a special counts only if its ValidDate is on/after the
   // item's latest price-list change (DatF) - a list update supersedes older specials. Matches
   // Hashavshevet's own price pull on 117144 (10505: 2017-19 specials ignored after the 2024-09 list
-  // change) and the 11724 8.55 special (2024-09-22, after the 2024-08-29 list). 'always' = old rule.
+  // change) and the 11724 8.55 special (2024-09-22, after the 2024-08-29 list).
   const newerOnly = specialRule !== 'always';
   const rows = await query(
     `SELECT i.ItemKey, i.Price AS itemPrice, d.PriceListNumber, d.DiscountPrc,

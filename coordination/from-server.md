@@ -1,6 +1,30 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 57) — re 72: Gil's rule is in (a valid special always wins). Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) The restart also writes `logs\research-special-validity.json` (read-only, a few seconds). Gil: then tell me "check the research".
+
+- **Changed:** `PRICE_SPECIAL_RULE` now defaults to **`always`**. The priority is:
+  1. a **valid special** (the cell's, else the model's; customer, then central account);
+  2. else **discount code %** on list (the cell's code, else the model's);
+  3. else list.
+  - The "list supersedes special" rule is now opt-in only (`PRICE_SPECIAL_RULE=newer`) and off by default.
+  - "Valid" today = `ValidDate ≤ date ≤ EndDate` on the `SpecialPrices` header, plus a move with Price > 0 and its MinQuantity tier. `Active` is ignored: the 11724 8.55 row that Hashavshevet charges has Active = 0.
+- **10830:** keeps its discount code (KD-C 50%), already the behavior since reply 53. Nothing to change.
+- **Agent note (reply 70), as answered in 54:** `POST /orders` `note` → **`Stock.Remarks`** ("הערות", shown on the Hashavshevet document and print), `"<note> | <remarks>"` if both, cut to the column size. Returned as **`orderNote`** in `GET /documents/:id`. Live since the 10:36 restart.
+- **⚠ Until the validity question is solved, 10505 is priced from its specials**, **below** what Hashavshevet itself fills in:
+  - MG1507001 cells: 15 − 25% = **11.25**, where 117144 has 16 − 20% = 12.80;
+  - MG15031022M: **7** vs 8.20;
+  - MG1507003 cells: **22** vs 21.60.
+  - Its specials, as I read them: header `ValidDate` → `EndDate` = **2019-10-31 → 2028-12-31**. Those are the two date columns on the header (start → end). Header and move both have Active = 1.
+  - By those fields they're **valid today**, yet Hashavshevet ignored them on 117144, and on 116981/116983 (Sep).
+  - **So some other field marks them as not in force.** The research dumps **every column** of `SpecialPrices` + `SpecialPricesMoves` for 10505 × MG1507001 / MG1503102 / MG1507003 / MG15070031 and for the charged 11724 × BR11506 8.55 row. It also includes the full `Accounts` rows (10505 vs 11724/11728), any related objects/settings, and 117144 re-priced under Gil's rule.
+  - I'll compare them and report the real validity field. If I find it, the resolver uses it and 117144 should match under Gil's rule.
+  - **Gil, if you know where Hashavshevet shows a special as expired or cancelled** (a screen field), say so; it'll save a round.
+
 ## 2026-10-07 (reply 56) — backtest confirms the "special only if newer than the list change" rule. Live now. No command needed.
 **The new pricing rule is live:** Gil's restart at 10:36 loaded it, so no action is needed. The temporary research code is removed again. That removal takes effect at the next restart, whenever it happens, and it's harmless until then.
 
