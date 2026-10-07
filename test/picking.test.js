@@ -42,12 +42,12 @@ test('item keys are trimmed (Hashavshevet pads varchar)', () => {
 
 test('notes: appended to other text, a re-run replaces the previous pick note', async () => {
   const { mergePickNotes } = await import('../bridge/picking.js');
-  assert.equal(mergePickNotes(null, 'חסר X'), 'ליקוט: חסר X');
-  assert.equal(mergePickNotes('הערת משרד', 'חסר X'), 'הערת משרד | ליקוט: חסר X');
-  assert.equal(mergePickNotes('הערת משרד | ליקוט: חסר X', 'הכל סופק'), 'הערת משרד | ליקוט: הכל סופק');
-  assert.equal(mergePickNotes('ליקוט: ישן', 'חדש'), 'ליקוט: חדש');
+  assert.equal(mergePickNotes(null, 'חסר X'), 'הערת מלקט: חסר X');
+  assert.equal(mergePickNotes('הערת סוכן: דחוף', 'חסר X'), 'הערת סוכן: דחוף\r\nהערת מלקט: חסר X');
+  assert.equal(mergePickNotes('הערת סוכן: דחוף\r\nהערת מלקט: חסר X', 'הכל סופק'), 'הערת סוכן: דחוף\r\nהערת מלקט: הכל סופק');
+  assert.equal(mergePickNotes('הערת משרד | ליקוט: ישן', 'חדש'), 'הערת משרד\r\nהערת מלקט: חדש'); // older layout
   // A short field: the agent's note is cut first, the picker's note is kept whole.
-  assert.equal(mergePickNotes('הערת סוכן: להתקשר לפני', 'חסר X', 30), 'הערת סוכן: להתק | ליקוט: חסר X');
+  assert.equal(mergePickNotes('הערת סוכן: להתקשר לפני', 'חסר X', 30), 'הערת סוכן: ל\r\nהערת מלקט: חסר X');
 });
 
 test('ruler sizes: a size entry targets only that size line', async () => {

@@ -542,14 +542,19 @@ function toDocumentRow(o, produced = []) {
 // Notes on a document (reply 74): both live in Stock.Remarks (the visible "הערות"), as segments
 // joined by ' | ' - 'הערת סוכן: …' (POST /orders) and 'ליקוט: …' (finish). Older picks wrote the
 // 'ליקוט:' segment to ExtraRemarks; it is still read from there when Remarks has none.
+// Reply 77 layout: line 1 'הערת סוכן: …', line 2 'הערת מלקט: …' (CRLF). The older ' | ' / 'ליקוט:'
+// forms are still understood.
 export function splitNotes(remarks, extraRemarks) {
-  const parts = (s) => (trim(s) || '').split(' | ').map((x) => x.trim()).filter(Boolean);
+  const parts = (s) => (trim(s) || '').split(/\r?\n| \| /).map((x) => x.trim()).filter(Boolean);
+  const isPick = (x) => x.startsWith('הערת מלקט:') || x.startsWith('ליקוט:');
   const all = parts(remarks);
-  const pick = all.find((x) => x.startsWith('ליקוט:')) ?? parts(extraRemarks).find((x) => x.startsWith('ליקוט:'));
-  const agent = all.filter((x) => !x.startsWith('ליקוט:')).map((x) => x.replace(/^הערת סוכן:\s*/, '')).join(' | ');
+  const pick = all.find(isPick) ?? parts(extraRemarks).find(isPick);
+  const agent = all.filter((x) => !isPick(x)).map((x) => x.replace(/^הערת סוכן:\s*/, '')).join('\n');
+  const pickText = pick?.replace(/^(הערת מלקט|ליקוט):\s*/, '');
   return {
     orderNote: agent || undefined, // agent's note (+ any other remarks), prefix removed
-    pickNotes: pick || undefined, // 'ליקוט: …' as written by POST /picking/:id/finish
+    pickNote: pickText || undefined, // picker's note, prefix removed
+    pickNotes: pick || undefined, // the picker's line as stored (kept for compatibility)
   };
 }
 

@@ -1,6 +1,45 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 62) — re 77 + research: notes as two lines in Remarks; K345101_BLACK is NOT a roll-up issue. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) This loads the two-line notes and writes `logs\research-wh1-moves.json` (read-only). Gil: then "check the research".
+
+**Current live state:** the 11:24 restart loaded the final pricing rule (reply 60, valid + Active = 0) and notes in Remarks.
+
+### Notes (reply 77): done
+- **`Stock.Remarks` is the right field.** It's varchar(250), and staff fill it on 173 of the last 500 Hashavshevet docs. `ExtraRemarks` is filled on **0**, which is why Gil never saw the picker note.
+- **Layout (CRLF between the lines):**
+  ```
+  הערת סוכן: <agent note>        ← POST /orders `note`
+  הערת מלקט: <picker note>       ← POST /picking/:id/finish, appended under line 1
+  ```
+  - Only one of them → just that line.
+  - A re-finish replaces the מלקט line.
+  - If 250 chars is too little, the agent line is shortened first so the picker's line survives.
+- **`GET /documents/:id`:**
+  - `orderNote` = the agent's text (prefix removed);
+  - **`pickNote`** = the picker's text (prefix removed);
+  - `pickNotes` = the picker's line as stored (compat; older picks read `ליקוט: …` from ExtraRemarks);
+  - `remarks` = raw.
+- **Verify after the restart:** a test order with a note + finish with a note. Send me the Stock.ID.
+
+### Stock (reply 75): K345101_BLACK
+- **It is a plain single SKU:** no matrix cells, no note-36 children, so no roll-up (`rolledUp: false`).
+  - The 15 sampled note-36 parents came back **empty**: no item that has note-36 children also has a warehouse balance. So the note-36 roll-up isn't over-counting anything.
+  - The 20 random shown items are all single SKUs. The app value = the view's warehouse-1 value in every case.
+- **Hashavshevet's own view `vBalByStockWH` says:** K345101_BLACK **warehouse 1 = 30**, warehouse 10830 = **−23**, `Items.Quantity` = 7. K345101_CAMEL: warehouse 1 = 90, `Items.Quantity` = −1.
+  - So the app shows exactly what the view says for warehouse 1, and Gil's "0" comes from a different number.
+- **The pattern across the sample:** almost every item has warehouse 1 **positive** and warehouse **10830 negative** (also 13700 / 10850 / 7). E.g. KD82152_PURPLE: 468 / −307 / −48; KD21204: 1,366, with 13700 at −1,215.
+  - 10830 is the transfer customer's warehouse (doc 19 from warehouse 1).
+  - My suspicion: **the transfers / sales from those warehouses don't reduce warehouse 1 in the view**, or Gil's "מחסן 1" screen nets them. Another candidate is that Gil's screen shows *available* = balance − open orders.
+- **The report this restart writes** shows exactly how it adds up: the view's SQL definition, the item's movements grouped by warehouse × document type × status (including header `Warehouse`/`TransStore` for transfers), the last 25 movements, the document definitions involved, and the warehouse tables.
+- **Gil, it would help to know which screen/report shows "מחסן 1 = 0"** for K345101_BLACK, e.g. "יתרות מלאי למחסן", the item card, or "מלאי זמין". Then I can match its formula exactly.
+
+Tests 23/23 (picking notes test updated to the two-line layout). Contract updated (`orderNote` / `pickNote` / `pickNotes`).
+
 ## ⚡ 2026-10-07 (reply 61) — re 74/75/76: notes moved to the visible Remarks; wh1 stock report queued; active0 confirmed. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

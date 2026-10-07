@@ -45,15 +45,19 @@ function validate(body) {
   return { picker, notes: trim(body.notes) || '', picked };
 }
 
-// Notes field after a finish: keep whatever else is there, but a re-run (admin re-opened the pick)
-// REPLACES our previous 'ליקוט: …' segment instead of adding another one. When the field is too
-// short, the other text (e.g. the agent's note) is shortened first so the picker's note survives.
+// Notes field after a finish (reply 77): the existing lines (agent's 'הערת סוכן: …') stay, the
+// picker's note goes on its own line below as 'הערת מלקט: …'. A re-run (admin re-opened the pick)
+// REPLACES the previous picker line (also the older 'ליקוט: …' form). When the field is too short,
+// the other text is shortened first so the picker's line survives.
+export const PICK_PREFIX = 'הערת מלקט:';
+const NL = '\r\n';
+const isPickLine = (s) => s.startsWith(PICK_PREFIX) || s.startsWith('ליקוט:');
 export function mergePickNotes(existing, notes, max = NOTES_MAX) {
-  const others = (trim(existing) || '').split(' | ').map((s) => s.trim()).filter((s) => s && !s.startsWith('ליקוט:'));
-  const pick = `ליקוט: ${notes}`.slice(0, max);
-  const room = max - pick.length - 3;
-  const before = room > 0 ? others.join(' | ').slice(0, room).trim() : '';
-  return before ? `${before} | ${pick}` : pick;
+  const others = (trim(existing) || '').split(/\r?\n| \| /).map((s) => s.trim()).filter((s) => s && !isPickLine(s));
+  const pick = `${PICK_PREFIX} ${notes}`.slice(0, max);
+  const room = max - pick.length - NL.length;
+  const before = room > 0 ? others.join(NL).slice(0, room).trim() : '';
+  return before ? `${before}${NL}${pick}` : pick;
 }
 
 export const pickKey = (itemKey, size) => (size ? `${itemKey}|${size}` : itemKey);

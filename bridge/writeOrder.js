@@ -337,8 +337,9 @@ export async function writeOrder(order, { commit = false } = {}) {
       ...(transfer && { TransStore: transfer.fromWarehouse }), // transfer: source warehouse
       PrintStyle: printStyle,
       // Agent's order note (reply 70) + remarks -> Stock.Remarks ("הערות"), cut to the column size.
+      // Line 1 'הערת סוכן: …' (reply 77); the picker's line is added under it on finish.
       Remarks: fitText(columns.Stock, 'Remarks', [order.note?.trim() && `הערת סוכן: ${order.note.trim()}`, order.remarks?.trim()]
-        .filter(Boolean).join(' | ')),
+        .filter(Boolean).join('\r\n')),
       AccountName: trim(account.FullName),
       Address: trim(account.Address),
       City: trim(account.City),
