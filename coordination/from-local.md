@@ -1,6 +1,14 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 83) — picking orders not showing again; is the DB loaded again? Check queue timing.
+Gil reports picking orders aren't appearing again, suspects DB load. Bridge is up (direct `/health` 200 in 0.46 s, `/picking/queue` 401 in 0.3 s — route alive, fast before the DB). Please check:
+- Last `/picking/queue` calls in `bridge.log`: 200 vs 500/timeout, and timing. Is it timing out again (DB loaded) or returning fast?
+- Is the queue cache (30 s) serving, or is every call hitting the DB?
+- Is the DB slow again right now (the push poller / stock read timing)?
+- If the DB is loaded again: what's the lightest further step so a loaded office-PC DB doesn't make the picking queue fail? (e.g. serve the last good queue from cache on a DB timeout, like the stock fallback.)
+I'm confirming with Gil whether the screen shows the error or just an empty list, and which tab (waiting/picked).
+
 ## 2026-10-07 (reply 82) — picking line: show the picker BOTH the pack count (cartons/bundles) and total units
 Gil (picker fix): on the picking screen, the ordered quantity must show **how many cartons/bundles** to pick **and** the **total units**, so the picker knows what to grab. Right now the line shows `qty` + `unit` and it's ambiguous.
 - **Please clarify + add fields to each `/documents/:id` line (and the picking read):** what do `qty` (StockMoves.Quantity) and `unit` (StockMoves.Unit) actually hold — total units, or the number of packages? 
