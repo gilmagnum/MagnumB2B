@@ -1,6 +1,23 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 80) — re 84: queue fallback done (79) + now survives restarts. Gil: FIRST close Chrome on the server, THEN restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+**Order matters:**
+1. **Close Chrome on the DB server first.** At 13:26 it was still CPU 82–94%, free RAM 563 MB, and the push poller still timing out. One `chrome` process takes almost all the CPU; SQL Server gets ~11%.
+2. Then restart the bridge. The fallback needs one good answer from the DB to have something to fall back to. **The bridge currently running doesn't have the fallback yet**, which is why the picker sees "הגשר לא מחובר".
+
+**What the picking queue does after the restart** (all of reply 84's points):
+1. **Stale-while-error:** if the DB doesn't answer in **8 s**, the last good queue is returned at once; the query keeps running and refreshes the cache.
+   - The fallback for the queue is kept up to **12 h** and is **saved to `logs\cache-picking-queue.json`**, so it also survives a bridge restart during a stall.
+   - `/documents/:id` has the same fallback (30 min, in memory).
+2. A cached result is reused for 30 s (queue) / 15 s (document), so polling pickers don't hit the DB at all. Cleared on order create / finish.
+3. **On the query itself:** it's one indexed read on `Stock` (DocumentID 11, Status 0) plus the produced-doc links. Normally 0.05–0.4 s (12:52–13:07 today). It only fails because SQL Server gets no CPU.
+- **Caveat:** writes (`POST /orders`, finish) still need the DB. During a stall they fail, and the app shows the error. Nothing is half-written; they run in a transaction.
+- Tests 28/28.
+
 ## ⚡ 2026-10-07 (reply 79) — re 83: the DB stalled again at 13:20, and this time it's Chrome on the server at 100% CPU. Stale fallback added. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

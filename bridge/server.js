@@ -4,9 +4,11 @@
 // Binds to localhost by default: exposing it (e.g. a tunnel for Vercel) is a separate, deliberate step.
 import http from 'node:http';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
 import { warmPriceCache } from './pricing.js';
-import { ORDER_DOCUMENT_IDS, orderWriteEnabled, writeTestAccounts } from './config.js';
+import { ORDER_DOCUMENT_IDS, orderWriteEnabled, writeTestAccounts, ROOT } from './config.js';
 import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
@@ -105,9 +107,33 @@ function parseDayParam(value, name) {
 // the last staleMaxMs exists, that result is served at once (logged); the query keeps running and
 // refreshes the cache when it finishes. A loaded office-PC DB then shows a slightly old list
 // instead of an error.
-function shortCache(ttlMs, { staleAfterMs = 8000, staleMaxMs = 30 * 60_000 } = {}) {
+function shortCache(ttlMs, { staleAfterMs = 8000, staleMaxMs = 30 * 60_000, persistFile } = {}) {
   const entries = new Map();
   const good = new Map();
+  // persistFile: the last good results survive a bridge restart (a restart during a DB stall would
+  // otherwise lose the fallback). Written at most every 10 s.
+  if (persistFile) {
+    try {
+      for (const [k, v] of Object.entries(JSON.parse(fs.readFileSync(persistFile, 'utf8')))) good.set(k, v);
+    } catch {}
+    let timer;
+    const save = () => {
+      timer ??= setTimeout(() => {
+        timer = undefined;
+        try {
+          fs.writeFileSync(persistFile, JSON.stringify(Object.fromEntries(good)));
+        } catch (err) {
+          console.error(`cache save failed: ${err.message}`);
+        }
+      }, 10_000).unref();
+    };
+    const set = good.set.bind(good);
+    good.set = (k, v) => {
+      set(k, v);
+      save();
+      return good;
+    };
+  }
   return {
     get(keyText, load) {
       const hit = entries.get(keyText);
@@ -133,7 +159,7 @@ function shortCache(ttlMs, { staleAfterMs = 8000, staleMaxMs = 30 * 60_000 } = {
     clear: () => entries.clear(), // the stale fallback (good) is kept on purpose
   };
 }
-const queueCache = shortCache(30_000);
+const queueCache = shortCache(30_000, { staleMaxMs: 12 * 60 * 60_000, persistFile: path.join(ROOT, 'logs', 'cache-picking-queue.json') });
 const docCache = shortCache(15_000);
 
 const routes = [
