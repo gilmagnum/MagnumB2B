@@ -29,7 +29,7 @@ type Item = {
   ignoreStock: boolean;       // NoteID 31
   isMatrix: boolean;          // detected via IMatrixItems
   isCartonSizeItem: boolean;  // NoteID 26 'פריט קרטון מידה' - each carton is one size; order per size inside the product
-  stock: number;              // warehouse 1 only: vBalByStockWH (Warehouse = STOCK_WAREHOUSE, default 1) + produced transfers (doc 19) into it - out of it (the view ignores transfers; cached map refreshed after each stock sync; STOCK_TRANSFER_ADJ=0 = off). Items WITH children (matrix cells via IMatrixItems, or items whose parentSku = this item): max(own,0) + Σ max(child,0). Others: own balance (may be < 0 = oversold)
+  stock: number;              // warehouse 1 only: vBalItemWarehouse.ITEMWARHBAL (WAREHOUSE = STOCK_WAREHOUSE, default 1) - transfers included (vBalByStockWH ignored them). Items WITH children (matrix cells via IMatrixItems, or items whose parentSku = this item): max(own,0) + Σ max(child,0). Others: own balance (may be < 0 = oversold)
   imageUrl?: string;          // app layer (not from Hashavshevet)
   cells?: MatrixCell[];       // GET /items/:itemkey only, when isMatrix
 };
@@ -140,7 +140,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `POST /sync` → full catalog refresh Hashavshevet → Supabase (`items`, `item_variants`, ruler codes); returns
   `{ items, shown, variants, rulers, deactivated, ms }` (also runs at start + every `SYNC_INTERVAL_MIN`).
   Supabase `items.item_seq` = Items.ID (identity = creation order; newest = highest), written on the full sync.
-  Supabase `items.stock` = warehouse-1 stock (vBalByStockWH; parents of variants rolled up as in `Item.stock`) is refreshed by a light stock sync every
+  Supabase `items.stock` = warehouse-1 stock (vBalItemWarehouse; parents of variants rolled up as in `Item.stock`) is refreshed by a light stock sync every
   `STOCK_SYNC_MIN` (30) min, all day, plus on every full sync; written only once the `stock` column exists.
   `GET /sync` → `{ running, last }`. Images/colors/categories are app-layer and never touched.
 - `POST /orders[?dryRun=1]` → create a temp order (DocNumber 0, Status 0):

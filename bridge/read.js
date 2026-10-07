@@ -60,85 +60,26 @@ function shapeItem(row, extra = {}) {
 }
 
 // --- stock = warehouse 1 only (Gil, reply 61) --------------------------------------------------
-// Source: Hashavshevet's view vBalByStockWH (ItemKey, Warehouse, BALBYSTOCKWH); Σ over warehouses
-// = Items.Quantity. STOCK_WAREHOUSE (default 1 = מחסן ראשי). Single items read it directly; the
-// all-items map is cached 5 min (the view aggregates movements).
+// Source: Hashavshevet's view vBalItemWarehouse (ITEMKEY, WAREHOUSE, ITEMWARHBAL) - the real balance
+// per warehouse, warehouse transfers included; Σ over warehouses = Items.Quantity. (Reply 75: the
+// older vBalByStockWH ignores transfers - K345101_BLACK showed 30 in warehouse 1, the real one is 0.)
+// STOCK_WAREHOUSE (default 1 = מחסן ראשי). Single items read it directly; the all-items map is cached
+// 5 min and read on the background pool (120 s timeout).
 export const STOCK_WAREHOUSE = Number(process.env.STOCK_WAREHOUSE || 1);
-// Reply 75: vBalByStockWH does NOT count warehouse transfers (doc 19 "העברה בין מחסנים").
-// K345101_BLACK: view wh1 = 30 / wh10830 = -23, but 30 units went 1 -> 10830 on a produced transfer;
-// Gil's warehouse 1 = 0 = 30 - 30. So: stock = view + produced transfers into the warehouse - out of
-// it. A transfer line is "out" when its warehouse is the header's TransStore (source), else "in".
-const TRANSFER_DOCS = [...new Set(Object.values(TRANSFER_ACCOUNTS).map((t) => Number(t.documentId)))].join(',') || '19';
-// Transfer documents are few (Stock scan), their lines are read by StockID (indexed) - never a scan
-// of StockMoves by warehouse (that timed out the stock sync).
-const TRANSFER_STOCK_IDS = `SELECT ID FROM Stock WHERE DocumentID IN (${TRANSFER_DOCS}) AND Status <> 0 AND TransStore <> Warehouse`;
-const TRANSFER_ADJ_SUM = 'SUM(CASE WHEN tm.Warehouse = ts.TransStore THEN -tm.Quantity ELSE tm.Quantity END)';
-// Per-item SQL reads the view only (a StockMoves lookup by ItemKey is not indexed and timed out);
-// callers add the transfer adjustment from the cached map below (transferAdj / adjustStock).
-const WH_STOCK_SQL = `(SELECT TOP 1 v.BALBYSTOCKWH FROM vBalByStockWH v WHERE v.ItemKey = %KEY% AND v.Warehouse = ${STOCK_WAREHOUSE})`;
+const WH_STOCK_SQL = `(SELECT TOP 1 v.ITEMWARHBAL FROM vBalItemWarehouse v WHERE v.ITEMKEY = %KEY% AND v.WAREHOUSE = ${STOCK_WAREHOUSE})`;
 export const whStockSql = (keyExpr) => WH_STOCK_SQL.replaceAll('%KEY%', keyExpr);
-
-// Transfer adjustments for all items: Map<itemKey, ±qty>, cached 30 min. On failure the last good
-// map is kept (or an empty one) so the stock sync never breaks on it.
-let transferCache;
-let transferPending;
-// The load takes ~45 s (4,255 transfers); run in parallel with the 17 s warehouse view it pushed the
-// view past the 30 s timeout (reply 66). So it is NEVER loaded on demand: the server refreshes it
-// right after each stock sync (sequential), and every reader uses the cached map.
-// STOCK_TRANSFER_ADJ=0 turns the correction off.
-export const TRANSFER_ADJ_ON = process.env.STOCK_TRANSFER_ADJ !== '0';
-export const transferAdjAge = () => (transferCache ? Date.now() - transferCache.at : Infinity);
-export function refreshTransferAdjustments() {
-  if (!TRANSFER_ADJ_ON) return Promise.resolve(new Map());
-  transferPending ??= loadTransferAdjustments().finally(() => {
-    transferPending = undefined;
-    whStockCache = undefined; // next stock read picks up the new map
-  });
-  return transferPending;
-}
-// The cached map (empty until the first load).
-export function transferAdjNow() {
-  return TRANSFER_ADJ_ON ? transferCache?.map ?? new Map() : new Map();
-}
-// stock + the item's transfer adjustment (null stays null).
-export const adjustStock = (itemKey, stock) => (stock == null ? stock : stock + (transferAdjNow().get(trim(itemKey)) ?? 0));
-
-async function loadTransferAdjustments() {
-  const started = Date.now();
-  try {
-    const ids = (await query(TRANSFER_STOCK_IDS, {}, 'bg')).map((r) => Number(r.ID));
-    const map = new Map();
-    for (let i = 0; i < ids.length; i += 500) {
-      const rows = await query(
-        `SELECT tm.ItemKey, ${TRANSFER_ADJ_SUM} AS adj FROM StockMoves tm JOIN Stock ts ON ts.ID = tm.StockID
-         WHERE tm.StockID IN (${ids.slice(i, i + 500).join(',')}) AND tm.Warehouse = ${STOCK_WAREHOUSE}
-         GROUP BY tm.ItemKey`,
-        {},
-        'bg',
-      );
-      for (const r of rows) map.set(trim(r.ItemKey), (map.get(trim(r.ItemKey)) ?? 0) + (r.adj ?? 0));
-    }
-    transferCache = { at: Date.now(), map };
-    console.log(`transfer adjustments: ${ids.length} transfers, ${map.size} items, ${Date.now() - started}ms`);
-    return map;
-  } catch (err) {
-    console.error(`transfer adjustments failed (stock without transfers): ${err.message}`);
-    // Keep the last good map (or none) and retry in 5 min, not on every request.
-    transferCache = { at: Date.now() - 25 * 60_000, map: transferCache?.map ?? new Map() };
-    return transferCache.map;
-  }
-}
-
 let whStockCache;
 export async function getWarehouseStock() {
   if (!whStockCache || Date.now() - whStockCache.at > 5 * 60_000) {
-    const map = (async () => {
-      const rows = await query(`SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`, {}, 'bg');
-      const adjustments = transferAdjNow();
-      const m = new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0]));
-      for (const [k, adj] of adjustments) m.set(k, (m.get(k) ?? 0) + adj);
-      return m;
-    })();
+    const started = Date.now();
+    const map = query(
+      `SELECT ITEMKEY AS ItemKey, ITEMWARHBAL AS qty FROM vBalItemWarehouse WHERE WAREHOUSE = ${STOCK_WAREHOUSE}`,
+      {},
+      'bg',
+    ).then((rows) => {
+      console.log(`warehouse stock read: ${rows.length} items, ${Date.now() - started}ms`);
+      return new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0]));
+    });
     whStockCache = { at: Date.now(), map };
     map.catch(() => (whStockCache = undefined));
   }
@@ -195,8 +136,8 @@ export async function getParentStock(itemKeys) {
      FROM (${CHILDREN_SQL(` AND parent IN (${keys.map((_, i) => `@k${i}`).join(',')})`)}) r`,
     params,
   );
-  const own = new Map(rel.map((r) => [r.parent, adjustStock(r.parent, r.ownStock ?? 0)]));
-  const childStock = new Map(rel.map((r) => [r.child, adjustStock(r.child, r.childStock ?? 0)]));
+  const own = new Map(rel.map((r) => [r.parent, r.ownStock ?? 0]));
+  const childStock = new Map(rel.map((r) => [r.child, r.childStock ?? 0]));
   return rollUpStock(own, groupChildren(rel), (k) => childStock.get(k));
 }
 
@@ -232,7 +173,7 @@ export async function getItem(itemKey) {
   ]);
   if (!rows.length) return null;
   const extra = { ...extras.get(trim(rows[0].ItemKey)), isMatrix: rows[0].hasCells === 1 };
-  const stock = parentStock.get(trim(rows[0].ItemKey)) ?? adjustStock(rows[0].ItemKey, rows[0].whStock ?? 0);
+  const stock = parentStock.get(trim(rows[0].ItemKey)) ?? rows[0].whStock ?? 0;
   return { ...shapeItem(rows[0], { ...extra, stock }), active: Number(rows[0].Dumi) !== 1 };
 }
 
@@ -325,7 +266,7 @@ export async function getMatrixCells(fatherItemKey) {
   return rows.map((r) => {
     const cell = { itemKey: trim(r.ItemKey), fatherKey: father, line: r.Line, col: r.Col,
       sizeNote: trim(r.sizeNote) || null, colorNote: trim(r.colorNote) || null };
-    return { itemkey: cell.itemKey, ...labelCell(cell, axes.get(father)), line: r.Line, col: r.Col, stock: adjustStock(r.ItemKey, r.stock ?? 0) };
+    return { itemkey: cell.itemKey, ...labelCell(cell, axes.get(father)), line: r.Line, col: r.Col, stock: r.stock ?? 0 };
   });
 }
 
@@ -679,7 +620,7 @@ export async function getDocument(stockId) {
         unitPrice: l.Price,
         discountPct: l.DiscountPrc || 0,
         lineTotal: l.TFtal,
-        onHand: parentStock.get(trim(l.ItemKey)) ?? adjustStock(l.ItemKey, l.onHand) ?? undefined, // warehouse-1 stock (parents: rolled up)
+        onHand: parentStock.get(trim(l.ItemKey)) ?? l.onHand ?? undefined, // warehouse-1 stock (parents: rolled up)
         ...(shipping.has(trim(l.ItemKey)) && { isShipping: true }),
       })),
   };

@@ -1,6 +1,33 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 68) — SOLVED properly: Hashavshevet has a correct warehouse view. Switched; transfer arithmetic removed. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) After ~1 min, tell me "check the log". Expected: `warehouse stock read: N items, X ms`, then `stock sync ok`.
+
+**The research (`logs\research-stock-views.json`):** Hashavshevet's view **`vBalItemWarehouse`** (`ITEMKEY, WAREHOUSE, ITEMWARHBAL`) is the real per-warehouse balance, **transfers included**:
+| item | old `vBalByStockWH` wh 1 | **`vBalItemWarehouse` wh 1** | other warehouses | Σ = Items.Quantity |
+|---|---|---|---|---|
+| K345101_BLACK | 30 | **0** (= Gil) | 10830: 7 | 7 ✓ |
+| K345101_CAMEL | 90 | **0** | 10830: −1 | −1 ✓ |
+| KD82152_PURPLE | 468 | **0** | 10830: 113, 10850: 0 | 113 ✓ |
+| BR22611 | 1,888 | **944** | 10830: 178, 13700: 6 | 1,128 ✓ |
+- Per-item reads take 17–63 ms (the first call was cold, 10 s).
+
+**Changed (`bridge/read.js`):**
+- Stock = **`vBalItemWarehouse.ITEMWARHBAL`, warehouse 1**, everywhere:
+  - `/items` and `/items/:key`, matrix cells;
+  - Supabase `items.stock` (both syncs);
+  - the matrix-parent roll-up;
+  - `onHand` and `NO_STOCK`.
+- **All of my transfer arithmetic (replies 63–67) is removed.** It was a reconstruction of what this view already does.
+- **Kept from 67:** the background read connection (1 connection, 120 s timeout) for the all-items stock read and the matrix-children list. The stock sync can't time out at 30 s again, and interactive requests keep their own pool.
+- The log prints `warehouse stock read: N items, X ms` each time, so we can watch its cost.
+- **Expect many items' warehouse-1 stock to go DOWN** (e.g. BR22611 1,888 → 944, KD82152_PURPLE 468 → 0). Until now the old view counted everything transferred to 10830 / 13700 / 10850 as still in warehouse 1. These are the real numbers Gil sees.
+- `STOCK_TRANSFER_ADJ` no longer exists. Research code removed. Contract updated. Tests 23/23.
+
 ## ⚡ 2026-10-07 (reply 67) — the stock sync timeouts are fixed at the root; transfer correction back ON. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
