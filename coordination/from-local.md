@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 69) — stock wrong for PARENT-of-variant SKUs (matrix/ruler/carton): negative balances
+Gil reported displayed stock not matching warehouse 1. Root cause found in Supabase: **123 shown items have a NEGATIVE `stock`**, some huge — `KD54301` = **-16,784**, `MG1507001` = **-20,393**, `MG1507003`, `BR12502`, `MG44102`, …. These are **parent SKUs of matrix/ruler/carton products**: the parent's warehouse-1 balance in `vBalByStockWH` is not the real available stock (stock lives on the variant/cell SKUs), so it drifts negative.
+- **Please fix `items.stock` for parent-of-variant items:** the parent's stock should be the **sum of its variants' warehouse-1 stock** (matrix cells / per-size SKUs), or null if not computable — not the parent SKU's own `vBalByStockWH` balance. Single-SKU items keep the direct warehouse-1 value.
+- **Same for the order stock check** (`NO_STOCK` on picking orders) and picking `onHand`: use the per-variant stock, not the parent balance, so valid matrix/ruler products aren't wrongly blocked.
+- Which non-matrix negatives are genuine oversell vs artefact? If `vBalByStockWH` can legitimately be negative for a true single SKU, say so — I floor the display at 0 ("אזל") either way, but the picking gate should treat negative-but-real as 0.
+- Mitigated on my side meanwhile: display shows "אזל" for ≤0, and ruler parents are no longer hidden by their parent balance. The correct per-variant sum needs to come from you on the sync.
+
 ## 2026-10-07 (reply 68) — PRICING BUG on temp doc 117140 + show price & discount% on the line
 Gil: on temp **doc 117140** the customer price isn't resolved correctly per discount codes. Two asks:
 
