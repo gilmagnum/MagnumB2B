@@ -1,5 +1,4 @@
 import { query, key, sql } from './db.js';
-import { PICK_NOTES_FIELD } from './picking.js';
 import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS, SHIPPING_ITEMS, TRANSFER_ACCOUNTS } from './config.js';
 
 const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
@@ -540,13 +539,27 @@ function toDocumentRow(o, produced = []) {
   };
 }
 
+// Notes on a document (reply 74): both live in Stock.Remarks (the visible "הערות"), as segments
+// joined by ' | ' - 'הערת סוכן: …' (POST /orders) and 'ליקוט: …' (finish). Older picks wrote the
+// 'ליקוט:' segment to ExtraRemarks; it is still read from there when Remarks has none.
+export function splitNotes(remarks, extraRemarks) {
+  const parts = (s) => (trim(s) || '').split(' | ').map((x) => x.trim()).filter(Boolean);
+  const all = parts(remarks);
+  const pick = all.find((x) => x.startsWith('ליקוט:')) ?? parts(extraRemarks).find((x) => x.startsWith('ליקוט:'));
+  const agent = all.filter((x) => !x.startsWith('ליקוט:')).map((x) => x.replace(/^הערת סוכן:\s*/, '')).join(' | ');
+  return {
+    orderNote: agent || undefined, // agent's note (+ any other remarks), prefix removed
+    pickNotes: pick || undefined, // 'ליקוט: …' as written by POST /picking/:id/finish
+  };
+}
+
 // One customer document with its lines, for the export sheet (orders and the documents produced
 // from them; supplier/purchase documents are not returned).
 export async function getDocument(stockId) {
   const [o] = await query(
     `SELECT s.ID, s.DocNumber, s.DocumentID, d.DocName, s.AccountKey, s.AccountName, a.FullName, a.Agent,
             s.IssueDate, s.TFtal, s.TFtalVat, s.VatPrc, s.DiscountPrc, s.Status, s.Remarks, s.ExtraText2,
-            s.${PICK_NOTES_FIELD} AS pickNotes,
+            s.ExtraRemarks,
             s.Address, s.City, s.Phone, a.Address AS accAddress, a.City AS accCity, a.Phone AS accPhone,
             a.EMail, a.TaxFileNum
      FROM Stock s
@@ -573,8 +586,7 @@ export async function getDocument(stockId) {
     vatPct: o.VatPrc ?? undefined,
     orderDiscountPct: o.DiscountPrc || 0,
     remarks: trim(o.Remarks) || undefined,
-    orderNote: trim(o.Remarks) || undefined, // agent's note from POST /orders `note` (Stock.Remarks, same as remarks)
-    pickNotes: trim(o.pickNotes) || undefined, // picker notes written by POST /picking/:id/finish
+    ...splitNotes(o.Remarks, o.ExtraRemarks),
     customer: {
       address: trim(o.Address) || trim(o.accAddress) || undefined,
       city: trim(o.City) || trim(o.accCity) || undefined,

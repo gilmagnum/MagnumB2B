@@ -82,8 +82,8 @@ type Document = {
 
 type DocumentDetail = Document & {
   totalBeforeVat?: number; vatPct?: number; orderDiscountPct: number; remarks?: string;
-  pickNotes?: string;         // Stock.ExtraRemarks - picker notes written by /picking/:id/finish
-  orderNote?: string;         // Stock.Remarks - the agent's note from POST /orders `note` (same text as remarks)
+  pickNotes?: string;         // 'ליקוט: …' segment of Stock.Remarks (the visible הערות), written by /picking/:id/finish (older picks: Stock.ExtraRemarks)
+  orderNote?: string;         // Stock.Remarks minus the 'ליקוט:' segment, 'הערת סוכן: ' prefix removed - the agent's note from POST /orders `note`
   customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
   lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
            discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; isShipping?: true; lineId: number; size?: string }[];  // onHand = warehouse-1 stock now; M1001/M1002 flagged, not removed
@@ -111,7 +111,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   → `{ ok, stockId, dryRun, picker, notesField, notes, shortages: [{ itemkey, ordered, picked, action: 'reduced'|'deleted' }], totals: { net, gross } }`.
   One transaction, only on doc 11 with Status 0: pickedQty ≥ ordered → unchanged; 0 < pickedQty < ordered → line reduced
   (Quantity/TFtal/TftalVat/Supply/Base/PurchQuantity); 0 → line deleted; header TFtalVat/TFtal recomputed;
-  `Stock.ExtraText2 = 'לוקט - <picker>'`; notes appended to `Stock.ExtraRemarks` as `ליקוט: <notes>` (a re-run replaces the previous `ליקוט:` part). Never produces the document.
+  `Stock.ExtraText2 = 'לוקט - <picker>'`; notes appended to `Stock.Remarks` (visible הערות) as `ליקוט: <notes>` (a re-run replaces the previous `ליקוט:` part). Never produces the document.
   Items not listed and M1001/M1002 are untouched. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
   before `ORDER_WRITE_ENABLED=1`), 404 DOC_NOT_FOUND, 409 NOT_OPEN/TREE_UNSUPPORTED, 422 ITEM_NOT_IN_ORDER, 501 NO_PERMISSION (GRANT missing).
 - `GET /customers/:accountKey/balance[?agent=:id]` → `{ accountKey, customerName, agent?, balance, obligo, maxCredit?, maxObligo? }`
@@ -148,7 +148,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   {
     "accountKey": "10",
     "orderKind": "picking" | "future",      // picking -> DocumentID 11 "הזמנת סוכן", future -> DocumentID 6 "הזמנה"
-    "note": "...",                           // optional, agent's order note -> Stock.Remarks (reply 70)
+    "note": "...",                           // optional, agent's order note -> Stock.Remarks as "הערת סוכן: <note>" (reply 70/74)
     "remarks": "...",                        // optional -> Stock.Remarks (joined after note with " | "; cut to the column size)
     "orderDiscountPct": 0,                  // optional, header-level discount % (Stock.DiscountPrc/DiscountPrcR)
     "lines": [ { "itemkey": "WF3400036", "qty": 2, "unit": "carton" | "bundle", "price"?: 8.55, "discountPct"?: 0, "size"?: "2-4" } ],

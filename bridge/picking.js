@@ -4,15 +4,15 @@
 //     its totals; pickedQty <= 0 -> delete the line
 //   - recompute the header totals from the surviving lines
 //   - Stock.ExtraText2 = 'לוקט - <picker>' (the marker the old warehouse app writes)
-//   - picker notes -> Stock.ExtraRemarks (PICK_NOTES_FIELD), appended
+//   - picker notes -> Stock.Remarks (PICK_NOTES_FIELD; the document's visible "הערות", reply 74), appended
 // The document is never produced here - Hashavshevet users produce it manually.
 // Needs on magnumapp: UPDATE on Stock, UPDATE + DELETE on StockMoves.
 import { sql, getPool } from './db.js';
 import { ORDER_DOCUMENT_IDS, SHIPPING_ITEMS, VAT_PRC, TRANSFER_ACCOUNTS, writeAllowed } from './config.js';
 
 // Header field for the picker's notes (varchar(250), unused on site orders). Whitelisted: it goes into SQL.
-const NOTES_FIELDS = ['ExtraRemarks', 'Details'];
-export const PICK_NOTES_FIELD = NOTES_FIELDS.includes(process.env.PICK_NOTES_FIELD) ? process.env.PICK_NOTES_FIELD : 'ExtraRemarks';
+const NOTES_FIELDS = ['Remarks', 'ExtraRemarks', 'Details'];
+export const PICK_NOTES_FIELD = NOTES_FIELDS.includes(process.env.PICK_NOTES_FIELD) ? process.env.PICK_NOTES_FIELD : 'Remarks';
 const NOTES_MAX = 250;
 const MARKER_MAX = 50; // Stock.ExtraText2 varchar(50)
 
@@ -46,10 +46,14 @@ function validate(body) {
 }
 
 // Notes field after a finish: keep whatever else is there, but a re-run (admin re-opened the pick)
-// REPLACES our previous 'ליקוט: …' segment instead of adding another one.
-export function mergePickNotes(existing, notes) {
+// REPLACES our previous 'ליקוט: …' segment instead of adding another one. When the field is too
+// short, the other text (e.g. the agent's note) is shortened first so the picker's note survives.
+export function mergePickNotes(existing, notes, max = NOTES_MAX) {
   const others = (trim(existing) || '').split(' | ').map((s) => s.trim()).filter((s) => s && !s.startsWith('ליקוט:'));
-  return [...others, `ליקוט: ${notes}`].join(' | ').slice(0, NOTES_MAX);
+  const pick = `ליקוט: ${notes}`.slice(0, max);
+  const room = max - pick.length - 3;
+  const before = room > 0 ? others.join(' | ').slice(0, room).trim() : '';
+  return before ? `${before} | ${pick}` : pick;
 }
 
 export const pickKey = (itemKey, size) => (size ? `${itemKey}|${size}` : itemKey);
@@ -95,7 +99,10 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
   try {
     // Lock the order row for the whole transaction and re-check it is still an open agent order.
     const [order] = (await req().query(
-      `SELECT ID, DocumentID, Status, AccountKey, DiscountPrc, VatPrc, ${PICK_NOTES_FIELD} AS notes
+      `SELECT ID, DocumentID, Status, AccountKey, DiscountPrc, VatPrc, ${PICK_NOTES_FIELD} AS notes,
+              (SELECT CASE WHEN c.max_length < 0 THEN 4000 WHEN t.name LIKE 'n%' THEN c.max_length / 2 ELSE c.max_length END
+               FROM sys.columns c JOIN sys.types t ON t.user_type_id = c.user_type_id
+               WHERE c.object_id = OBJECT_ID('Stock') AND c.name = '${PICK_NOTES_FIELD}') AS notesMax
        FROM Stock WITH (UPDLOCK, ROWLOCK) WHERE ID = @id`,
     )).recordset;
     if (!order) throw new PickingError(404, 'DOC_NOT_FOUND', `הזמנה ${id} לא נמצאה`);
@@ -150,12 +157,13 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
     // Transfers carry no VAT on the header (TFtal = TFtalVat).
     const gross = round2(sum.net * (1 - (order.DiscountPrc ?? 0) / 100) * (transfer ? 1 : vat));
     const marker = `לוקט - ${picker}`.slice(0, MARKER_MAX);
-    const noteText = notes ? mergePickNotes(order.notes, notes) : null;
+    const notesMax = Math.min(order.notesMax || NOTES_MAX, 4000);
+    const noteText = notes ? mergePickNotes(order.notes, notes, notesMax) : null;
     const upd = req()
       .input('net', sql.Float, net)
       .input('gross', sql.Float, gross)
       .input('marker', sql.NVarChar(MARKER_MAX), marker);
-    if (noteText) upd.input('notes', sql.NVarChar(NOTES_MAX), noteText);
+    if (noteText) upd.input('notes', sql.NVarChar(notesMax), noteText);
     const done = await upd.query(
       `UPDATE Stock SET TFtalVat = @net, TFtal = @gross, ExtraText2 = @marker
          ${noteText ? `, ${PICK_NOTES_FIELD} = @notes` : ''}

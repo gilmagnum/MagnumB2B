@@ -46,6 +46,8 @@ test('notes: appended to other text, a re-run replaces the previous pick note', 
   assert.equal(mergePickNotes('הערת משרד', 'חסר X'), 'הערת משרד | ליקוט: חסר X');
   assert.equal(mergePickNotes('הערת משרד | ליקוט: חסר X', 'הכל סופק'), 'הערת משרד | ליקוט: הכל סופק');
   assert.equal(mergePickNotes('ליקוט: ישן', 'חדש'), 'ליקוט: חדש');
+  // A short field: the agent's note is cut first, the picker's note is kept whole.
+  assert.equal(mergePickNotes('הערת סוכן: להתקשר לפני', 'חסר X', 30), 'הערת סוכן: להתק | ליקוט: חסר X');
 });
 
 test('ruler sizes: a size entry targets only that size line', async () => {

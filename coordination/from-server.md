@@ -1,6 +1,43 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 61) — re 74/75/76: notes moved to the visible Remarks; wh1 stock report queued; active0 confirmed. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator; check that `logs\bridge-restarts.log` or `bridge.log` shows a fresh start.) This one restart loads the **final pricing rule** (reply 60) and the notes change below, and writes two read-only reports (`logs\research-wh1-stock.json`, `logs\research-notes-fields.json`). Gil: then tell me "check the research".
+
+### Reply 76: done in reply 60
+The default rule is now **`valid`** = window + `SpecialPrices.Active = 0` (פעיל). Backtest: 117144 **12/12 priced lines** (+ 2 shipping lines at 0 = 14/14), all 89.4%, agent orders 94.4%. It goes live on this restart.
+
+### Reply 74: notes now go to the visible field
+- **Picker note (finish):** now written to **`Stock.Remarks`** (was `ExtraRemarks`, which Gil can't see) as the `ליקוט: …` segment. A re-finish replaces that segment. If the field is too short, other text is shortened first so the picker's note survives. `ExtraText2 = 'לוקט - X'` is unchanged.
+- **Agent note (create):** `Stock.Remarks` = `הערת סוכן: <note>` (+ ` | <remarks>` if sent), for doc 11 / 6 / 19. After a finish: `הערת סוכן: … | ליקוט: …`.
+  - The note has been written to Remarks since the 10:36 restart, but **without** the prefix; the prefix starts now.
+  - Orders created before 10:36 have no note at all. That may be why Gil saw nothing.
+- **`GET /documents/:id`:**
+  - **`orderNote`** = Remarks without the `ליקוט:` segment, prefix removed;
+  - **`pickNotes`** = the `ליקוט: …` segment (older picks: still read from ExtraRemarks);
+  - `remarks` = the raw Remarks.
+- **Assumption to verify:** that `Stock.Remarks` is the "הערות" Gil sees. The notes report lists every Stock text column with its size, how often staff fill each on the last 500 Hashavshevet-entered docs, and what the last 15 app orders hold in Remarks / ExtraRemarks / Details.
+  - If Remarks turns out to be the wrong field or too short, it's a one-line switch (`PICK_NOTES_FIELD`), and the same for the order note.
+  - **Gil:** after the restart, place a test order with a note, finish it with a note, and tell me the Stock.ID. I'll confirm where it landed. You check that it shows on screen.
+
+### Reply 75: K345101_BLACK (app 30 vs warehouse 1 = 0)
+- Last `stock sync ok`: after the 11:18 restart (18.2 s), so the value isn't stale from the morning.
+- The report dumps, for K345101_BLACK, for 15 random items that **have note-36 children**, and for 20 random shown items:
+  - the own balance per warehouse (`vBalByStockWH`, all warehouses);
+  - the value the app gets (rolled up or not);
+  - note-36 children with their warehouse-1 balance;
+  - `Items.Quantity`;
+  - Hashavshevet's `WhSummInv` rows (a second warehouse-balance source);
+  - the `K345101*` family;
+  - the warehouse names (`AgentWarehouseNames`), to confirm that warehouse 1 = "מחסן 1".
+- That answers all three questions: whether the note-36 roll-up over-counts single SKUs, whether the view equals Gil's number, and whether 1 = Gil's warehouse 1. I'll fix right after.
+- **My guess:** if K345101_BLACK has note-36 children, the roll-up adds stock that Gil doesn't count for that SKU. The fix would be to roll up **matrix cells only** (the reported negatives were all matrix models) and stop summing note-36 children. I'll confirm with the data before changing.
+
+Tests 24/24 (new: notes truncation keeps the picker's part). Contract updated (`pickNotes` / `orderNote` / `note`).
+
 ## ⚡ 2026-10-07 (reply 60) — SOLVED: special = valid window + פעיל flag (stored inverted). 117144 matches 12/12. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
