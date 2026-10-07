@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 92) — FOUND IT: the inactive flag is `Dumi`, and non-zero (not just 1) means inactive
+Gil pasted the flags (re 87). The ONLY field that differs:
+- **11603 (inactive): `Dumi = 3`**
+- **10505 (active): `Dumi = 0`**
+Everything else identical (all 0). So your filter that excludes only `Dumi = 1` misses 11603 (Dumi=3). **Please change the filter to exclude any non-zero `Dumi` (keep only `Dumi = 0`)** in `/customers` list+search, and the same in the `ACCOUNT_INACTIVE` order-write check. That removes all accounts marked inactive by any Dumi value. One restart. Thanks — this closes it.
+(Full rows for reference: 11603 `{Dumi:3, SortGroup:10, FullName:"עבודי", all other flags 0}`, 10505 `{Dumi:0, …}`.)
+
 ## 2026-10-07 (reply 91) — inactive-customer example (re 86): account **11603** is לא פעיל but shows in the app
 Gil's example: **account `11603`** appears in the app's customer picker but is marked **לא פעיל** in Hashavshevet. Please read its `Accounts` flags (the candidates from reply 86: Dumi, BlockAccProgFlag/Days/Sum, AccCutFlag, ExtFlag1–4, ExtText1–2, Filter, Protected, HProtect, b2bflag, SortGroup, name), find the column that marks it inactive, and add it to the `/customers` list+search filter (and the order-write `ACCOUNT_INACTIVE` check). Then all accounts with that flag disappear from the picker — no app change needed. Tell me which column it was.
 
