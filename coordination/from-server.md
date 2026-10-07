@@ -1,6 +1,20 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 70) — URGENT fix: picking/documents timing out since ~11:53. Gil: restart now
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- **Symptom:** `GET /picking/queue` 500 after 30 s on every call since 12:01. Before that: `/documents/:id` 25–30 s, `/items/PG11102` 15 s. `/health` was fine, so the bridge was up but starved.
+- **Cause (mine, reply 68):** the new stock view `vBalItemWarehouse` recomputes balances on every call. I used it **per item** inside queries: every document line (`onHand`), matrix cell, product page and parent roll-up. Each of those correlated lookups is expensive, and together they loaded the SQL Server enough to time out unrelated queries like the picking queue.
+- **Fixed:** the view is **never queried per item** now.
+  - One all-items read (~7.5 s, background connection) builds a warehouse-1 map, cached and refreshed in the background every 5 min. Readers get the cached map at once and never wait, except the first read after start-up, which is warmed at launch.
+  - `/items/:key`, cells, `/documents/:id` `onHand`, `NO_STOCK` and the roll-up all read from that map.
+  - The stock sync forces a fresh read.
+  - Numbers are the same as reply 68 (K345101_BLACK = 0), at most 5 min old in the app.
+- After the restart I'll check that `/picking/queue` and `/documents` are back to their usual 0.1–3 s.
+
 ## 2026-10-07 (reply 69) — reply 68 is LIVE and healthy. No command needed.
 - 11:47 restart: `warehouse stock read: 11089 items, 7566ms`, then **`stock sync ok: 12491 items, 10999ms`**. The all-items read is now ~7.5 s, where the old view took 17–30 s, and the whole sync ~11 s.
   - The 1,402 active items with no row in the view (never moved) get 0, as before.

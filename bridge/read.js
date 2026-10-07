@@ -63,28 +63,44 @@ function shapeItem(row, extra = {}) {
 // Source: Hashavshevet's view vBalItemWarehouse (ITEMKEY, WAREHOUSE, ITEMWARHBAL) - the real balance
 // per warehouse, warehouse transfers included; Σ over warehouses = Items.Quantity. (Reply 75: the
 // older vBalByStockWH ignores transfers - K345101_BLACK showed 30 in warehouse 1, the real one is 0.)
-// STOCK_WAREHOUSE (default 1 = מחסן ראשי). Single items read it directly; the all-items map is cached
-// 5 min and read on the background pool (120 s timeout).
+// STOCK_WAREHOUSE (default 1 = מחסן ראשי). The view recomputes balances on every call, so it is
+// NEVER queried per item (correlated per-line lookups made /documents and /picking/queue time out):
+// the all-items map (~7.5 s, background pool) is cached and refreshed in the background every 5 min;
+// every reader - single items, cells, document lines - takes its numbers from that map.
 export const STOCK_WAREHOUSE = Number(process.env.STOCK_WAREHOUSE || 1);
-const WH_STOCK_SQL = `(SELECT TOP 1 v.ITEMWARHBAL FROM vBalItemWarehouse v WHERE v.ITEMKEY = %KEY% AND v.WAREHOUSE = ${STOCK_WAREHOUSE})`;
-export const whStockSql = (keyExpr) => WH_STOCK_SQL.replaceAll('%KEY%', keyExpr);
 let whStockCache;
-export async function getWarehouseStock() {
-  if (!whStockCache || Date.now() - whStockCache.at > 5 * 60_000) {
+let whStockPending;
+function loadWarehouseStock() {
+  whStockPending ??= (async () => {
     const started = Date.now();
-    const map = query(
-      `SELECT ITEMKEY AS ItemKey, ITEMWARHBAL AS qty FROM vBalItemWarehouse WHERE WAREHOUSE = ${STOCK_WAREHOUSE}`,
-      {},
-      'bg',
-    ).then((rows) => {
+    try {
+      const rows = await query(
+        `SELECT ITEMKEY AS ItemKey, ITEMWARHBAL AS qty FROM vBalItemWarehouse WHERE WAREHOUSE = ${STOCK_WAREHOUSE}`,
+        {},
+        'bg',
+      );
+      const map = new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0]));
+      whStockCache = { at: Date.now(), map };
       console.log(`warehouse stock read: ${rows.length} items, ${Date.now() - started}ms`);
-      return new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0]));
-    });
-    whStockCache = { at: Date.now(), map };
-    map.catch(() => (whStockCache = undefined));
-  }
-  return whStockCache.map;
+      return map;
+    } finally {
+      whStockPending = undefined;
+    }
+  })();
+  return whStockPending;
 }
+// fresh = true (stock sync): wait for a read newer than 5 min. Otherwise a stale map is returned at
+// once and refreshed in the background; only the very first call waits.
+export async function getWarehouseStock({ fresh = false } = {}) {
+  const age = whStockCache ? Date.now() - whStockCache.at : Infinity;
+  if (age < 5 * 60_000) return whStockCache.map;
+  if (whStockCache && !fresh) {
+    loadWarehouseStock().catch((err) => console.error(`warehouse stock read failed: ${err.message}`));
+    return whStockCache.map;
+  }
+  return loadWarehouseStock();
+}
+const whStockOf = (map, itemKey) => map.get(trim(itemKey)) ?? 0;
 
 // --- parents of variants (reply 69) -------------------------------------------------------------
 // A model's own warehouse balance is not its stock: the goods are booked on its children - matrix
@@ -119,8 +135,8 @@ const groupChildren = (rows) => {
 };
 
 // Warehouse stock for every item, parents rolled up: Map<itemKey, stock>.
-async function getRolledStock() {
-  const whStock = await getWarehouseStock();
+async function getRolledStock({ fresh = false } = {}) {
+  const whStock = await getWarehouseStock({ fresh });
   const rel = await query(CHILDREN_SQL(), {}, 'bg');
   return rollUpStock(whStock, groupChildren(rel), (k) => whStock.get(k));
 }
@@ -131,14 +147,12 @@ export async function getParentStock(itemKeys) {
   const keys = [...new Set(itemKeys.map((k) => String(k).trim()))];
   if (!keys.length) return new Map();
   const params = Object.fromEntries(keys.map((k, i) => [`k${i}`, key(k)]));
-  const rel = await query(
-    `SELECT r.parent, r.child, ${whStockSql('r.child')} AS childStock, ${whStockSql('r.parent')} AS ownStock
-     FROM (${CHILDREN_SQL(` AND parent IN (${keys.map((_, i) => `@k${i}`).join(',')})`)}) r`,
-    params,
-  );
-  const own = new Map(rel.map((r) => [r.parent, r.ownStock ?? 0]));
-  const childStock = new Map(rel.map((r) => [r.child, r.childStock ?? 0]));
-  return rollUpStock(own, groupChildren(rel), (k) => childStock.get(k));
+  const [rel, wh] = await Promise.all([
+    query(`${CHILDREN_SQL(` AND parent IN (${keys.map((_, i) => `@k${i}`).join(',')})`)}`, params),
+    getWarehouseStock(),
+  ]);
+  const own = new Map(rel.map((r) => [r.parent, whStockOf(wh, r.parent)]));
+  return rollUpStock(own, groupChildren(rel), (k) => whStockOf(wh, k));
 }
 
 // Active items with their "extra fields". shownOnly=true -> only "מוצג באתר"=1.
@@ -161,19 +175,20 @@ export async function getItems({ shownOnly = false } = {}) {
 }
 
 export async function getItem(itemKey) {
-  const [rows, extras, parentStock] = await Promise.all([
+  const [rows, extras, parentStock, wh] = await Promise.all([
     query(
-      `SELECT ${ITEM_COLUMNS}, Dumi, ${whStockSql('Items.ItemKey')} AS whStock,
+      `SELECT ${ITEM_COLUMNS}, Dumi,
          CASE WHEN EXISTS (SELECT 1 FROM IMatrixItems WHERE FItemKey = @itemKey) THEN 1 ELSE 0 END AS hasCells
        FROM Items WHERE ItemKey = @itemKey`,
       { itemKey: key(itemKey) },
     ),
     loadExtras(itemKey),
     getParentStock([itemKey]),
+    getWarehouseStock(),
   ]);
   if (!rows.length) return null;
   const extra = { ...extras.get(trim(rows[0].ItemKey)), isMatrix: rows[0].hasCells === 1 };
-  const stock = parentStock.get(trim(rows[0].ItemKey)) ?? rows[0].whStock ?? 0;
+  const stock = parentStock.get(trim(rows[0].ItemKey)) ?? whStockOf(wh, rows[0].ItemKey);
   return { ...shapeItem(rows[0], { ...extra, stock }), active: Number(rows[0].Dumi) !== 1 };
 }
 
@@ -251,9 +266,9 @@ async function loadAxes(fatherKey) {
 
 // Matrix cells of one model with stock and size/colour labels.
 export async function getMatrixCells(fatherItemKey) {
-  const [rows, axes] = await Promise.all([
+  const [rows, axes, wh] = await Promise.all([
     query(
-      `SELECT m.ItemKey, m.Line, m.Col, ${whStockSql('m.ItemKey')} AS stock,
+      `SELECT m.ItemKey, m.Line, m.Col,
          (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 33) AS sizeNote,
          (SELECT TOP 1 Note FROM ExtraNotes WHERE KeF = m.ItemKey AND NoteID = 29) AS colorNote
        FROM IMatrixItems m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
@@ -261,12 +276,13 @@ export async function getMatrixCells(fatherItemKey) {
       { k: key(fatherItemKey) },
     ),
     loadAxes(fatherItemKey),
+    getWarehouseStock(),
   ]);
   const father = trim(fatherItemKey);
   return rows.map((r) => {
     const cell = { itemKey: trim(r.ItemKey), fatherKey: father, line: r.Line, col: r.Col,
       sizeNote: trim(r.sizeNote) || null, colorNote: trim(r.colorNote) || null };
-    return { itemkey: cell.itemKey, ...labelCell(cell, axes.get(father)), line: r.Line, col: r.Col, stock: r.stock ?? 0 };
+    return { itemkey: cell.itemKey, ...labelCell(cell, axes.get(father)), line: r.Line, col: r.Col, stock: whStockOf(wh, r.ItemKey) };
   });
 }
 
@@ -308,7 +324,7 @@ export async function getAccount(accountKey) {
 
 // General stock (Items.Quantity) for all active items: Map<itemKey, quantity>
 export async function getStock() {
-  const [rows, whStock] = await Promise.all([query(`SELECT ItemKey FROM Items WHERE ${ACTIVE}`), getRolledStock()]);
+  const [rows, whStock] = await Promise.all([query(`SELECT ItemKey FROM Items WHERE ${ACTIVE}`), getRolledStock({ fresh: true })]);
   return new Map(rows.map((x) => [trim(x.ItemKey), whStock.get(trim(x.ItemKey)) ?? 0]));
 }
 
@@ -583,14 +599,15 @@ export async function getDocument(stockId) {
     { id: Number(stockId) },
   );
   if (!o) return null;
-  const [lines, produced] = await Promise.all([
+  const [lines, produced, wh] = await Promise.all([
     query(
-      `SELECT m.ID, m.Details, m.ItemKey, m.ItemName, m.Quantity, m.Unit, m.Price, m.DiscountPrc, m.TFtal, m.Tree, ${whStockSql('m.ItemKey')} AS onHand
+      `SELECT m.ID, m.Details, m.ItemKey, m.ItemName, m.Quantity, m.Unit, m.Price, m.DiscountPrc, m.TFtal, m.Tree
        FROM StockMoves m LEFT JOIN Items i ON i.ItemKey = m.ItemKey
        WHERE m.StockID = @id ORDER BY m.LineNoForSorting, m.ID`,
       { id: o.ID },
     ),
     producedDocsFor([o.ID]),
+    getWarehouseStock(),
   ]);
   const shipping = new Set(Object.values(SHIPPING_ITEMS).map((s) => s.itemKey));
   const parentStock = await getParentStock(lines.map((l) => trim(l.ItemKey)));
@@ -620,7 +637,7 @@ export async function getDocument(stockId) {
         unitPrice: l.Price,
         discountPct: l.DiscountPrc || 0,
         lineTotal: l.TFtal,
-        onHand: parentStock.get(trim(l.ItemKey)) ?? l.onHand ?? undefined, // warehouse-1 stock (parents: rolled up)
+        onHand: parentStock.get(trim(l.ItemKey)) ?? whStockOf(wh, l.ItemKey), // warehouse-1 stock (parents: rolled up)
         ...(shipping.has(trim(l.ItemKey)) && { isShipping: true }),
       })),
   };

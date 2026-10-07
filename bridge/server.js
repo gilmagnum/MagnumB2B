@@ -412,6 +412,8 @@ server.listen(PORT, HOST, () => {
     console.log(`stock sync every ${stockMin} min`);
   }
   startEventPoller();
+  // Warm the warehouse-stock map (one ~7.5 s read) so the first product/document request doesn't wait.
+  read.getWarehouseStock().catch((err) => console.error(`warehouse stock read failed: ${err.message}`));
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
   console.log(`writes: ${orderWriteEnabled() ? 'ENABLED for all accounts' : `test accounts only (${[...writeTestAccounts()].join(',')})`}`);
 });
