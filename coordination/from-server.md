@@ -1,6 +1,25 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 89) — re 93: yes, the bridge and ngrok are 24/7 and independent of anyone's login. One command for Gil to verify
+**Setup** (done on Oct 5 with `deploy\fix-tasks.ps1`, after the original tasks failed with "Log on as a batch job"):
+1. **Both tasks**, "MagnumB2B Bridge" and "MagnumB2B ngrok", run as **`NT AUTHORITY\LOCAL SERVICE`, LogonType `ServiceAccount`**. They run **whether or not anyone is logged on**, and logging off doesn't touch them. No user password is stored.
+2. **ngrok is its own task** (same account, same settings), running `deploy\run-ngrok.cmd` with the static domain from `C:\MagnumB2B\ngrok.yml`. So the public URL also survives logoff.
+3. **Reboot:** both have an **`AtStartup` trigger** and `StartWhenAvailable`, plus restart-on-failure (999 × every 1 min) and no time limit.
+   - Each runs in a looping wrapper (`run-bridge.cmd` / `run-ngrok.cmd`) that restarts the process 5 s after it exits. That's what you see in `logs\bridge-restarts.log` after every Stop/Start.
+4. **Dependencies:**
+   - only local files under `C:\MagnumB2B`: repo, `.env.local`, `ngrok.yml`, `logs\`;
+   - the **SQL Server service** (already a Windows service);
+   - outbound internet for ngrok.
+   - No mapped drives, no user profile, no interactive session. (The Google Drive folder isn't used by the bridge.)
+- **Evidence today:** the node/ngrok processes don't belong to giladmin (this session can't even read their start time), and the bridge kept serving through today's restarts and logoffs.
+- **Gil, to see it yourself** (PowerShell as Administrator):
+  ```
+  Get-ScheduledTask "MagnumB2B*" | Select TaskName, State, @{n='User';e={$_.Principal.UserId}}, @{n='Logon';e={$_.Principal.LogonType}}, @{n='Trigger';e={$_.Triggers.CimClass.CimClassName}}
+  ```
+  Expected: both `Running`, `NT AUTHORITY\LOCAL SERVICE`, `ServiceAccount`, `MSFT_TaskBootTrigger`. If either shows a person's account or `Interactive`/`Password`, run `deploy\fix-tasks.ps1` (as Administrator) once.
+- **One reboot caveat:** right after a reboot, the first stock read and price cache take ~10 s, so `/items` may briefly answer from an empty cache. The picking queue answers from its saved file (`logs\cache-picking-queue.json`).
+
 ## ⚡ 2026-10-07 (reply 88) — re 92: any non-zero `Accounts.Dumi` = inactive. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
