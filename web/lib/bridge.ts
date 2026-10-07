@@ -38,6 +38,8 @@ export type Document = {
   picked?: boolean;      // Stock.ExtraText2 set (לוקט - …)
   picker?: string;       // picker name parsed from ExtraText2
   pickedMarker?: string; // raw ExtraText2
+  produced?: boolean;    // a document was produced from this order (ת.משלוח / חשבונית)
+  producedDate?: string; // date it was produced (for the manager's produced-today view)
 };
 export type DocLine = {
   itemkey: string; name?: string; qty: number; unit?: string;
@@ -46,6 +48,7 @@ export type DocLine = {
   size?: string; lineId?: number; // ruler products: per-size line (StockMoves.Details / .ID)
   // Pack breakdown for picking (qty is total units): units = qty, packs × packSize = units.
   units?: number; packs?: number; packSize?: number; packLabel?: string; // "קרטון" | "חבילה"
+  isPacking?: boolean; packingLabel?: string; // M1001 "חבילות" / M1002 "משטחים" — picker sets at the end
 };
 export type DocumentDetail = Document & {
   lines: DocLine[];
@@ -111,10 +114,11 @@ export const bridge = {
     call<{ ok: boolean; stockId: number; shortages?: unknown[] }>(`/picking/${stockId}/finish`, { method: "POST", body: JSON.stringify(body) }),
   // Picking queue (read-only). state "waiting" = awaiting picking (ExtraText2 empty),
   // "picked" = picked but not yet produced. agentId 0 = all.
-  pickingQueue: (agentId: number, opts: { q?: string; state?: "waiting" | "picked" } = {}) => {
+  pickingQueue: (agentId: number, opts: { q?: string; state?: "waiting" | "picked"; includeProducedToday?: boolean } = {}) => {
     const p = new URLSearchParams({ agent: String(agentId) });
     if (opts.q) p.set("q", opts.q);
     if (opts.state) p.set("state", opts.state === "picked" ? "picked" : "waiting");
+    if (opts.includeProducedToday) p.set("includeProducedToday", "1");
     return call<Document[]>(`/picking/queue?${p.toString()}`);
   },
   // Batch status for app-order backups: stockIds -> open|produced|gone (one indexed query).

@@ -31,14 +31,16 @@ export default function PickingPage() {
     if (!allowed) return;
     setLoading(true); setErr("");
     try {
-      const r = await bridge.pickingQueue(0, { state, q: q.trim() || undefined });
+      // Managers also see orders produced today in the "picked" tab.
+      const includeProducedToday = state === "picked" && managerOrAbove(role);
+      const r = await bridge.pickingQueue(0, { state, q: q.trim() || undefined, includeProducedToday });
       setRows(r);
       getActiveLocks(r.map((d) => d.stockId)).then(setLocks).catch(() => {});
     } catch {
       setErr("הגשר עדיין לא מחובר — תור הליקוט ייטען כשהגשר יעלה.");
       setRows([]);
     } finally { setLoading(false); }
-  }, [allowed, state, q]);
+  }, [allowed, state, q, role]);
 
   useEffect(() => { void load(); }, [allowed, state]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -73,6 +75,7 @@ export default function PickingPage() {
                 </div>
                 <div style={{ fontWeight: 600 }}>{d.customerName} <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}>({d.accountKey})</span></div>
                 <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>{d.docTypeName}{d.total != null ? ` · ${d.total.toFixed(2)} ₪` : ""}</div>
+                {d.produced && <span className="chip chip-ok" style={{ width: "fit-content" }}>הופק{d.producedDate ? ` · ${new Date(d.producedDate).toLocaleDateString("he-IL")}` : ""}</span>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 2 }}>
                   <span style={{ color: canOpen ? "var(--brand)" : "var(--ink-muted)", fontWeight: 700 }}>
                     {state === "waiting" ? "ליקוט ←" : managerOrAbove(role) ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}

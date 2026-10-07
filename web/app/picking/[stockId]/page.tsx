@@ -59,16 +59,19 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       const init: Record<string, number> = {};
       // Fresh pick starts from 0 (or a saved draft). A REOPENED (already-picked) order starts
       // from the current line quantities, so a manager review that finishes unchanged keeps them.
-      for (const l of d.lines ?? []) if (!l.isShipping) init[lineKey(l)] = d.picked ? l.qty : (prog[lineKey(l)] ?? 0);
+      // Product lines start at 0; packing lines (M1001/M1002) start at the agent's seed, the picker adjusts.
+      for (const l of d.lines ?? []) if (!l.isShipping || l.isPacking) init[lineKey(l)] = d.picked ? l.qty : (prog[lineKey(l)] ?? (l.isPacking ? l.qty : 0));
       setPicked(init);
       if ("notes" in sess && sess.notes) setNotes(sess.notes);
     })();
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const lines = useMemo(
-    () => (doc?.lines ?? []).filter((l) => !l.isShipping).sort((a, b) => (a.itemkey.localeCompare(b.itemkey) || (a.size ?? "").localeCompare(b.size ?? ""))),
-    [doc],
-  );
+  const lines = useMemo(() => {
+    const all = (doc?.lines ?? []).filter((l) => !l.isShipping || l.isPacking);
+    const products = all.filter((l) => !l.isPacking).sort((a, b) => (a.itemkey.localeCompare(b.itemkey) || (a.size ?? "").localeCompare(b.size ?? "")));
+    const packing = all.filter((l) => l.isPacking); // M1001 / M1002 — always last, picker sets them
+    return [...products, ...packing];
+  }, [doc]);
 
   const alreadyPicked = doc?.picked === true;
   const isAdmin = managerOrAbove(role);
@@ -83,12 +86,14 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   }, [doc, lockedBy, readOnly, viewOnly, done, id]);
 
   const shortageOf = (l: DocLine): "none" | "full" | "partial" => {
+    if (l.isPacking) return "none"; // packing lines aren't a shortage — the picker sets them freely
     const p = picked[lineKey(l)] ?? 0;
     if (p >= l.qty) return "none";
     return p <= 0 ? "full" : "partial";
   };
   const shortages = lines.filter((l) => shortageOf(l) !== "none");
-  const setQty = (l: DocLine, v: number) => setPicked((p) => ({ ...p, [lineKey(l)]: Math.max(0, Math.min(l.qty, v)) }));
+  // Product lines cap at the ordered qty; packing lines may go above the seed.
+  const setQty = (l: DocLine, v: number) => setPicked((p) => ({ ...p, [lineKey(l)]: l.isPacking ? Math.max(0, v) : Math.max(0, Math.min(l.qty, v)) }));
   const fillAll = () => setPicked(Object.fromEntries(lines.map((l) => [lineKey(l), l.qty])));
 
   const saveAndBack = async () => {
@@ -209,34 +214,44 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         {lines.map((l) => {
           const sh = shortageOf(l);
           const q = picked[lineKey(l)] ?? 0;
-          const overStock = (l.onHand ?? Infinity) < l.qty;
+          const isPacking = !!l.isPacking;
+          const overStock = !isPacking && (l.onHand ?? Infinity) < l.qty;
           const packStep = (l.packSize ?? 0) > 1 && !!l.packLabel; // step by a whole pack when we know the pack
           const step = packStep ? (l.packSize as number) : 1;
+          const border = isPacking ? "var(--brand)" : sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)";
           return (
-            <div key={lineKey(l)} className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)"}` }}>
+            <div key={lineKey(l)} className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${border}` }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                {images[l.itemkey]
-                  // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={images[l.itemkey]} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />
-                  : <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />}
+                {isPacking
+                  ? <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--brand-soft)", display: "grid", placeItems: "center", fontSize: 26, flex: "0 0 auto" }}>📦</div>
+                  : images[l.itemkey]
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={images[l.itemkey]} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />
+                    : <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />}
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ fontWeight: 700 }}>{l.itemkey}{l.size ? <span className="chip chip-info" style={{ marginInlineStart: 6 }}>מידה {l.size}</span> : null}</div>
-                  <div style={{ fontSize: 13, color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</div>
+                  {isPacking
+                    ? <div style={{ fontWeight: 700 }}>{l.packingLabel ?? "אריזה"}</div>
+                    : <>
+                        <div style={{ fontWeight: 700 }}>{l.itemkey}{l.size ? <span className="chip chip-info" style={{ marginInlineStart: 6 }}>מידה {l.size}</span> : null}</div>
+                        <div style={{ fontSize: 13, color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</div>
+                      </>}
                 </div>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14 }}>הוזמן: {l.packs != null && l.packLabel
-                  ? <><b>{l.packs} {l.packLabel}</b> <span style={{ color: "var(--ink-muted)" }}>({l.units ?? l.qty} יח׳)</span></>
-                  : <><b>{l.units ?? l.qty}</b>{l.unit ? ` ${l.unit}` : " יח׳"}</>}</span>
+                <span style={{ fontSize: 14 }}>{isPacking
+                  ? "כמות למשלוח (קובע המלקט):"
+                  : <>הוזמן: {l.packs != null && l.packLabel
+                      ? <><b>{l.packs} {l.packLabel}</b> <span style={{ color: "var(--ink-muted)" }}>({l.units ?? l.qty} יח׳)</span></>
+                      : <><b>{l.units ?? l.qty}</b>{l.unit ? ` ${l.unit}` : " יח׳"}</>}</>}</span>
                 {/* Stepper jumps by one pack (packSize units); the number stays editable for a manual fix. + on the right (RTL). */}
                 <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <button onClick={() => setQty(l, q + step)} disabled={readOnly} className="btn btn-primary btn-sm" style={{ padding: "8px 13px", fontSize: 18 }} title={packStep ? `+${l.packLabel}` : "+1"}>+</button>
-                  <input type="number" inputMode="numeric" min={0} max={l.qty} value={q} disabled={readOnly}
+                  <input type="number" inputMode="numeric" min={0} max={isPacking ? undefined : l.qty} value={q} disabled={readOnly}
                     onChange={(e) => setQty(l, Number(e.target.value))}
                     style={{ width: 72, padding: "8px", fontSize: 16, textAlign: "center", borderRadius: 8, border: "1px solid var(--border)" }} />
                   <button onClick={() => setQty(l, q - step)} disabled={readOnly || q <= 0} className="btn btn-sm" style={{ padding: "8px 13px", fontSize: 18 }} title={packStep ? `−${l.packLabel}` : "−1"}>−</button>
-                  <button onClick={() => setQty(l, l.qty)} disabled={readOnly} className="btn btn-sm" style={{ padding: "8px 12px" }}>מלא</button>
+                  {!isPacking && <button onClick={() => setQty(l, l.qty)} disabled={readOnly} className="btn btn-sm" style={{ padding: "8px 12px" }}>מלא</button>}
                 </span>
               </div>
               {packStep && (
@@ -245,12 +260,14 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                 </div>
               )}
 
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                {sh === "none" && <span className="chip chip-ok">✓ לוקט במלואו</span>}
-                {sh === "partial" && <span className="chip chip-warn">חוסר: {l.qty - q}</span>}
-                {sh === "full" && <span className="chip chip-danger">טרם לוקט</span>}
-                {overStock && <span className="chip chip-danger">⚠ הוזמן יותר מהמלאי</span>}
-              </div>
+              {!isPacking && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {sh === "none" && <span className="chip chip-ok">✓ לוקט במלואו</span>}
+                  {sh === "partial" && <span className="chip chip-warn">חוסר: {l.qty - q}</span>}
+                  {sh === "full" && <span className="chip chip-danger">טרם לוקט</span>}
+                  {overStock && <span className="chip chip-danger">⚠ הוזמן יותר מהמלאי</span>}
+                </div>
+              )}
             </div>
           );
         })}
