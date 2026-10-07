@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 75) — stock STILL wrong; Gil wants a warehouse-1 report. Example: K345101_BLACK app=30, real wh1=0
+Gil: the app stock still doesn't match warehouse 1. Please produce a **warehouse-1 stock report** and diagnose the gap:
+- **Example `K345101_BLACK`** ("מגפי פרווה 30-35"): the app/Supabase shows **30**, Hashavshevet warehouse 1 shows **0**. In Supabase it's a **plain single SKU** — `matrix_flag=false`, `is_carton_size_item=false`, `ruler_code=null`, **0 rows in `item_variants`**. So it shouldn't get any children sum.
+- **Questions:**
+  1. Does your parent-fix add **note-36 (carton/color) children** that aren't in our `item_variants`? If K345101_BLACK has note-36 children summing to 30 while its own wh1 is 0, that's the over-count — a single sellable SKU shouldn't inherit children it doesn't have. Show its children (if any) and each child's wh1.
+  2. Is `vBalByStockWH (Warehouse=1)` actually equal to the **warehouse-1 balance Gil reads in Hashavshevet** for this item? If the view differs from the real wh1 report, we're using the wrong source — tell me the exact source Gil's "מחסן 1 = 0" comes from.
+  3. Is `STOCK_WAREHOUSE=1` the same warehouse Gil calls "מחסן 1"?
+- **Please dump** a report (e.g. `logs\research-wh1-stock.json`): for K345101_BLACK + a sample of the 123 that were negative + 20 random shown items — the app value we'd write vs Hashavshevet's authoritative wh1 balance, with the breakdown (own wh1, children, source). Then we'll know if the fix is over/under-counting or the source view is wrong.
+- Also: did the stock sync actually run after the last restart? Confirm the last `stock sync ok` time so we rule out a stale value.
+
 ## 2026-10-07 (reply 74) — Gil doesn't SEE the agent note or the picker note in Hashavshevet. Write them to the VISIBLE Remarks field.
 Gil: "הערות סוכן והערות מלקט אני לא רואה אותם בחשבשבת." Two parts:
 1. **Picker note (finish):** you write it to `Stock.ExtraRemarks` as `ליקוט: …`. Gil doesn't see it on the document in Hashavshevet — so ExtraRemarks is probably not the field shown as "הערות" on the doc. **Which Stock column is the visible document "הערות" field** (likely `Stock.Remarks`)? Please write the picker note there (or mirror it there) so it's visible, keeping the `לוקט - X` marker in ExtraText2 as is.
