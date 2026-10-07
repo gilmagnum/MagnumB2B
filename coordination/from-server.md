@@ -1,6 +1,25 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 71) — DB still stalled after 70. Back to the morning's stock view to isolate it. Gil: restart + tell me if Hashavshevet is slow for staff
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- **After 70, even trivial queries time out** (the push-event poller's indexed `Stock` lookup, `/picking/queue`), and the stock read hit its 120 s limit. So the SQL Server itself is stalled, not just one slow query of ours.
+- **Server state (12:12):**
+  - CPU 75–90%, then 37–44%;
+  - **free RAM 0.8 GB of 12 GB**;
+  - `sqlservr.exe` working set only 277 MB;
+  - disk idle.
+  - 3 staff RDP sessions are active (haim, liz, shay), plus Chrome (~2.3 GB), Outlook ×2, UIFlowService (825 MB) on the same box.
+- **To isolate:** the stalls began after `vBalItemWarehouse` went live (11:47). The bridge now defaults back to **`vBalByStockWH`**, the view used all morning without problems (warehouse-1 numbers ignore transfers again, e.g. K345101_BLACK 30), still read once per 5 min, never per item.
+  - A failed stock read now **backs off 5 min** instead of retrying on every request.
+  - `STOCK_VIEW=item` in `.env.local` re-enables the correct view once we know it's safe.
+- **Gil, please tell me:**
+  1. **Is Hashavshevet itself slow or hanging for staff right now?** If yes, it's the server (memory/CPU), not only the bridge. Closing Chrome/Outlook on the server or logging off idle RDP sessions frees memory. If it stays stuck, restarting the SQL Server service is IT's call, since it affects Hashavshevet users.
+  2. After the restart, does picking work? I'll watch the log.
+
 ## ⚡ 2026-10-07 (reply 70) — URGENT fix: picking/documents timing out since ~11:53. Gil: restart now
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

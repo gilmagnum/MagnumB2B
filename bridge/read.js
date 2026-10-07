@@ -68,21 +68,30 @@ function shapeItem(row, extra = {}) {
 // the all-items map (~7.5 s, background pool) is cached and refreshed in the background every 5 min;
 // every reader - single items, cells, document lines - takes its numbers from that map.
 export const STOCK_WAREHOUSE = Number(process.env.STOCK_WAREHOUSE || 1);
+// STOCK_VIEW: 'byStock' (default) = vBalByStockWH - ran all morning without load problems, but
+// ignores transfers; 'item' = vBalItemWarehouse - correct, but the DB stalled after it went live
+// (reply 71), so it is opt-in until that is understood.
+const STOCK_VIEWS = {
+  byStock: `SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`,
+  item: `SELECT ITEMKEY AS ItemKey, ITEMWARHBAL AS qty FROM vBalItemWarehouse WHERE WAREHOUSE = ${STOCK_WAREHOUSE}`,
+};
+export const STOCK_VIEW = process.env.STOCK_VIEW === 'item' ? 'item' : 'byStock';
+const RETRY_AFTER_FAIL = 5 * 60_000; // a failed read is not retried for 5 min (no hammering a slow DB)
 let whStockCache;
 let whStockPending;
+let whStockFailedAt = 0;
 function loadWarehouseStock() {
   whStockPending ??= (async () => {
     const started = Date.now();
     try {
-      const rows = await query(
-        `SELECT ITEMKEY AS ItemKey, ITEMWARHBAL AS qty FROM vBalItemWarehouse WHERE WAREHOUSE = ${STOCK_WAREHOUSE}`,
-        {},
-        'bg',
-      );
+      const rows = await query(STOCK_VIEWS[STOCK_VIEW], {}, 'bg');
       const map = new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0]));
       whStockCache = { at: Date.now(), map };
-      console.log(`warehouse stock read: ${rows.length} items, ${Date.now() - started}ms`);
+      console.log(`warehouse stock read (${STOCK_VIEW}): ${rows.length} items, ${Date.now() - started}ms`);
       return map;
+    } catch (err) {
+      whStockFailedAt = Date.now();
+      throw err;
     } finally {
       whStockPending = undefined;
     }
@@ -94,6 +103,10 @@ function loadWarehouseStock() {
 export async function getWarehouseStock({ fresh = false } = {}) {
   const age = whStockCache ? Date.now() - whStockCache.at : Infinity;
   if (age < 5 * 60_000) return whStockCache.map;
+  if (Date.now() - whStockFailedAt < RETRY_AFTER_FAIL) {
+    if (whStockCache) return whStockCache.map;
+    throw new Error('מלאי לא זמין כרגע (קריאת המלאי מחשבשבת נכשלה, ניסיון חוזר בעוד כמה דקות)');
+  }
   if (whStockCache && !fresh) {
     loadWarehouseStock().catch((err) => console.error(`warehouse stock read failed: ${err.message}`));
     return whStockCache.map;
