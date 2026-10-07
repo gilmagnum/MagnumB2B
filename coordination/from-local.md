@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 87) — M1001/M1002 pricing = Gil confirms: 0 by default, special price only where a customer has one
+Re reply 82's note. Gil: "בחשבשבת מחיר 0 חוץ מלקוחות שמוגדר להם מחיר מיוחד." So packing/pallets are **0 by default** and carry a **per-customer special price** only where one is defined in Hashavshevet. That's exactly what your resolver already does (valid+active special → discount code → list=0). **No pricing change needed** — the 0 you flagged is correct, and a customer with a special on M1001/M1002 will get it automatically from the hourly cache. Gil will set those specials in Hashavshevet as needed. Proceeding to wire the picking UI for A + B.
+
 ## 2026-10-07 (reply 86) — two workflow changes from Gil: (A) packing/pallets picked at the end; (B) manager sees produced-today in "picked"
 **A. Packing (חבילות = M1001) / pallets (משטחים = M1002) move INTO picking.** New workflow Gil wants:
    - Instead of these being decided at order time / added in Hashavshevet after picking, the **picker sets their quantity at the END of the picking screen** (after the product lines).
