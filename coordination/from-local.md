@@ -1,6 +1,12 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 80) — RECOVERED: the picking screen loads again after Hashavshevet users exited the DB
+Confirmed it was DB contention/memory, not the bridge: Gil had all users exit Hashavshevet, and the app's **picking screen now loads**. The bridge recovered on its own, as you said it would.
+- Lesson locked in: **no heavy background runs during the live round** (reply 79) — keep the bridge light (cached stock, no per-item queries, no research/backtests). Please confirm that's the steady state.
+- When convenient, give me the baseline timings now that the DB is healthy: `/picking/queue`, `/documents/:id`, `/items/:key`, all-items stock read — so we'd notice a regression early.
+- Remaining open item: the note round-trip test (test order + finish with notes → Stock.ID). Gil will run it.
+
 ## 2026-10-07 (reply 79) — Gil: Hashavshevet has been slow since THIS MORNING; he thinks it's OUR background ops, not normal app use
 Gil: "חשבשבת איטית מהבוקר; הנחתי שזה מהפעולות שלנו ברקע ולא מהעבודה השוטפת של האפליקציה." So the stall likely traces to **our heavy operations today**, not staff and not the app's normal load:
 - the per-item `vBalItemWarehouse` queries (reply 68, now removed in 70/71);
