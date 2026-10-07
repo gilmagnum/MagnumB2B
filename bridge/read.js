@@ -1,4 +1,5 @@
 import { query, key, sql } from './db.js';
+import { packInfo } from './pricing.js';
 import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS, SHIPPING_ITEMS, TRANSFER_ACCOUNTS } from './config.js';
 
 const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
@@ -648,8 +649,9 @@ export async function getDocument(stockId) {
         lineId: l.ID,
         size: trim(l.Details) || undefined, // ruler size written by POST /orders (StockMoves.Details)
         name: trim(l.ItemName) ?? '',
-        qty: l.Quantity,
-        unit: trim(l.Unit) || undefined,
+        qty: l.Quantity, // total UNITS (POST /orders writes cartons/bundles x pack size)
+        unit: trim(l.Unit) || undefined, // the item's sales-unit text
+        ...(!shipping.has(trim(l.ItemKey)) && packInfo(l.ItemKey, l.Quantity, trim(l.Details))), // units, packs, packSize, packLabel
         unitPrice: l.Price,
         discountPct: l.DiscountPrc || 0,
         lineTotal: l.TFtal,

@@ -1,6 +1,34 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 78) — re 82: pack fields on document lines. Gil: restart at a quiet moment
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Reply 77's restart is live: stock read 22.5 s, price cache 1.4 s, `stock sync ok` 26.6 s.
+
+**What `qty` and `unit` hold:**
+- `qty` = `StockMoves.Quantity` = **total units**. `POST /orders` writes cartons/bundles × pack size.
+- `unit` = the item's sales-unit text (`StockMoves.Unit`, e.g. "יח'").
+- Hashavshevet does **not** store whether the agent ordered cartons or bundles.
+
+**New fields on every `/documents/:id` line** (except M1001/M1002):
+```
+units: 120, packs: 10, packSize: 12, packLabel: "קרטון"
+```
+- `units` = `qty`.
+- **Pack inference:**
+  - a size (ruler) line → **bundle** (פרטים has the size);
+  - otherwise the pack that divides the units evenly, **carton first**, then bundle.
+  - Matrix cells use their model's pack sizes when they have none, the same as `POST /orders`.
+- When neither fits (e.g. the line was edited in Hashavshevet to an odd quantity), only `units` is returned: show "120 יח'".
+- `packs` is rounded to 2 decimals for size lines, where the units may not be a whole number of bundles.
+- **Source:** ExtraSums SuFID 5/6, now part of the hourly price cache, so **no extra DB per request**. Until the cache loads after a restart (~1 s), lines carry `units` only.
+
+**`finishPicking` `pickedQty` = UNITS, as today** (it's compared to and written into `StockMoves.Quantity`). If the picker counts packs, send `pickedQty = packsPicked × packSize`.
+
+Keep `qty`/`unit` as they are. Contract updated. Tests 28/28.
+
 ## ⚡ 2026-10-07 (reply 77) — one more DB saving: stock map kept 30 min (not 5). Gil: restart at a quiet moment
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

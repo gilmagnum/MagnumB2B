@@ -138,7 +138,16 @@ function loadGlobal() {
       const items = await query('SELECT ItemKey, DiscountCode, Price FROM Items', {}, 'bg');
       const fathers = await query('SELECT ItemKey, FItemKey FROM IMatrixItems', {}, 'bg');
       const lists = await query('SELECT ItemKey, Price, DatF, ID FROM PriceLists WHERE PriceListNumber = 1', {}, 'bg');
-      const g = { at: Date.now(), items: new Map(), fathers: new Map(), list1: new Map() };
+      // Pack sizes (reply 82): ExtraSums SuFID 5 = units per carton, 6 = units per bundle.
+      const sums = await query('SELECT * FROM ExtraSums WHERE SuFID IN (5, 6)', {}, 'bg');
+      const g = { at: Date.now(), items: new Map(), fathers: new Map(), list1: new Map(), packs: new Map() };
+      for (const r of sums) {
+        const k = norm(r.KeF);
+        const v = Number('SuF' in r ? r.SuF : 'Sum' in r ? r.Sum : Object.entries(r).find(([c]) => !['KeF', 'ID', 'SuFID'].includes(c))?.[1]);
+        if (!(v > 0)) continue;
+        if (!g.packs.has(k)) g.packs.set(k, {});
+        g.packs.get(k)[Number(r.SuFID) === 5 ? 'carton' : 'bundle'] = v;
+      }
       for (const r of items) g.items.set(norm(r.ItemKey), { code: codeKey(r.DiscountCode), price: r.Price });
       for (const r of fathers) g.fathers.set(norm(r.ItemKey), norm(r.FItemKey));
       for (const r of lists) {
@@ -253,3 +262,25 @@ export async function resolvePrices(accountKey, itemKeys, opts = {}) {
 
 // Warm the global price cache (server start-up).
 export const warmPriceCache = () => loadGlobal();
+
+// Pack info for an order line (reply 82): StockMoves.Quantity is total UNITS; Hashavshevet doesn't
+// keep whether the agent ordered cartons or bundles, so it is inferred: a ruler (size) line =
+// bundle; else whichever pack divides the units evenly, carton first. Matrix cells use their
+// model's pack sizes when they have none (as writeOrder does). From the price cache - no DB.
+// Returns { units, packs, packSize, packLabel } or { units } when it can't be inferred.
+export function packInfo(itemKey, units, size, g = globalCache) {
+  const out = { units };
+  if (!g || !(units > 0)) return out;
+  const k = norm(itemKey);
+  const own = g.packs.get(k) ?? {};
+  const fatherPacks = g.packs.get(g.fathers.get(k)) ?? {};
+  const carton = own.carton || fatherPacks.carton;
+  const bundle = own.bundle || fatherPacks.bundle;
+  const whole = (n) => n > 0 && Number.isInteger(Math.round((units / n) * 1e6) / 1e6);
+  const pick = size
+    ? (bundle && ['bundle', bundle]) || (carton && whole(carton) && ['carton', carton])
+    : (whole(carton) && ['carton', carton]) || (whole(bundle) && ['bundle', bundle]);
+  if (!pick) return out;
+  const [kind, packSize] = pick;
+  return { units, packs: Math.round((units / packSize) * 100) / 100, packSize, packLabel: kind === 'carton' ? 'קרטון' : 'חבילה' };
+}

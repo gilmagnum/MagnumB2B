@@ -53,3 +53,17 @@ test('unknown item or a non-default price list -> null (SQL fallback)', () => {
   const list7 = acct([], [['MG', { PriceListNumber: 7, DiscountPrc: 10 }]]);
   assert.equal(resolveFromCache(g, list7, '10505', 'MG1507001', 0, now, 'valid'), null);
 });
+
+test('packInfo: carton first, bundle for size lines, model fallback, unknown', async () => {
+  const { packInfo } = await import('../bridge/pricing.js');
+  const g = {
+    packs: new Map([['A', { carton: 12, bundle: 6 }], ['M', { carton: 24 }], ['R', { carton: 60, bundle: 5 }]]),
+    fathers: new Map([['M01', 'M']]),
+  };
+  assert.deepEqual(packInfo('A', 120, undefined, g), { units: 120, packs: 10, packSize: 12, packLabel: 'קרטון' });
+  assert.deepEqual(packInfo('A', 18, undefined, g), { units: 18, packs: 3, packSize: 6, packLabel: 'חבילה' });
+  assert.deepEqual(packInfo('M01', 48, undefined, g), { units: 48, packs: 2, packSize: 24, packLabel: 'קרטון' });
+  assert.deepEqual(packInfo('R', 10, '2-4', g), { units: 10, packs: 2, packSize: 5, packLabel: 'חבילה' });
+  assert.deepEqual(packInfo('A', 7, undefined, g), { units: 7 });
+  assert.deepEqual(packInfo('X', 7, undefined, g), { units: 7 });
+});

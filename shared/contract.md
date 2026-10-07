@@ -87,7 +87,7 @@ type DocumentDetail = Document & {
   orderNote?: string;         // agent's note (prefix removed) - line 'הערת סוכן: …' of Stock.Remarks, from POST /orders `note`
   customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
   lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
-           discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; isShipping?: true; lineId: number; size?: string }[];  // onHand = warehouse-1 stock now; M1001/M1002 flagged, not removed
+           discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; units: number /* = qty, total units */; packs?: number; packSize?: number; packLabel?: 'קרטון' | 'חבילה' /* inferred: size line = bundle, else the pack dividing units evenly (carton first); absent when unknown */; isShipping?: true; lineId: number; size?: string }[];  // onHand = warehouse-1 stock now; M1001/M1002 flagged, not removed
 };
 
 type ApiError = { error: { code: string; message: string } };  // message in Hebrew, show as-is
