@@ -115,7 +115,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   One transaction, only on doc 11 with Status 0: pickedQty ≥ ordered → unchanged; 0 < pickedQty < ordered → line reduced
   (Quantity/TFtal/TftalVat/Supply/Base/PurchQuantity); 0 → line deleted; header TFtalVat/TFtal recomputed;
   `Stock.ExtraText2 = 'לוקט - <picker>'`; notes go on their own line in `Stock.Remarks` (visible הערות) under the agent's line, as `הערת מלקט: <notes>` (CRLF) (a re-run replaces the previous `ליקוט:` part). Never produces the document.
-  Items not listed and M1001/M1002 are untouched. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
+  Items not listed are untouched. **M1001/M1002 (packing/pallets, reply 86):** if sent, the line is set to that quantity (may exceed the seed; 0 deletes it); response `packing: [{ itemkey, qty, action: 'set'|'deleted'|'unchanged' }]`. Errors: 400 BAD_REQUEST/BAD_LINE, 403 WRITE_DISABLED (real customers
   before `ORDER_WRITE_ENABLED=1`), 404 DOC_NOT_FOUND, 409 NOT_OPEN/TREE_UNSUPPORTED, 422 ITEM_NOT_IN_ORDER, 501 NO_PERMISSION (GRANT missing).
 - `GET /customers/:accountKey/balance[?agent=:id]` → `{ accountKey, customerName, agent?, balance, obligo, maxCredit?, maxObligo? }`
   (₪; `balance` = Accounts.Balance raw: **negative = customer owes us** (יתרה לתשלום; the web shows -balance); `obligo` = Accounts.Obligo). 403 if `agent` isn't the customer's agent.
@@ -155,7 +155,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
     "remarks": "...",                        // optional -> Stock.Remarks (joined after note with " | "; cut to the column size)
     "orderDiscountPct": 0,                  // optional, header-level discount % (Stock.DiscountPrc/DiscountPrcR)
     "lines": [ { "itemkey": "WF3400036", "qty": 2, "unit": "carton" | "bundle", "price"?: 8.55, "discountPct"?: 0, "size"?: "2-4" } ],
-    "shipping": { "carton": 1, "pallet": 0 } // picking only -> M1001 / M1002 (both always written, qty 0 when unused)
+    "shipping": { "carton": 1, "pallet": 0 } // picking only -> M1001 / M1002: both always written, last, qty = this seed (default 0), customer's price; the picker sets the real qty on finish
   }
   // 200 response
   { "stockId": 117030, "dryRun": false, "documentId": 11,
