@@ -115,6 +115,9 @@ export const bridge = {
     if (opts.state) p.set("state", opts.state === "picked" ? "picked" : "waiting");
     return call<Document[]>(`/picking/queue?${p.toString()}`);
   },
+  // Batch status for app-order backups: stockIds -> open|produced|gone (one indexed query).
+  documentsStatus: (stockIds: number[]) =>
+    call<Record<string, "open" | "produced" | "gone">>(`/documents/status`, { method: "POST", body: JSON.stringify({ stockIds }) }),
   // Open A/R balance for a customer (positive = owes us).
   balance: (accountKey: string) =>
     call<{ accountKey: string; balance: number }>(`/customers/${encodeURIComponent(accountKey)}/balance`),
