@@ -69,24 +69,52 @@ export const STOCK_WAREHOUSE = Number(process.env.STOCK_WAREHOUSE || 1);
 // Gil's warehouse 1 = 0 = 30 - 30. So: stock = view + produced transfers into the warehouse - out of
 // it. A transfer line is "out" when its warehouse is the header's TransStore (source), else "in".
 const TRANSFER_DOCS = [...new Set(Object.values(TRANSFER_ACCOUNTS).map((t) => Number(t.documentId)))].join(',') || '19';
-const TRANSFER_ADJ_FROM = `FROM StockMoves tm JOIN Stock ts ON ts.ID = tm.StockID
-  WHERE ts.DocumentID IN (${TRANSFER_DOCS}) AND ts.Status <> 0 AND ts.TransStore <> ts.Warehouse
-    AND tm.Warehouse = ${STOCK_WAREHOUSE}`;
+// Transfer documents are few (Stock scan), their lines are read by StockID (indexed) - never a scan
+// of StockMoves by warehouse (that timed out the stock sync).
+const TRANSFER_STOCK_IDS = `SELECT ID FROM Stock WHERE DocumentID IN (${TRANSFER_DOCS}) AND Status <> 0 AND TransStore <> Warehouse`;
 const TRANSFER_ADJ_SUM = 'SUM(CASE WHEN tm.Warehouse = ts.TransStore THEN -tm.Quantity ELSE tm.Quantity END)';
 const WH_STOCK_SQL = `(ISNULL((SELECT TOP 1 v.BALBYSTOCKWH FROM vBalByStockWH v WHERE v.ItemKey = %KEY% AND v.Warehouse = ${STOCK_WAREHOUSE}), 0)
-  + ISNULL((SELECT ${TRANSFER_ADJ_SUM} ${TRANSFER_ADJ_FROM} AND tm.ItemKey = %KEY%), 0))`;
+  + ISNULL((SELECT ${TRANSFER_ADJ_SUM} FROM StockMoves tm JOIN Stock ts ON ts.ID = tm.StockID
+            WHERE tm.ItemKey = %KEY% AND tm.Warehouse = ${STOCK_WAREHOUSE} AND ts.DocumentID IN (${TRANSFER_DOCS})
+              AND ts.Status <> 0 AND ts.TransStore <> ts.Warehouse), 0))`;
 export const whStockSql = (keyExpr) => WH_STOCK_SQL.replaceAll('%KEY%', keyExpr);
+
+// Transfer adjustments for all items: Map<itemKey, ±qty>, cached 30 min. On failure the last good
+// map is kept (or an empty one) so the stock sync never breaks on it.
+let transferCache;
+async function getTransferAdjustments() {
+  if (transferCache?.map && Date.now() - transferCache.at < 30 * 60_000) return transferCache.map;
+  const started = Date.now();
+  try {
+    const ids = (await query(TRANSFER_STOCK_IDS)).map((r) => Number(r.ID));
+    const map = new Map();
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await query(
+        `SELECT tm.ItemKey, ${TRANSFER_ADJ_SUM} AS adj FROM StockMoves tm JOIN Stock ts ON ts.ID = tm.StockID
+         WHERE tm.StockID IN (${ids.slice(i, i + 500).join(',')}) AND tm.Warehouse = ${STOCK_WAREHOUSE}
+         GROUP BY tm.ItemKey`,
+      );
+      for (const r of rows) map.set(trim(r.ItemKey), (map.get(trim(r.ItemKey)) ?? 0) + (r.adj ?? 0));
+    }
+    transferCache = { at: Date.now(), map };
+    console.log(`transfer adjustments: ${ids.length} transfers, ${map.size} items, ${Date.now() - started}ms`);
+    return map;
+  } catch (err) {
+    console.error(`transfer adjustments failed (stock without transfers): ${err.message}`);
+    return transferCache?.map ?? new Map();
+  }
+}
+
 let whStockCache;
 export async function getWarehouseStock() {
   if (!whStockCache || Date.now() - whStockCache.at > 5 * 60_000) {
-    const map = Promise.all([
-      query(`SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`),
-      query(`SELECT tm.ItemKey, ${TRANSFER_ADJ_SUM} AS adj ${TRANSFER_ADJ_FROM} GROUP BY tm.ItemKey`),
-    ]).then(([rows, adjustments]) => {
+    const map = (async () => {
+      const rows = await query(`SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`);
+      const adjustments = await getTransferAdjustments();
       const m = new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0]));
-      for (const a of adjustments) m.set(trim(a.ItemKey), (m.get(trim(a.ItemKey)) ?? 0) + (a.adj ?? 0));
+      for (const [k, adj] of adjustments) m.set(k, (m.get(k) ?? 0) + adj);
       return m;
-    });
+    })();
     whStockCache = { at: Date.now(), map };
     map.catch(() => (whStockCache = undefined));
   }

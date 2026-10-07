@@ -8,11 +8,11 @@ import { whStockSql, getWarehouseStock, STOCK_WAREHOUSE } from './read.js';
 
 async function wh1Corrected() {
   const started = Date.now();
+  // Sample from the latest produced transfers (read by StockID, no StockMoves scan).
   const sample = await query(
-    `SELECT TOP 25 x.ItemKey FROM (
-       SELECT DISTINCT m.ItemKey FROM StockMoves m JOIN Stock s ON s.ID = m.StockID
-       WHERE s.DocumentID = 19 AND s.Status <> 0 AND m.Warehouse = ${STOCK_WAREHOUSE}
-     ) x ORDER BY NEWID()`,
+    `SELECT DISTINCT TOP 25 m.ItemKey FROM StockMoves m
+     WHERE m.StockID IN (SELECT TOP 40 ID FROM Stock WHERE DocumentID = 19 AND Status <> 0 ORDER BY ID DESC)
+       AND m.Warehouse = ${STOCK_WAREHOUSE}`,
   );
   const keys = ['K345101_BLACK', 'K345101_CAMEL', ...sample.map((s) => s.ItemKey.trim())];
   const rows = [];
@@ -39,7 +39,7 @@ async function wh1Corrected() {
 }
 
 export async function runStartupResearch(logsDir, { log = console } = {}) {
-  const jobs = [['wh1-corrected', wh1Corrected]];
+  const jobs = [['wh1-corrected-2', wh1Corrected]];
   for (const [name, run] of jobs) {
     const file = path.join(logsDir, `research-${name}.json`);
     if (fs.existsSync(file)) continue;

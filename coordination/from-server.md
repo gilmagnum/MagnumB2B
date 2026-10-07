@@ -1,6 +1,21 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 64) — reply 63's stock query was too slow (sync timed out). Fixed. Gil: restart now
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Then "check the research" (`logs\research-wh1-corrected-2.json`).
+- **After the 11:29 restart, the stock sync failed:** `Timeout: Request failed to complete in 30000ms`.
+  - The new all-items transfer query scanned all of `StockMoves` by warehouse.
+  - Supabase `items.stock` keeps its last good values (from 11:27), so nothing is wrong, only not refreshing.
+  - Single-item stock (`/items/:key`, the order check) wasn't affected by that query.
+- **Fixed:**
+  - The transfer adjustment now reads the transfer **documents** first (a small set) and their lines by `StockID` (indexed), in batches. It runs after the view, not in parallel with it, and is cached for 30 min.
+  - **If it ever fails, stock falls back to the view alone**, with an error in the log, so the stock sync can't break on it again.
+  - The log now shows `transfer adjustments: N transfers, M items, X ms` on each refresh.
+- The verification report (old vs new warehouse-1 values for K345101_BLACK/CAMEL + items from the latest 40 transfers) is now built only from indexed lookups.
+
 ## ⚡ 2026-10-07 (reply 63) — re 75: FOUND IT. Hashavshevet's warehouse view ignores warehouse transfers. Fixed. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
