@@ -573,6 +573,7 @@ export async function getDocument(stockId) {
     vatPct: o.VatPrc ?? undefined,
     orderDiscountPct: o.DiscountPrc || 0,
     remarks: trim(o.Remarks) || undefined,
+    orderNote: trim(o.Remarks) || undefined, // agent's note from POST /orders `note` (Stock.Remarks, same as remarks)
     pickNotes: trim(o.pickNotes) || undefined, // picker notes written by POST /picking/:id/finish
     customer: {
       address: trim(o.Address) || trim(o.accAddress) || undefined,

@@ -1,6 +1,52 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 54) — re 70/71 + research: matrix-cell pricing fixed (father's special), agent note → Remarks. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) The restart writes `logs\research-pricing-117144.json`: each 117144 line with Hashavshevet's price vs the bridge's new price. Gil: then tell me "check the research".
+
+### Research 117140 (account 10505 הלבשת מני) — the suspicion is confirmed, with a twist: it's the SPECIAL price, not the code
+- **What the doc holds:** the app wrote **list price at 0%** on every line:
+  - MG1507001 cells: 16 / 0%
+  - MG15031022M: 10.25 / 0%
+  - MG1507003 cells: 22 / 0%
+- **The customer's real terms are on the model, not the cell.** 10505 has active specials on the models:
+  - `MG1507001`: **15 − 25% = 11.25** (2019-10-31 → 2028)
+  - `MG1503102`: **7**
+  - The cells (MG150700102…, MG15031022M) have **no special of their own**.
+  - The old resolver looked only at the cell, so it fell to discount code `MG` (20%): 16 − 20% = 12.80 and 10.25 − 20% = 8.20.
+  - MG1507003's cells do carry their own special (22), which is why those lines were already right.
+- **Discount codes are fine:** cells' `DiscountCode` matched the father on these lines.
+  - Across all 4,674 cells: 332 have none, 198 differ from the father, and 58 have a different price. So falling back to the father's code is also needed for some cells.
+- **Fixed in `bridge/pricing.js`:** for a matrix cell, the order is:
+  1. the cell's own special;
+  2. **else the model's special** (customer, then central);
+  3. else discount by the cell's code (**or the model's** if the cell has none);
+  4. else the cell's list price (**or the model's**).
+  - `/price` and `POST /orders` both use it. Special-from-model results carry `specialFrom: "<model>"`.
+  - **Expected for 117140 now:**
+    - MG1507001 cells → 15 / 25% (11.25);
+    - MG15031022M → 7 / 0%;
+    - MG1507003 cells → 22 / 0% (unchanged).
+  - 117144 will confirm.
+- **Heads-up, transfer 117141 (10830):** 10830 has `Discounts` rows (KD-C = **50%**). With bridge pricing, transfers now get **27 − 50%**, where the app used to write 27 / 0%.
+  - **Gil:** is 50% right for internal transfers, or should doc 19 stay at list/0%? One line in the code either way.
+
+### Research — parent stock (reply 69)
+- KD54301 (135 cells), MG1507001 (6), MG1507003 (5), MG44102 (5) are **matrix models**. Their stock is now the sum of the cells.
+- No item has parent-SKU (note 36) children among those checked, so **BR11506 (4,424) and MG11129 (3,477) are unchanged**.
+- **BR12502 (−11,852) has no cells and no children.** Hashavshevet books its movements on the SKU itself, so the negative is genuine for warehouse 1: probably sold from stock received into another warehouse or under other SKUs. It shows "אזל", and the gate blocks it (unless `ignoreStock`).
+
+### Reply 70 — agent note
+- `POST /orders` body `note?: string` → **`Stock.Remarks`** ("הערות"), shown on Hashavshevet's document and print. Written for all kinds (doc 11 / 6 / 19).
+  - If `remarks` is also sent, it's `"<note> | <remarks>"`.
+  - Cut to the column size. Empty → nothing.
+  - Kept separate from the picker's `ליקוט:` note in `ExtraRemarks`.
+- `GET /documents/:id` returns **`orderNote`** (= Stock.Remarks; `remarks` is the same text, kept for compatibility).
+- Contract updated. Tests 23/23.
+
 ## ⚡ 2026-10-07 (reply 53) — re 68 (pricing) + 69 (parent stock): fixes in. Gil: restart the bridge
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

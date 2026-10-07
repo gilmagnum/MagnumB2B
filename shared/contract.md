@@ -83,6 +83,7 @@ type Document = {
 type DocumentDetail = Document & {
   totalBeforeVat?: number; vatPct?: number; orderDiscountPct: number; remarks?: string;
   pickNotes?: string;         // Stock.ExtraRemarks - picker notes written by /picking/:id/finish
+  orderNote?: string;         // Stock.Remarks - the agent's note from POST /orders `note` (same text as remarks)
   customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
   lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
            discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; isShipping?: true; lineId: number; size?: string }[];  // onHand = warehouse-1 stock now; M1001/M1002 flagged, not removed
@@ -147,7 +148,8 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   {
     "accountKey": "10",
     "orderKind": "picking" | "future",      // picking -> DocumentID 11 "הזמנת סוכן", future -> DocumentID 6 "הזמנה"
-    "remarks": "...",                        // optional -> Stock.Remarks
+    "note": "...",                           // optional, agent's order note -> Stock.Remarks (reply 70)
+    "remarks": "...",                        // optional -> Stock.Remarks (joined after note with " | "; cut to the column size)
     "orderDiscountPct": 0,                  // optional, header-level discount % (Stock.DiscountPrc/DiscountPrcR)
     "lines": [ { "itemkey": "WF3400036", "qty": 2, "unit": "carton" | "bundle", "price"?: 8.55, "discountPct"?: 0, "size"?: "2-4" } ],
     "shipping": { "carton": 1, "pallet": 0 } // picking only -> M1001 / M1002 (both always written, qty 0 when unused)
@@ -166,7 +168,9 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
     M1001/M1002**, whatever `orderKind` is. Response adds `transfer: { from, to }`, `documentId: 19`.
   - Writes are allowed for accounts in `WRITE_TEST_ACCOUNTS` (default `10`) until `ORDER_WRITE_ENABLED=1`.
   - **Pricing is the bridge's (reply 68):** every line is priced by the resolver (same as /price: special → discount code → price list)
-    and written as **base `Price` + `DiscountPrc`** (not a baked net). The app's `price`/`discountPct` are used only when the
+    and written as **base `Price` + `DiscountPrc`** (not a baked net). Matrix cells fall back to their model (IMatrixItems):
+    cell special > model special > discount by the cell's code (else the model's) > cell list (else the model's); `/price`
+    then adds `specialFrom: <model>` when the special came from the model. The app's `price`/`discountPct` are used only when the
     resolver has no price (`priceSource: 'web'`). If the app's net differs from the bridge's, the response line adds `webNet`
     and bridge.log records `price differs <acc>/<item>: web X vs bridge Y`.
   - Matrix: one line per cell SKU (`cells[].itemkey`); the cell inherits shownOnSite/pack sizes/ignoreStock from its parent.

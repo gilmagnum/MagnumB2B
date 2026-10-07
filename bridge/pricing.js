@@ -32,23 +32,36 @@ export async function resolvePrices(accountKey, itemKeys, { date = new Date(), q
   const values = keys.map((_, i) => `(@k${i}, @q${i})`).join(',');
   const active = activeOnly ? 'AND h.Active = 1 AND m.Active = 1' : '';
 
+  // Matrix cells (reply 68/71): special prices are often defined on the MODEL only (10505:
+  // MG1507001 = 15 -25%, its cells have none), so a cell falls back to its father (IMatrixItems):
+  // the cell's own special > the father's special > discount by the cell's code (else the
+  // father's) > the cell's list price (else the father's).
   const rows = await query(
     `SELECT i.ItemKey, i.Price AS itemPrice, d.PriceListNumber, d.DiscountPrc,
-       (SELECT TOP 1 p.Price FROM PriceLists p
-         WHERE p.ItemKey = i.ItemKey AND p.PriceListNumber = ISNULL(d.PriceListNumber, 1) AND p.DatF <= @asOf
-         ORDER BY p.DatF DESC, p.ID DESC) AS listPrice,
-       sp.Price AS specialPrice, sp.DiscountPrc AS specialDiscount, sp.AccountKey AS specialAccount
+       COALESCE(
+         (SELECT TOP 1 p.Price FROM PriceLists p
+           WHERE p.ItemKey = i.ItemKey AND p.PriceListNumber = ISNULL(d.PriceListNumber, 1) AND p.DatF <= @asOf
+           ORDER BY p.DatF DESC, p.ID DESC),
+         (SELECT TOP 1 p.Price FROM PriceLists p
+           WHERE p.ItemKey = f.father AND p.PriceListNumber = ISNULL(d.PriceListNumber, 1) AND p.DatF <= @asOf
+           ORDER BY p.DatF DESC, p.ID DESC)) AS listPrice,
+       sp.Price AS specialPrice, sp.DiscountPrc AS specialDiscount, sp.AccountKey AS specialAccount,
+       sp.ItemKey AS specialItem
      FROM (VALUES ${values}) AS want(ItemKey, Qty)
      JOIN Items i ON i.ItemKey = want.ItemKey
+     OUTER APPLY (SELECT TOP 1 FItemKey AS father FROM IMatrixItems WHERE ItemKey = i.ItemKey) f
+     OUTER APPLY (SELECT COALESCE(NULLIF(LTRIM(RTRIM(i.DiscountCode)), ''),
+                    (SELECT NULLIF(LTRIM(RTRIM(DiscountCode)), '') FROM Items WHERE ItemKey = f.father)) AS code) dc
      OUTER APPLY (SELECT NULLIF(LTRIM(RTRIM(AssignKey)), '') AS central FROM Accounts WHERE AccountKey = @acc) a
      OUTER APPLY (SELECT TOP 1 PriceListNumber, DiscountPrc FROM Discounts
-                  WHERE AccountKey = @acc AND ItemDiscountCode = i.DiscountCode ORDER BY ID DESC) d
-     OUTER APPLY (SELECT TOP 1 m.Price, m.DiscountPrc, h.AccountKey
+                  WHERE AccountKey = @acc AND ItemDiscountCode = dc.code ORDER BY ID DESC) d
+     OUTER APPLY (SELECT TOP 1 m.Price, m.DiscountPrc, h.AccountKey, h.ItemKey
                   FROM SpecialPrices h JOIN SpecialPricesMoves m ON m.SPID = h.ID
-                  WHERE h.AccountKey IN (@acc, a.central) AND h.ItemKey = i.ItemKey
+                  WHERE h.AccountKey IN (@acc, a.central) AND h.ItemKey IN (i.ItemKey, f.father)
                     AND @asOf >= h.ValidDate AND @asOf < h.EndDate + 1
                     AND m.Price > 0 AND ISNULL(m.MinQuantity, 0) <= want.Qty ${active}
-                  ORDER BY CASE WHEN h.AccountKey = @acc THEN 0 ELSE 1 END, h.ValidDate DESC,
+                  ORDER BY CASE WHEN h.ItemKey = i.ItemKey THEN 0 ELSE 1 END,
+                           CASE WHEN h.AccountKey = @acc THEN 0 ELSE 1 END, h.ValidDate DESC,
                            m.MinQuantity DESC, h.ID DESC) sp`,
     params,
   );
@@ -58,7 +71,11 @@ export async function resolvePrices(accountKey, itemKeys, { date = new Date(), q
       const priceListNumber = r.PriceListNumber ?? 1;
       if (r.specialPrice > 0) {
         const source = trim(r.specialAccount) === String(accountKey).trim() ? 'special' : 'special-central';
-        return [trim(r.ItemKey), { price: r.specialPrice, discountPrc: r.specialDiscount ?? 0, source, priceListNumber }];
+        const fromModel = trim(r.specialItem) !== trim(r.ItemKey);
+        return [trim(r.ItemKey), {
+          price: r.specialPrice, discountPrc: r.specialDiscount ?? 0, source, priceListNumber,
+          ...(fromModel && { specialFrom: trim(r.specialItem) }),
+        }];
       }
       const price = r.listPrice > 0 ? r.listPrice : r.itemPrice;
       return [

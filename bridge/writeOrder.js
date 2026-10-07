@@ -70,6 +70,14 @@ function fitRow(table, columns, { required, optional }) {
   return row;
 }
 
+// Free text cut to the column's size (null when empty).
+function fitText(columns, name, text) {
+  if (!text) return null;
+  const col = columns.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  if (!col || col.maxLength < 0) return text;
+  return text.slice(0, col.type.startsWith('n') ? col.maxLength / 2 : col.maxLength);
+}
+
 async function insertRow(tx, table, row) {
   const names = Object.keys(row);
   const params = Object.fromEntries(names.map((n, i) => [`p${i}`, row[n]]));
@@ -112,6 +120,7 @@ function validate(order) {
   }
   const orderDiscount = order.orderDiscountPct ?? 0;
   if (!(orderDiscount >= 0 && orderDiscount < 100)) throw new OrderError('BAD_DISCOUNT', 'הנחת הזמנה לא תקינה');
+  if (order.note != null && typeof order.note !== 'string') throw new OrderError('BAD_NOTE', 'הערה לא תקינה');
   for (const [kind, qty] of Object.entries(order.shipping ?? {})) {
     if (!(kind in SHIPPING_ITEMS) || !Number.isInteger(qty) || qty < 0) throw new OrderError('BAD_SHIPPING', 'נתוני משלוח לא תקינים');
   }
@@ -327,7 +336,8 @@ export async function writeOrder(order, { commit = false } = {}) {
       ...HEADER_DEFAULTS,
       ...(transfer && { TransStore: transfer.fromWarehouse }), // transfer: source warehouse
       PrintStyle: printStyle,
-      Remarks: order.remarks?.trim() || null,
+      // Agent's order note (reply 70) + remarks -> Stock.Remarks ("הערות"), cut to the column size.
+      Remarks: fitText(columns.Stock, 'Remarks', [order.note, order.remarks].map((s) => s?.trim()).filter(Boolean).join(' | ')),
       AccountName: trim(account.FullName),
       Address: trim(account.Address),
       City: trim(account.City),
