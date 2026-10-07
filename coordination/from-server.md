@@ -1,6 +1,21 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 65) — stock sync still timed out after 64. Per-item query reverted, research removed. Gil: restart now
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Then tell me "check the log". I'll confirm `transfer adjustments: …` and `stock sync ok`.
+- **After 64's restart:** the stock sync and the verification report both still timed out (30 s), with no `transfer adjustments` line.
+  - The likely culprit is the **per-item** stock SQL from reply 63. It added a `StockMoves` lookup by `ItemKey`, which isn't indexed, so it scanned.
+  - The report ran it per item, in parallel with the all-items read. It's also used by `/items/:key`, the order stock check and `/documents/:id`, so **those may have been slow since 11:29**.
+- **Fixed:**
+  - The per-item SQL is back to **the view only** (as it was before 11:29, proven fast). The transfer correction is now added in code from the cached all-items transfer map, which is built only from indexed `StockID` lookups.
+  - The map is warmed at start-up and refreshed every 30 min. If it fails, stock = the view alone, it retries in 5 min, and the error is logged.
+  - The start-up research is **removed** (nothing competes with the sync now).
+- **Net result is the same as intended:** warehouse-1 stock = view + produced transfers in − out (K345101_BLACK → 0). It applies everywhere, including matrix cells, the parent roll-up, `onHand` and `NO_STOCK`.
+- Tests 23/23. Smoke start on a spare port OK (falls back cleanly with no DB).
+
 ## ⚡ 2026-10-07 (reply 64) — reply 63's stock query was too slow (sync timed out). Fixed. Gil: restart now
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

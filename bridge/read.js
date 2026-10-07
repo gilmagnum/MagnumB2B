@@ -73,17 +73,29 @@ const TRANSFER_DOCS = [...new Set(Object.values(TRANSFER_ACCOUNTS).map((t) => Nu
 // of StockMoves by warehouse (that timed out the stock sync).
 const TRANSFER_STOCK_IDS = `SELECT ID FROM Stock WHERE DocumentID IN (${TRANSFER_DOCS}) AND Status <> 0 AND TransStore <> Warehouse`;
 const TRANSFER_ADJ_SUM = 'SUM(CASE WHEN tm.Warehouse = ts.TransStore THEN -tm.Quantity ELSE tm.Quantity END)';
-const WH_STOCK_SQL = `(ISNULL((SELECT TOP 1 v.BALBYSTOCKWH FROM vBalByStockWH v WHERE v.ItemKey = %KEY% AND v.Warehouse = ${STOCK_WAREHOUSE}), 0)
-  + ISNULL((SELECT ${TRANSFER_ADJ_SUM} FROM StockMoves tm JOIN Stock ts ON ts.ID = tm.StockID
-            WHERE tm.ItemKey = %KEY% AND tm.Warehouse = ${STOCK_WAREHOUSE} AND ts.DocumentID IN (${TRANSFER_DOCS})
-              AND ts.Status <> 0 AND ts.TransStore <> ts.Warehouse), 0))`;
+// Per-item SQL reads the view only (a StockMoves lookup by ItemKey is not indexed and timed out);
+// callers add the transfer adjustment from the cached map below (transferAdj / adjustStock).
+const WH_STOCK_SQL = `(SELECT TOP 1 v.BALBYSTOCKWH FROM vBalByStockWH v WHERE v.ItemKey = %KEY% AND v.Warehouse = ${STOCK_WAREHOUSE})`;
 export const whStockSql = (keyExpr) => WH_STOCK_SQL.replaceAll('%KEY%', keyExpr);
 
 // Transfer adjustments for all items: Map<itemKey, ±qty>, cached 30 min. On failure the last good
 // map is kept (or an empty one) so the stock sync never breaks on it.
 let transferCache;
-async function getTransferAdjustments() {
-  if (transferCache?.map && Date.now() - transferCache.at < 30 * 60_000) return transferCache.map;
+let transferPending;
+export function getTransferAdjustments() {
+  if (transferCache?.map && Date.now() - transferCache.at < 30 * 60_000) return Promise.resolve(transferCache.map);
+  transferPending ??= loadTransferAdjustments().finally(() => (transferPending = undefined));
+  return transferPending;
+}
+// Non-blocking for single-item reads: the cached map, or empty while the first load runs.
+export function transferAdjNow() {
+  if (!transferCache?.map || Date.now() - transferCache.at >= 30 * 60_000) getTransferAdjustments().catch(() => {});
+  return transferCache?.map ?? new Map();
+}
+// stock + the item's transfer adjustment (null stays null).
+export const adjustStock = (itemKey, stock) => (stock == null ? stock : stock + (transferAdjNow().get(trim(itemKey)) ?? 0));
+
+async function loadTransferAdjustments() {
   const started = Date.now();
   try {
     const ids = (await query(TRANSFER_STOCK_IDS)).map((r) => Number(r.ID));
@@ -101,7 +113,9 @@ async function getTransferAdjustments() {
     return map;
   } catch (err) {
     console.error(`transfer adjustments failed (stock without transfers): ${err.message}`);
-    return transferCache?.map ?? new Map();
+    // Keep the last good map (or none) and retry in 5 min, not on every request.
+    transferCache = { at: Date.now() - 25 * 60_000, map: transferCache?.map ?? new Map() };
+    return transferCache.map;
   }
 }
 
@@ -170,8 +184,8 @@ export async function getParentStock(itemKeys) {
      FROM (${CHILDREN_SQL(` AND parent IN (${keys.map((_, i) => `@k${i}`).join(',')})`)}) r`,
     params,
   );
-  const own = new Map(rel.map((r) => [r.parent, r.ownStock ?? 0]));
-  const childStock = new Map(rel.map((r) => [r.child, r.childStock ?? 0]));
+  const own = new Map(rel.map((r) => [r.parent, adjustStock(r.parent, r.ownStock ?? 0)]));
+  const childStock = new Map(rel.map((r) => [r.child, adjustStock(r.child, r.childStock ?? 0)]));
   return rollUpStock(own, groupChildren(rel), (k) => childStock.get(k));
 }
 
@@ -207,7 +221,7 @@ export async function getItem(itemKey) {
   ]);
   if (!rows.length) return null;
   const extra = { ...extras.get(trim(rows[0].ItemKey)), isMatrix: rows[0].hasCells === 1 };
-  const stock = parentStock.get(trim(rows[0].ItemKey)) ?? rows[0].whStock ?? 0;
+  const stock = parentStock.get(trim(rows[0].ItemKey)) ?? adjustStock(rows[0].ItemKey, rows[0].whStock ?? 0);
   return { ...shapeItem(rows[0], { ...extra, stock }), active: Number(rows[0].Dumi) !== 1 };
 }
 
@@ -300,7 +314,7 @@ export async function getMatrixCells(fatherItemKey) {
   return rows.map((r) => {
     const cell = { itemKey: trim(r.ItemKey), fatherKey: father, line: r.Line, col: r.Col,
       sizeNote: trim(r.sizeNote) || null, colorNote: trim(r.colorNote) || null };
-    return { itemkey: cell.itemKey, ...labelCell(cell, axes.get(father)), line: r.Line, col: r.Col, stock: r.stock ?? 0 };
+    return { itemkey: cell.itemKey, ...labelCell(cell, axes.get(father)), line: r.Line, col: r.Col, stock: adjustStock(r.ItemKey, r.stock ?? 0) };
   });
 }
 
@@ -654,7 +668,7 @@ export async function getDocument(stockId) {
         unitPrice: l.Price,
         discountPct: l.DiscountPrc || 0,
         lineTotal: l.TFtal,
-        onHand: parentStock.get(trim(l.ItemKey)) ?? l.onHand ?? undefined, // warehouse-1 stock (parents: rolled up)
+        onHand: parentStock.get(trim(l.ItemKey)) ?? adjustStock(l.ItemKey, l.onHand) ?? undefined, // warehouse-1 stock (parents: rolled up)
         ...(shipping.has(trim(l.ItemKey)) && { isShipping: true }),
       })),
   };

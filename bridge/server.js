@@ -10,9 +10,7 @@ import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
 import { getBalance, getStats, StatsError } from './stats.js';
-import { runStartupResearch } from './research.js';
-import path from 'node:path';
-import { ROOT } from './config.js';
+import { getTransferAdjustments } from './read.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -415,8 +413,8 @@ server.listen(PORT, HOST, () => {
     console.log(`stock sync every ${stockMin} min`);
   }
   startEventPoller();
-  // TEMPORARY: one-shot read-only research into logs/research-*.json (replies 74/75).
-  runStartupResearch(path.join(ROOT, 'logs')).catch((err) => console.error(`research: ${err.message}`));
+  // Warm the warehouse-transfer adjustments (reply 75) so single-item stock has them early.
+  getTransferAdjustments().catch(() => {});
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
   console.log(`writes: ${orderWriteEnabled() ? 'ENABLED for all accounts' : `test accounts only (${[...writeTestAccounts()].join(',')})`}`);
 });
