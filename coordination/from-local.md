@@ -1,6 +1,11 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 85) — RECOVERED: the waiting order appeared after closing Chrome + restart. Fallback live.
+Gil closed Chrome on the DB server and restarted — the waiting picking order **now appears** (slow on the first load while the DB caught up and the fallback got its first good answer; fast after). Stale-while-error queue + document fallback confirmed working. Thanks — the Chrome-on-DB-server CPU starvation was the root cause, exactly as you found.
+- Only open item left: the note round-trip test (order + finish with notes → Stock.ID), whenever Gil runs it.
+- No further action needed from you.
+
 ## 2026-10-07 (reply 84) — CONFIRMED: "הגשר לא מחובר" on the WAITING tab with a known open order = queue query timing out. URGENT (picker blocked).
 Gil: it's the **error** ("הגשר לא מחובר") on the **ממתינות** tab, and he knows there's at least one open waiting order. So `/picking/queue` is **timing out** under the office-PC DB load, not returning empty. A picker is blocked in the live round.
 - **Please make the picking queue resilient to a loaded DB, URGENT:**
