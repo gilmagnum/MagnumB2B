@@ -6,12 +6,13 @@ import { bridge } from "../../lib/bridge";
 import { useCart, type CartLine, type Unit } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
 
-type DocStatus = "sent" | "produced" | "deleted" | "?";
+type DocStatus = "sent" | "produced" | "deleted" | "…" | "?";
 const STATUS_CHIP: Record<DocStatus, { label: string; cls: string }> = {
   sent: { label: "נשלח", cls: "chip-info" },
   produced: { label: "הופק", cls: "chip-ok" },
   deleted: { label: "נמחק", cls: "chip-danger" },
-  "?": { label: "—", cls: "chip-info" },
+  "…": { label: "…", cls: "chip-info" },
+  "?": { label: "בדוק ↓", cls: "chip-info" },
 };
 
 // Copy intent carried to /customer when copying an order to a DIFFERENT customer.
@@ -31,21 +32,15 @@ export default function AppOrdersList() {
 
   useEffect(() => { listAppOrders().then((r) => { setRows(r); setLoading(false); }).catch(() => setLoading(false)); }, []);
 
-  // Resolve each order's current Hashavshevet status: open=נשלח, produced=הופק, gone=נמחק.
-  useEffect(() => {
-    const ids = [...new Set(rows.map((r) => r.stock_id).filter((x): x is number => x != null))];
-    if (!ids.length) return;
-    let alive = true;
-    (async () => {
-      const out: Record<number, DocStatus> = {};
-      await Promise.all(ids.map(async (id) => {
-        try { const d = await bridge.document(id); out[id] = d.status === "produced" ? "produced" : "sent"; }
-        catch { out[id] = "deleted"; }
-      }));
-      if (alive) setStatuses(out);
-    })();
-    return () => { alive = false; };
-  }, [rows]);
+  // Resolve one order's Hashavshevet status on demand (open=נשלח, produced=הופק, gone=נמחק).
+  // Lazy — only when a row is opened — to keep the DB light (no burst of lookups on load).
+  const ensureStatus = (id?: number | null) => {
+    if (id == null || statuses[id]) return;
+    setStatuses((s) => ({ ...s, [id]: "…" as DocStatus }));
+    bridge.document(id)
+      .then((d) => setStatuses((s) => ({ ...s, [id]: d.status === "produced" ? "produced" : "sent" })))
+      .catch(() => setStatuses((s) => ({ ...s, [id]: "deleted" })));
+  };
 
   // Copy to the SAME customer: load the lines into the cart and go review.
   const copySame = (r: AppOrderRow) => {
@@ -78,12 +73,18 @@ export default function AppOrdersList() {
             return (
               <Fragment key={r.id}>
                 <tr>
-                  <td><button onClick={() => setOpen(isOpen ? null : r.id)} className="btn btn-sm" style={{ padding: "2px 9px" }}>{isOpen ? "−" : "+"}</button></td>
+                  <td><button onClick={() => { const next = isOpen ? null : r.id; setOpen(next); if (next) ensureStatus(r.stock_id); }} className="btn btn-sm" style={{ padding: "2px 9px" }}>{isOpen ? "−" : "+"}</button></td>
                   <td style={{ whiteSpace: "nowrap" }}>{dt(r.created_at)}</td>
                   <td>{r.customer_name} <span style={{ color: "var(--ink-muted)" }}>({r.account_key})</span></td>
                   <td>{kind(r.order_kind)}</td>
                   <td>{r.stock_id ?? "—"}</td>
-                  <td>{(() => { const s = STATUS_CHIP[(r.stock_id != null ? statuses[r.stock_id] : undefined) ?? "?"]; return <span className={`chip ${s.cls}`}>{s.label}</span>; })()}</td>
+                  <td>{(() => {
+                    const key = (r.stock_id != null ? statuses[r.stock_id] : undefined) ?? "?";
+                    const s = STATUS_CHIP[key];
+                    return key === "?"
+                      ? <button onClick={() => ensureStatus(r.stock_id)} className={`chip ${s.cls}`} style={{ cursor: "pointer", border: 0 }} title="בדוק סטטוס בחשבשבת">{s.label}</button>
+                      : <span className={`chip ${s.cls}`}>{s.label}</span>;
+                  })()}</td>
                   <td>{lines.length}</td>
                   <td>{r.totals?.total != null ? `${Math.round(r.totals.total).toLocaleString("he-IL")} ₪` : "—"}</td>
                 </tr>
