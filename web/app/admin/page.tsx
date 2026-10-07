@@ -28,6 +28,7 @@ export default async function AdminPage() {
     return {
       id: p.id, fullName: p.full_name, role: p.role, agentId: p.agent_id,
       email: au?.email ?? null, lastSignIn: au?.last_sign_in_at ?? null, createdAt: p.created_at, active: !banned,
+      deleted: !au, // profile row with no auth user = the login was deleted
       pushPrefs: (p.push_prefs as Record<string, boolean> | null) ?? null,
       emailPrefs: (p.email_prefs as Record<string, boolean> | null) ?? null,
     };

@@ -47,17 +47,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Pickers are restricted to the picking screens (plus their notifications).
-  // Only page navigations are redirected — never /api (the bridge proxy, push, etc.),
-  // which the picking screen fetches and which is already role-gated at the data layer.
-  // Without this, a picker's /api/bridge/picking/queue was redirected to /picking (HTML),
-  // so the fetch failed and the screen showed "הגשר לא מחובר" with no orders.
-  if (user && !path.startsWith("/picking") && !path.startsWith("/notifications") && !path.startsWith("/api")) {
+  // Role-based page restrictions (never on /api — the bridge proxy etc. are gated at the
+  // data layer; redirecting /api/bridge/picking/queue to an HTML page broke the picker screen).
+  if (user && !path.startsWith("/api")) {
     const { data: prof } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-    if (prof?.role === "picker") {
+    const role = prof?.role;
+    // Pickers: picking screens + their notifications only.
+    if (role === "picker" && !path.startsWith("/picking") && !path.startsWith("/notifications")) {
       const url = request.nextUrl.clone();
-      url.pathname = "/picking";
-      url.search = "";
+      url.pathname = "/picking"; url.search = "";
+      return NextResponse.redirect(url);
+    }
+    // Agents: no access to the data dashboard (managers/admins only).
+    if (role === "agent" && path.startsWith("/data")) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/"; url.search = "";
       return NextResponse.redirect(url);
     }
   }

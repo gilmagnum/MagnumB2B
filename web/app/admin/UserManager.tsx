@@ -1,7 +1,7 @@
 "use client";
 import { Fragment, useState } from "react";
 import { supabaseBrowser } from "../../lib/supabase/browser";
-import { setActiveAction, resetPasswordAction, changeRoleAction, updateUserAction, deleteUserAction } from "./actions";
+import { setActiveAction, resetPasswordAction, changeRoleAction, updateUserAction, deleteUserAction, cleanupProfileAction } from "./actions";
 import { saveUserPrefs, saveUserEmailPrefs } from "../notif-actions";
 import { eventsForRole, effectivePref, effectiveEmailPref, type Role } from "../../lib/pushEvents";
 import { ASSIGNABLE_ROLES, roleLabel } from "../../lib/roles";
@@ -9,6 +9,7 @@ import { ASSIGNABLE_ROLES, roleLabel } from "../../lib/roles";
 export type ManagedUser = {
   id: string; fullName: string | null; role: string; agentId: number | null;
   email: string | null; lastSignIn: string | null; createdAt: string | null; active: boolean;
+  deleted?: boolean; // profile row whose auth login was deleted
   pushPrefs?: Record<string, boolean> | null;
   emailPrefs?: Record<string, boolean> | null;
 };
@@ -110,6 +111,18 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
     setLog((data as LogRow[]) ?? []); setLogLoading(false);
   };
 
+  const cleanup = async (u: ManagedUser) => {
+    if (!window.confirm(`לנקות את הרשומה היתומה של ${u.fullName || "—"}? (ההתחברות כבר נמחקה)`)) return;
+    setBusy(u.id);
+    const fd = new FormData(); fd.set("id", u.id);
+    const res = await cleanupProfileAction({}, fd);
+    setBusy(null);
+    if (res.ok) setUsers((us) => us.filter((x) => x.id !== u.id)); else flash(u.id, res.error ?? "שגיאה", false);
+  };
+
+  const live = users.filter((u) => !u.deleted && u.active);
+  const inactive = users.filter((u) => u.deleted || !u.active);
+
   return (
     <div className="table-wrap">
       <table className="data-table" style={{ minWidth: 760 }}>
@@ -117,7 +130,7 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
           <tr><th>שם</th><th>אימייל</th><th>תפקיד</th><th>קוד סוכן</th><th>כניסה אחרונה</th><th>סטטוס</th><th>פעולות</th></tr>
         </thead>
         <tbody>
-          {users.map((u) => (
+          {live.map((u) => (
             <Fragment key={u.id}>
               <tr>
                 <td style={{ fontWeight: 600 }}>{u.fullName || "—"}</td>
@@ -206,6 +219,40 @@ export default function UserManager({ users: initial, meId }: { users: ManagedUs
           ))}
         </tbody>
       </table>
+
+      {inactive.length > 0 && (
+        <details style={{ marginTop: 20 }}>
+          <summary style={{ cursor: "pointer", fontWeight: 700, color: "var(--ink-muted)" }}>
+            משתמשים מושבתים / נמחקים — {inactive.length}
+          </summary>
+          <table className="data-table" style={{ minWidth: 640, marginTop: 10 }}>
+            <thead>
+              <tr><th>שם</th><th>אימייל</th><th>תפקיד</th><th>סטטוס</th><th>פעולות</th></tr>
+            </thead>
+            <tbody>
+              {inactive.map((u) => (
+                <tr key={u.id}>
+                  <td style={{ fontWeight: 600 }}>{u.fullName || "—"}</td>
+                  <td style={{ color: "var(--ink-muted)" }}>{u.email || "—"}</td>
+                  <td>{roleLabel(u.role)}{u.agentId != null ? ` · ${u.agentId}` : ""}</td>
+                  <td>{u.deleted ? <span className="chip chip-danger">נמחק</span> : <span className="chip chip-warn">מושבת</span>}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {u.deleted ? (
+                      <button onClick={() => cleanup(u)} disabled={busy === u.id} className="btn btn-sm" style={{ color: "var(--danger)" }}>נקה רשומה</button>
+                    ) : (
+                      <>
+                        <button onClick={() => toggleActive(u)} disabled={busy === u.id || u.id === meId} className="btn btn-sm">הפעל</button>
+                        <button onClick={() => deleteUser(u)} disabled={busy === u.id || u.id === meId} className="btn btn-sm" style={{ marginInlineStart: 6, color: "var(--danger)" }}>מחק</button>
+                      </>
+                    )}
+                    {msg?.id === u.id && <span className={`chip ${msg.ok ? "chip-ok" : "chip-danger"}`} style={{ marginInlineStart: 8 }}>{msg.text}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
     </div>
   );
 }

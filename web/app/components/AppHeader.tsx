@@ -7,7 +7,7 @@ import { useCart } from "../../lib/useCart";
 import HeaderSearch from "./HeaderSearch";
 import Icon from "./Icon";
 import NotifBell from "./NotifBell";
-import { canSeeAdminPanel } from "../../lib/roles";
+import { canSeeAdminPanel, managerOrAbove } from "../../lib/roles";
 
 type Role = "agent" | "customer" | "picker" | "admin" | "superadmin" | "";
 
@@ -42,7 +42,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
         { href: "/start", label: "התחלת הזמנה", icon: "plus" },
         { href: "/catalog", label: "קטלוג", icon: "catalog" },
         { href: "/documents", label: "מסמכים", icon: "docs" },
-        { href: "/data", label: "נתונים", icon: "chart" },
+        ...(managerOrAbove(role) ? [{ href: "/data", label: "נתונים", icon: "chart" }] : []),
         ...(canPick ? [{ href: "/picking", label: "ליקוט", icon: "picking" }] : []),
         ...(isSuper ? [{ href: "/admin", label: "ניהול", icon: "admin" }] : []),
         { href: "/settings", label: "הגדרות", icon: "user" },

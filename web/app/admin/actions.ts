@@ -165,6 +165,20 @@ export async function updateUserAction(_prev: AdminState, formData: FormData): P
   return { ok: "הפרטים עודכנו" };
 }
 
+// Clean up an orphaned profile row (its auth login was already deleted, so it shows
+// without an email). Removes just the profiles row.
+export async function cleanupProfileAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  const me = await getProfile().catch(() => null);
+  if (!me || !canManageUsers(me.role)) return { error: "אין הרשאה" };
+  const id = String(formData.get("id") ?? "");
+  if (!id) return { error: "משתמש חסר" };
+  if (id === me.id) return { error: "אי אפשר להסיר את עצמך" };
+  const { error } = await supabaseAdmin().from("profiles").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/admin");
+  return { ok: "הרשומה נוקתה" };
+}
+
 // Permanently delete a user (auth + profile cascade).
 export async function deleteUserAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
   const me = await getProfile().catch(() => null);
