@@ -210,6 +210,8 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
           const sh = shortageOf(l);
           const q = picked[lineKey(l)] ?? 0;
           const overStock = (l.onHand ?? Infinity) < l.qty;
+          const packStep = (l.packSize ?? 0) > 1 && !!l.packLabel; // step by a whole pack when we know the pack
+          const step = packStep ? (l.packSize as number) : 1;
           return (
             <div key={lineKey(l)} className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)"}` }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -227,13 +229,21 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                 <span style={{ fontSize: 14 }}>הוזמן: {l.packs != null && l.packLabel
                   ? <><b>{l.packs} {l.packLabel}</b> <span style={{ color: "var(--ink-muted)" }}>({l.units ?? l.qty} יח׳)</span></>
                   : <><b>{l.units ?? l.qty}</b>{l.unit ? ` ${l.unit}` : " יח׳"}</>}</span>
+                {/* Stepper jumps by one pack (packSize units); the number stays editable for a manual fix. + on the right (RTL). */}
                 <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <button onClick={() => setQty(l, q + step)} disabled={readOnly} className="btn btn-primary btn-sm" style={{ padding: "8px 13px", fontSize: 18 }} title={packStep ? `+${l.packLabel}` : "+1"}>+</button>
                   <input type="number" inputMode="numeric" min={0} max={l.qty} value={q} disabled={readOnly}
                     onChange={(e) => setQty(l, Number(e.target.value))}
                     style={{ width: 72, padding: "8px", fontSize: 16, textAlign: "center", borderRadius: 8, border: "1px solid var(--border)" }} />
-                  <button onClick={() => setQty(l, l.qty)} disabled={readOnly} className="btn btn-primary btn-sm" style={{ padding: "8px 12px" }}>מלא</button>
+                  <button onClick={() => setQty(l, q - step)} disabled={readOnly || q <= 0} className="btn btn-sm" style={{ padding: "8px 13px", fontSize: 18 }} title={packStep ? `−${l.packLabel}` : "−1"}>−</button>
+                  <button onClick={() => setQty(l, l.qty)} disabled={readOnly} className="btn btn-sm" style={{ padding: "8px 12px" }}>מלא</button>
                 </span>
               </div>
+              {packStep && (
+                <div style={{ fontSize: 12, color: "var(--ink-muted)" }}>
+                  קפיצה: {l.packLabel} ({step} יח׳) · לוקטו: <b>{Math.round((q / step) * 100) / 100}</b> {l.packLabel}
+                </div>
+              )}
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 {sh === "none" && <span className="chip chip-ok">✓ לוקט במלואו</span>}
