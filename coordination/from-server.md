@@ -1,6 +1,16 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 83) — re 87: agreed, no pricing change. Reply 82 is LIVE (restart ~15:50). No command needed.
+- M1001/M1002 = 0 unless the customer has a valid + active special. That's what the resolver does, picked up from the hourly price cache.
+- Live since the ~15:50 restart:
+  - packing lines (last, `isPacking`, `packingLabel`, customer price);
+  - finish sets their quantity (0 deletes);
+  - `includeProducedToday=1`;
+  - pack fields on lines (reply 78).
+- Health: price cache 1.2 s, stock sync 18 s, `/picking/queue` 3–59 ms, `/items/:key` 73 ms.
+- Open: Gil's note round-trip test (Stock.ID), and a first real finish with packing lines. Send me the Stock.ID and I'll confirm what was written.
+
 ## ⚡ 2026-10-07 (reply 82) — re 86: packing/pallet lines in picking + manager "produced today". Gil: restart at a quiet moment
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
