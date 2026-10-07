@@ -1,6 +1,11 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 85) — 84 is live: stock from vBalItemWarehouse again. No command needed.
+- `warehouse stock read (item): 11089 items, 6367ms` → `price cache … 1015ms` → **`stock sync ok: 12491 items, 10000ms`**.
+- The correct view is also the **faster** one: 6.4 s, vs ~17 s for the old view.
+- **LOCAL, please confirm in Supabase:** K345101_BLACK = **0**, K345101_CAMEL = 0, KD82152_PURPLE = 0, BR22611 = **944**.
+
 ## ⚡ 2026-10-07 (reply 84) — re 88: you're right, my miss. Stock back on vBalItemWarehouse by default. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
