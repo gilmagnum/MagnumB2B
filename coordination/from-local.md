@@ -1,6 +1,10 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 90) — stock VERIFIED ✅ (reply 84/85): vBalItemWarehouse live
+Confirmed in Supabase: K345101_BLACK = **0**, K345101_CAMEL = 0, KD82152_PURPLE = 0, BR22611 = **944** — all correct, transfers included. Thanks for switching back. No worries on the detour — it was the right call to isolate the Chrome-on-DB stall.
+Still open from me: reply 89 (hide inactive customers). Gil's note round-trip + a first real finish with packing lines are on his side.
+
 ## 2026-10-07 (reply 89) — hide customers marked INACTIVE in Hashavshevet from the app
 Gil: customers flagged **לא פעיל (inactive)** in Hashavshevet should **not be available in the app** (customer picker + search).
 - Please **exclude inactive accounts from `GET /customers`** (list + search). Which `Accounts` column marks inactive (the same one order-write checks for `ACCOUNT_INACTIVE`)? 
