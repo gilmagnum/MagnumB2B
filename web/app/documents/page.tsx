@@ -213,6 +213,9 @@ export default function DocumentsPage() {
                           {d.producedDocs && d.producedDocs.length > 0 && (
                             <div style={{ fontSize: 13, marginBottom: 8 }}>הופק: {d.producedDocs.map((p) => `${p.docTypeName} #${p.docNumber}`).join(" · ")}</div>
                           )}
+                          {dd.orderNote && (
+                            <div style={{ fontSize: 13, marginBottom: 8 }}><b>הערת סוכן:</b> {dd.orderNote}</div>
+                          )}
                           {(dd.picked || dd.pickNotes) && (
                             <div style={{ fontSize: 13, marginBottom: 8, color: "var(--ink-muted)" }}>
                               {dd.picked && <span className="chip chip-ok" style={{ marginInlineEnd: 8 }}>לוקט{dd.picker ? ` ע״י ${dd.picker}` : ""}</span>}

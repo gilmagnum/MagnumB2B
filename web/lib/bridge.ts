@@ -49,6 +49,7 @@ export type DocumentDetail = Document & {
   lines: DocLine[];
   totalBeforeVat?: number; vatPct?: number; orderDiscountPct?: number; remarks?: string;
   pickNotes?: string;   // Stock.ExtraRemarks (picker note, appended as 'ליקוט: …')
+  orderNote?: string;   // Stock.Remarks — the agent's order note (visible "הערות" on the doc)
   customer?: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
 };
 export type OrderKind = "picking" | "future";
