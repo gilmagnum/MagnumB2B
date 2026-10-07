@@ -79,27 +79,81 @@ export async function getWarehouseStock() {
   return whStockCache.map;
 }
 
+// --- parents of variants (reply 69) -------------------------------------------------------------
+// A model's own warehouse balance is not its stock: the goods are booked on its children - matrix
+// cells (IMatrixItems) and items whose "parent SKU" note (ExtraNotes 36) points at it - so the
+// model's own balance drifts negative (KD54301 -16,784). For an item with children:
+//   stock = max(own, 0) + Σ max(child, 0)      (a negative child has nothing to offer)
+// Items without children keep their own warehouse balance (may be negative = oversold).
+const CHILDREN_SQL = (where = '') =>
+  `SELECT parent, child FROM (
+     SELECT LTRIM(RTRIM(FItemKey)) AS parent, LTRIM(RTRIM(ItemKey)) AS child FROM IMatrixItems
+     UNION
+     SELECT LTRIM(RTRIM(Note)), LTRIM(RTRIM(KeF)) FROM ExtraNotes WHERE NoteID = 36 AND LTRIM(RTRIM(ISNULL(Note, ''))) <> ''
+   ) x WHERE parent <> child${where}`;
+
+export function rollUpStock(ownStock, childrenByParent, stockOf) {
+  const out = new Map(ownStock);
+  for (const [parent, children] of childrenByParent) {
+    let sum = Math.max(ownStock.get(parent) ?? 0, 0);
+    for (const c of children) sum += Math.max(stockOf(c) ?? 0, 0);
+    out.set(parent, sum);
+  }
+  return out;
+}
+
+const groupChildren = (rows) => {
+  const map = new Map();
+  for (const { parent, child } of rows) {
+    if (!map.has(parent)) map.set(parent, new Set());
+    map.get(parent).add(child);
+  }
+  return map;
+};
+
+// Warehouse stock for every item, parents rolled up: Map<itemKey, stock>.
+async function getRolledStock() {
+  const [whStock, rel] = await Promise.all([getWarehouseStock(), query(CHILDREN_SQL())]);
+  return rollUpStock(whStock, groupChildren(rel), (k) => whStock.get(k));
+}
+
+// Rolled-up stock for a few keys (single item, document lines): Map<itemKey, stock> for the keys
+// that HAVE children; others are absent (callers keep their direct warehouse balance).
+export async function getParentStock(itemKeys) {
+  const keys = [...new Set(itemKeys.map((k) => String(k).trim()))];
+  if (!keys.length) return new Map();
+  const params = Object.fromEntries(keys.map((k, i) => [`k${i}`, key(k)]));
+  const rel = await query(
+    `SELECT r.parent, r.child, ${whStockSql('r.child')} AS childStock, ${whStockSql('r.parent')} AS ownStock
+     FROM (${CHILDREN_SQL(` AND parent IN (${keys.map((_, i) => `@k${i}`).join(',')})`)}) r`,
+    params,
+  );
+  const own = new Map(rel.map((r) => [r.parent, r.ownStock ?? 0]));
+  const childStock = new Map(rel.map((r) => [r.child, r.childStock ?? 0]));
+  return rollUpStock(own, groupChildren(rel), (k) => childStock.get(k));
+}
+
 // Active items with their "extra fields". shownOnly=true -> only "מוצג באתר"=1.
 export async function getItems({ shownOnly = false } = {}) {
-  const [rows, extras, fathers, whStock] = await Promise.all([
+  const [rows, extras, fathers, stock] = await Promise.all([
     query(`SELECT ${ITEM_COLUMNS} FROM Items WHERE ${ACTIVE}`),
     loadExtras(),
     query('SELECT DISTINCT FItemKey FROM IMatrixItems'),
-    getWarehouseStock(),
+    getRolledStock(),
   ]);
   const matrix = new Set(fathers.map((r) => trim(r.FItemKey)));
   const items = rows.map((row) =>
     shapeItem(row, {
       ...extras.get(trim(row.ItemKey)),
       isMatrix: matrix.has(trim(row.ItemKey)),
-      stock: whStock.get(trim(row.ItemKey)) ?? 0,
+      stock: stock.get(trim(row.ItemKey)) ?? 0,
     }),
   );
   return shownOnly ? items.filter((i) => i.shownOnSite) : items;
 }
 
 export async function getItem(itemKey) {
-  const [rows, extras] = await Promise.all([
+  const [rows, extras, parentStock] = await Promise.all([
     query(
       `SELECT ${ITEM_COLUMNS}, Dumi, ${whStockSql('Items.ItemKey')} AS whStock,
          CASE WHEN EXISTS (SELECT 1 FROM IMatrixItems WHERE FItemKey = @itemKey) THEN 1 ELSE 0 END AS hasCells
@@ -107,10 +161,12 @@ export async function getItem(itemKey) {
       { itemKey: key(itemKey) },
     ),
     loadExtras(itemKey),
+    getParentStock([itemKey]),
   ]);
   if (!rows.length) return null;
   const extra = { ...extras.get(trim(rows[0].ItemKey)), isMatrix: rows[0].hasCells === 1 };
-  return { ...shapeItem(rows[0], { ...extra, stock: rows[0].whStock ?? 0 }), active: Number(rows[0].Dumi) !== 1 };
+  const stock = parentStock.get(trim(rows[0].ItemKey)) ?? rows[0].whStock ?? 0;
+  return { ...shapeItem(rows[0], { ...extra, stock }), active: Number(rows[0].Dumi) !== 1 };
 }
 
 // Raw Items rows for a list of keys (used by writeOrder for validation + name snapshot).
@@ -244,7 +300,7 @@ export async function getAccount(accountKey) {
 
 // General stock (Items.Quantity) for all active items: Map<itemKey, quantity>
 export async function getStock() {
-  const [rows, whStock] = await Promise.all([query(`SELECT ItemKey FROM Items WHERE ${ACTIVE}`), getWarehouseStock()]);
+  const [rows, whStock] = await Promise.all([query(`SELECT ItemKey FROM Items WHERE ${ACTIVE}`), getRolledStock()]);
   return new Map(rows.map((x) => [trim(x.ItemKey), whStock.get(trim(x.ItemKey)) ?? 0]));
 }
 
@@ -510,6 +566,7 @@ export async function getDocument(stockId) {
     producedDocsFor([o.ID]),
   ]);
   const shipping = new Set(Object.values(SHIPPING_ITEMS).map((s) => s.itemKey));
+  const parentStock = await getParentStock(lines.map((l) => trim(l.ItemKey)));
   return {
     ...toDocumentRow(o, produced.get(o.ID)),
     totalBeforeVat: o.TFtalVat ?? undefined,
@@ -536,7 +593,7 @@ export async function getDocument(stockId) {
         unitPrice: l.Price,
         discountPct: l.DiscountPrc || 0,
         lineTotal: l.TFtal,
-        onHand: l.onHand ?? undefined, // current general stock (Items.Quantity)
+        onHand: parentStock.get(trim(l.ItemKey)) ?? l.onHand ?? undefined, // warehouse-1 stock (parents: rolled up)
         ...(shipping.has(trim(l.ItemKey)) && { isShipping: true }),
       })),
   };

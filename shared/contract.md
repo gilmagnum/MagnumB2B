@@ -29,7 +29,7 @@ type Item = {
   ignoreStock: boolean;       // NoteID 31
   isMatrix: boolean;          // detected via IMatrixItems
   isCartonSizeItem: boolean;  // NoteID 26 'פריט קרטון מידה' - each carton is one size; order per size inside the product
-  stock: number;              // warehouse 1 only: vBalByStockWH (Warehouse = STOCK_WAREHOUSE, default 1); matrix parent usually 0, see cells
+  stock: number;              // warehouse 1 only: vBalByStockWH (Warehouse = STOCK_WAREHOUSE, default 1). Items WITH children (matrix cells via IMatrixItems, or items whose parentSku = this item): max(own,0) + Σ max(child,0). Others: own balance (may be < 0 = oversold)
   imageUrl?: string;          // app layer (not from Hashavshevet)
   cells?: MatrixCell[];       // GET /items/:itemkey only, when isMatrix
 };
@@ -138,7 +138,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `POST /sync` → full catalog refresh Hashavshevet → Supabase (`items`, `item_variants`, ruler codes); returns
   `{ items, shown, variants, rulers, deactivated, ms }` (also runs at start + every `SYNC_INTERVAL_MIN`).
   Supabase `items.item_seq` = Items.ID (identity = creation order; newest = highest), written on the full sync.
-  Supabase `items.stock` = warehouse-1 stock (vBalByStockWH, models and matrix cells alike) is refreshed by a light stock sync every
+  Supabase `items.stock` = warehouse-1 stock (vBalByStockWH; parents of variants rolled up as in `Item.stock`) is refreshed by a light stock sync every
   `STOCK_SYNC_MIN` (30) min, all day, plus on every full sync; written only once the `stock` column exists.
   `GET /sync` → `{ running, last }`. Images/colors/categories are app-layer and never touched.
 - `POST /orders[?dryRun=1]` → create a temp order (DocNumber 0, Status 0):
@@ -165,7 +165,10 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
     header `TransStore 1` / `Warehouse 10830`, lines `Warehouse 10830`), header **TFtal = TFtalVat = net** (no VAT), **no
     M1001/M1002**, whatever `orderKind` is. Response adds `transfer: { from, to }`, `documentId: 19`.
   - Writes are allowed for accounts in `WRITE_TEST_ACCOUNTS` (default `10`) until `ORDER_WRITE_ENABLED=1`.
-  - Omit `price` → the bridge prices it (same as /price). If sent, `price` (+ `discountPct`) is written as-is.
+  - **Pricing is the bridge's (reply 68):** every line is priced by the resolver (same as /price: special → discount code → price list)
+    and written as **base `Price` + `DiscountPrc`** (not a baked net). The app's `price`/`discountPct` are used only when the
+    resolver has no price (`priceSource: 'web'`). If the app's net differs from the bridge's, the response line adds `webNet`
+    and bridge.log records `price differs <acc>/<item>: web X vs bridge Y`.
   - Matrix: one line per cell SKU (`cells[].itemkey`); the cell inherits shownOnSite/pack sizes/ignoreStock from its parent.
   - Errors: 422 `ApiError` with codes `NO_ACCOUNT, ACCOUNT_NOT_FOUND, ACCOUNT_INACTIVE, BAD_KIND, NO_LINES, BAD_LINE,
     BAD_SHIPPING, BAD_DISCOUNT, ITEM_NOT_FOUND, ITEM_INACTIVE, ITEM_HIDDEN, NO_PACKING, NO_STOCK, NO_PRICE, WRITE_DISABLED`;

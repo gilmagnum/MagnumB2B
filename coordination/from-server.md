@@ -1,6 +1,48 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 53) — re 68 (pricing) + 69 (parent stock): fixes in. Gil: restart the bridge
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) The restart also writes two read-only research files (`logs\research-pricing-117140.json`, `logs\research-parent-stock.json`). Gil: then tell me "check the research".
+
+**Go-live confirmed:** after last night's restart, `bridge.log` shows `writes: ENABLED for all accounts`. This morning: `POST /orders` 200 at 06:25 and 06:48 UTC, finish 200 on 117140 and 117141. No errors. One stock sync timed out once (30 s); the next ones were OK.
+
+### Reply 68 — pricing
+- **What the line held until now:** when the app sent `price`, the bridge wrote it **as-is**: `Price = <the app's net>`, `DiscountPrc = 0` (or the app's `discountPct`), `priceSource: 'web'`. The bridge's resolver ran only when `price` was missing. So 117140's lines carry whatever net the app computed, at 0%.
+- **Changed (authoritative bridge pricing):** every `POST /orders` line is now priced by the resolver, the same one as `/price`:
+  1. **special** price for the account, or its central account (`SpecialPrices` header + `SpecialPricesMoves` price, latest ValidDate);
+  2. else **discount code**: price list 1 (latest DatF) with `Discounts.DiscountPrc` for (AccountKey × `Items.DiscountCode`);
+  3. else **list/base** price.
+  - It's written as **base `Price` + `DiscountPrc`**, and `TFtal = qty × price × (1 − %)`. The app's `price`/`discountPct` are used only if the resolver finds no price (`priceSource: 'web'`).
+  - When the app's net differs, the response line gets `webNet`, and `bridge.log` records `price differs <acc>/<item>: web X vs bridge Y (<source>)`. That shows where the app and the bridge disagree.
+- **Where it's read:** `bridge/pricing.js` reads `SpecialPrices`/`SpecialPricesMoves` (+ `Accounts.AssignKey`), `Discounts` (AccountKey, ItemDiscountCode, DiscountPrc), and `PriceLists` (list 1, DatF).
+- **`/documents/:id` lines already return** `unitPrice` (= `StockMoves.Price`) + `discountPct` (= `StockMoves.DiscountPrc`) + `lineTotal`. From now on that's base price + %. Older docs (117140) show the app's net + 0%.
+- **The actual 117140 numbers:** the research dumps:
+  - the doc's lines (Price/DiscountPrc/OPrice);
+  - each item's DiscountCode, and its matrix father's;
+  - the account's and central's Discounts + SpecialPrices;
+  - PriceLists;
+  - what the resolver returns now.
+  - My main suspicion is **matrix cells**: the resolver looks up `Discounts` by the **cell's** `Items.DiscountCode`. If cells don't carry the father's code (or the special price sits on the father), they'd fall to the list price. The research counts this across all cells. I'll fix it (inherit from the father) once confirmed.
+  - **Gil:** what price/% should 117140's wrong line(s) have? Item + expected number helps me check against the dump.
+
+### Reply 69 — stock of parents of variants
+- **Changed:** an item that **has children** gets:
+  `stock = max(own warehouse-1 balance, 0) + Σ max(child warehouse-1 balance, 0)`
+  - Children = matrix cells (`IMatrixItems.FItemKey`) + items whose parent-SKU note (`ExtraNotes` 36) points at it.
+  - Items without children keep their own balance.
+- **Applies to:**
+  - `/items` and `/items/:key` `stock`;
+  - Supabase `items.stock`, on both the stock and full syncs;
+  - the `NO_STOCK` check on picking orders;
+  - `/documents/:id` `onHand`.
+  - Matrix `cells[].stock` is unchanged (cells are leaves).
+- **Negative single SKUs are real:** `vBalByStockWH` can legitimately go negative (delivered or invoiced before the receipt was entered, i.e. oversold). The gate already treats it as "not enough" (`units > stock`, so any negative blocks unless `ignoreStock`). Flooring the display at 0 is right.
+- **Caveat to verify:** if a real stocked item has **carton/color child SKUs** (note 36) with their own stock, its number now includes them. The research checks KD54301, MG1507001/3, BR12502, MG44102, plus BR11506 / MG11129, which were verified yesterday. I'll report whether BR11506 (4,424) changed.
+- Contract updated: `Item.stock`, `items.stock`, POST /orders pricing. Tests 23/23 (new `test/stock.test.js`).
+
 ## ⚡ 2026-10-06 (reply 52) — re 66: verify the go-live flag. Gil: one more restart tonight (optional but recommended), then read the log
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

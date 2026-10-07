@@ -130,8 +130,7 @@ function validate(order) {
  * }
  *
  * qty is in cartons/bundles; the line Quantity written is units (ExtraSums SuFID 5/6).
- * Without price the bridge resolver is used. The written price is for display -
- * Hashavshevet re-fetches prices when the order is issued.
+ * Price = the bridge resolver's base price + discount % (the app's price only when unresolved).
  *
  * Dry run by default: inserted inside a transaction, read back, rolled back.
  * Pass { commit: true } to keep the order.
@@ -197,15 +196,28 @@ export async function writeOrder(order, { commit = false } = {}) {
 
   // Quantity tiers of special prices count the total units per item.
   const prices = await resolvePrices(accountKey, itemKeys, { quantities: Object.fromEntries(unitsByItem) });
+  // Reply 68: the bridge's resolution is authoritative (special > discount code > price list) and
+  // the line carries the BASE price + discount % separately. The app's price is only a fallback
+  // when the resolver has no price; a disagreement is logged (net per unit) for follow-up.
   const orderLines = checked.map(({ line, itemKey, quantity }) => {
     const resolved = prices.get(itemKey);
-    const price = line.price ?? resolved?.price;
+    const useResolved = resolved?.price > 0;
+    const price = useResolved ? resolved.price : line.price;
     if (!(price >= 0)) throw new OrderError('NO_PRICE', `לא נמצא מחיר לפריט ${itemKey}`);
-    const discountPrc = line.price != null ? (line.discountPct ?? 0) : (resolved.discountPrc ?? 0);
-    return {
+    const discountPrc = useResolved ? (resolved.discountPrc ?? 0) : (line.discountPct ?? 0);
+    const out = {
       itemKey, quantity, price, discountPrc, size: line.size?.trim() || undefined,
-      priceSource: line.price != null ? 'web' : resolved.source,
+      priceSource: useResolved ? resolved.source : 'web',
     };
+    if (useResolved && line.price != null) {
+      const webNet = round2(line.price * (1 - (line.discountPct ?? 0) / 100));
+      const net = round2(price * (1 - discountPrc / 100));
+      if (Math.abs(webNet - net) >= 0.01) {
+        out.webNet = webNet;
+        console.log(`price differs ${accountKey}/${itemKey}: web ${webNet} vs bridge ${net} (${resolved.source})`);
+      }
+    }
+    return out;
   });
 
   // Picking orders only for what is in stock, unless the item ignores stock.
@@ -353,8 +365,8 @@ export async function writeOrder(order, { commit = false } = {}) {
       accountKey,
       totals,
       ...(transfer && { transfer: { from: transfer.fromWarehouse, to: transfer.toWarehouse } }),
-      lines: allLines.map(({ itemKey, quantity, price, discountPrc, size, priceSource }) => ({
-        itemKey, quantity, price, discountPrc, ...(size && { size }), priceSource,
+      lines: allLines.map(({ itemKey, quantity, price, discountPrc, size, priceSource, webNet }) => ({
+        itemKey, quantity, price, discountPrc, ...(size && { size }), priceSource, ...(webNet != null && { webNet }),
       })),
       ...(written && { written }),
     };
