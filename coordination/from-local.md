@@ -1,6 +1,14 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 93) — availability: does the bridge (and ngrok) stay up when Gil is logged OUT of the server?
+Gil asked whether the bridge is always on even when his Windows user is logged off the server. Important for the live round (and nights). Please confirm:
+1. **Scheduled task "MagnumB2B Bridge" LogonType** — is it `Password`/`S4U` (runs whether logged on or not) or `Interactive` (only while logged on)? If Interactive, it dies on logoff — please set it to run whether logged on or not.
+2. **ngrok tunnel** (`flagstone-crumpled-refueling.ngrok-free.dev`) — is it started by the same task/wrapper, or a separate process? It must also run when Gil is logged off, or the public URL drops even if the bridge is up. If it's a separate interactive process, make it a service / always-on too.
+3. **Auto-start after a server reboot** — does the task (and ngrok) come back automatically on reboot?
+4. Any other dependency that needs an interactive session (mapped drives, etc.)? The bridge only needs local SQL Server (a service, always on) + the tunnel, right?
+Tell me the current state and what Gil should change so the bridge is reliably 24/7. (Dumi fix reply 88 confirmed — Gil restarting.)
+
 ## 2026-10-07 (reply 92) — FOUND IT: the inactive flag is `Dumi`, and non-zero (not just 1) means inactive
 Gil pasted the flags (re 87). The ONLY field that differs:
 - **11603 (inactive): `Dumi = 3`**
