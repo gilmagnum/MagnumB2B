@@ -50,11 +50,11 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
   // Hide no-stock products for ordering (single-SKU items only; matrix stock lives on cells so
   // the parent is ~0 and is gated on the product page). Guarded: only when stock looks synced.
   const stockSynced = useMemo(() => items.some((i) => (i.stock ?? 0) > 0), [items]);
-  // Hide single-SKU items with no stock. Matrix / carton-size / ruler PARENTS are excluded:
-  // their parent-SKU balance is not the real stock (it lives on the variants), so it can be
-  // 0 or even negative while sizes are in stock — gating those happens per-variant/cell.
+  // Hide items with no stock when ordering. Matrix / carton-size parents are excluded —
+  // their parent-SKU balance isn't the real stock (it lives on the cells), so gating is
+  // per-cell on the product page. Rulers ARE single SKUs with a real balance, so they're gated.
   const noStock = (i: CatalogItem) =>
-    !!ctx && stockSynced && !i.matrix_flag && !i.is_carton_size_item && !i.ruler_code && (i.stock ?? 0) <= 0
+    !!ctx && stockSynced && !i.matrix_flag && !i.is_carton_size_item && (i.stock ?? 0) <= 0
     && !(ctx.orderKind === "future" && i.ignore_stock);
 
   const shown = useMemo(() => items.filter((i) =>
