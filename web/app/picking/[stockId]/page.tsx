@@ -5,7 +5,7 @@ import { bridge, type DocumentDetail, type DocLine } from "../../../lib/bridge";
 import { fetchImages } from "../../../lib/images";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import { managerOrAbove } from "../../../lib/roles";
-import { openPickingSession, savePickingSession, releasePickingSession, handoffPickingSession } from "../../picking-actions";
+import { openPickingSession, savePickingSession, releasePickingSession, handoffPickingSession, saveAndReleasePickingSession } from "../../picking-actions";
 
 // Per-order picking (mobile/tablet first). The order is locked to one picker; picking starts
 // from 0; each line can be marked full in one click or typed; progress can be saved & resumed,
@@ -27,6 +27,8 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState("");
   const [handoff, setHandoff] = useState("");
+  const [viewOnly, setViewOnly] = useState(false);              // manager viewing a pick in progress
+  const [lockedProg, setLockedProg] = useState<Record<string, number>>({}); // the current picker's saved state
 
   const lineKey = (l: DocLine) => String(l.lineId ?? `${l.itemkey}|${l.size ?? ""}`);
   const pickedRef = useRef(picked); pickedRef.current = picked;
@@ -47,7 +49,11 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       fetchImages((d.lines ?? []).map((l) => l.itemkey)).then(setImages).catch(() => {});
       // Acquire the picking session (lock). Managers reopening a produced pick still lock it.
       const sess = await openPickingSession(id, pn).catch(() => ({} as { lockedBy?: string }));
-      if (sess.lockedBy) { setLockedBy(sess.lockedBy); return; }
+      if (sess.lockedBy) {
+        setLockedBy(sess.lockedBy);
+        if ("progress" in sess && sess.progress) setLockedProg(sess.progress);
+        return;
+      }
       if ("takenOver" in sess && sess.takenOver) setTookOver(true);
       const prog = ("progress" in sess ? sess.progress : undefined) ?? {};
       const init: Record<string, number> = {};
@@ -66,15 +72,15 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
 
   const alreadyPicked = doc?.picked === true;
   const isAdmin = managerOrAbove(role);
-  const readOnly = !!doc && alreadyPicked && !isAdmin;
-  const reopened = !!doc && alreadyPicked && isAdmin;
+  const readOnly = (!!doc && alreadyPicked && !isAdmin) || viewOnly; // no editing in view-only
+  const reopened = !!doc && alreadyPicked && isAdmin && !viewOnly;
 
-  // Heartbeat: keep the lock alive + autosave progress while picking.
+  // Heartbeat: keep the lock alive + autosave progress while picking (not when just viewing).
   useEffect(() => {
-    if (!doc || lockedBy || readOnly || done) return;
+    if (!doc || lockedBy || readOnly || viewOnly || done) return;
     const t = setInterval(() => { savePickingSession(id, pickedRef.current, notesRef.current).catch(() => {}); }, 120000);
     return () => clearInterval(t);
-  }, [doc, lockedBy, readOnly, done, id]);
+  }, [doc, lockedBy, readOnly, viewOnly, done, id]);
 
   const shortageOf = (l: DocLine): "none" | "full" | "partial" => {
     const p = picked[lineKey(l)] ?? 0;
@@ -86,7 +92,8 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const fillAll = () => setPicked(Object.fromEntries(lines.map((l) => [lineKey(l), l.qty])));
 
   const saveAndBack = async () => {
-    setSaving(true); await savePickingSession(id, picked, notes).catch(() => {}); setSaving(false);
+    // Save the current state AND release the lock, so another picker can continue from here.
+    setSaving(true); await saveAndReleasePickingSession(id, picked, notes).catch(() => {}); setSaving(false);
     router.push("/picking");
   };
   const resetRelease = async () => {
@@ -147,6 +154,13 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       </p>
       {isAdmin && !handoff && (
         <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button className="btn" disabled={saving}
+            onClick={() => {
+              // View the order read-only, with the current picker's saved progress, without taking the lock.
+              const init: Record<string, number> = {};
+              for (const l of (doc?.lines ?? [])) if (!l.isShipping) init[lineKey(l)] = lockedProg[lineKey(l)] ?? 0;
+              setPicked(init); setViewOnly(true); setLockedBy("");
+            }}>צפה בהזמנה (ללא נעילה)</button>
           <button className="btn btn-primary" disabled={saving}
             onClick={async () => {
               setSaving(true);
@@ -178,7 +192,8 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       </p>
 
       {tookOver && <p className="chip chip-info" style={{ display: "block", padding: 10 }}>הליקוט נלקח מהמלקט הקודם (לא היה פעיל) — המשך מהמצב השמור.</p>}
-      {readOnly && <p className="chip chip-warn" style={{ display: "block", padding: 12 }}>הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""}. פתיחה מחדש לעדכון מתאפשרת למנהל בלבד.</p>}
+      {viewOnly && <p className="chip chip-info" style={{ display: "block", padding: 12 }}>צפייה בלבד — ההזמנה בליקוט כעת אצל מלקט אחר. מוצג המצב השמור; אין עריכה.</p>}
+      {readOnly && !viewOnly && <p className="chip chip-warn" style={{ display: "block", padding: 12 }}>הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""}. פתיחה מחדש לעדכון מתאפשרת למנהל בלבד.</p>}
       {reopened && !done && <p className="chip chip-info" style={{ display: "block", padding: 12 }}>הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""} ונפתחה מחדש. שינוי יעדכן את הליקוט בחשבשבת. (שורה שנמחקה בעבר לא חוזרת.)</p>}
       {done && <p className="chip chip-ok" style={{ display: "block", padding: 12 }}>{done} <a href="/picking" style={{ color: "inherit", textDecoration: "underline" }}>לתור</a></p>}
 

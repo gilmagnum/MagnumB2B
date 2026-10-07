@@ -22,7 +22,7 @@ export async function openPickingSession(stockId: number, pickerName: string): P
     await admin.from("picking_sessions").update({ updated_at: new Date().toISOString(), picker_name: pickerName }).eq("stock_id", stockId);
     return { progress: (s.progress as Progress) ?? {}, notes: (s.notes as string) ?? "" };
   }
-  if (isActive(s.updated_at as string)) return { lockedBy: (s.picker_name as string) || "מלקט אחר" };
+  if (isActive(s.updated_at as string)) return { lockedBy: (s.picker_name as string) || "מלקט אחר", progress: (s.progress as Progress) ?? {}, notes: (s.notes as string) ?? "" };
   // stale lock → take over, keep whatever progress was saved
   await admin.from("picking_sessions").update({ picker_id: user.id, picker_name: pickerName, updated_at: new Date().toISOString() }).eq("stock_id", stockId);
   return { progress: (s.progress as Progress) ?? {}, notes: (s.notes as string) ?? "", takenOver: true };
@@ -36,6 +36,22 @@ export async function savePickingSession(stockId: number, progress: Progress, no
   const { data: s } = await admin.from("picking_sessions").select("picker_id, updated_at").eq("stock_id", stockId).maybeSingle();
   if (s && s.picker_id !== user.id && isActive(s.updated_at as string)) return { error: "ההזמנה ננעלה על ידי מלקט אחר" };
   await admin.from("picking_sessions").upsert({ stock_id: stockId, picker_id: user.id, progress, notes, updated_at: new Date().toISOString() }, { onConflict: "stock_id" });
+  return { ok: true };
+}
+
+// Save current progress AND free the lock, keeping the saved state, so another picker can
+// immediately take over and continue ("שמור וחזור"). The holder stales their own heartbeat.
+export async function saveAndReleasePickingSession(stockId: number, progress: Progress, notes: string): Promise<{ ok?: boolean; error?: string }> {
+  const { data: { user } } = await (await supabaseServer()).auth.getUser();
+  if (!user) return { error: "unauthorized" };
+  const admin = supabaseAdmin();
+  const { data: s } = await admin.from("picking_sessions").select("picker_id, updated_at").eq("stock_id", stockId).maybeSingle();
+  if (s && s.picker_id !== user.id && isActive(s.updated_at as string)) return { error: "ההזמנה ננעלה על ידי מלקט אחר" };
+  // updated_at = epoch → the lock is immediately free; progress/notes are kept for the next picker.
+  await admin.from("picking_sessions").upsert(
+    { stock_id: stockId, picker_id: user.id, progress, notes, updated_at: new Date(0).toISOString() },
+    { onConflict: "stock_id" },
+  );
   return { ok: true };
 }
 
