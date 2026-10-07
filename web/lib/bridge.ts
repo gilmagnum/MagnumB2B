@@ -44,6 +44,8 @@ export type DocLine = {
   unitPrice?: number; discountPct?: number; lineTotal?: number;
   onHand?: number; isShipping?: boolean;
   size?: string; lineId?: number; // ruler products: per-size line (StockMoves.Details / .ID)
+  // Pack breakdown for picking (qty is total units): units = qty, packs × packSize = units.
+  units?: number; packs?: number; packSize?: number; packLabel?: string; // "קרטון" | "חבילה"
 };
 export type DocumentDetail = Document & {
   lines: DocLine[];

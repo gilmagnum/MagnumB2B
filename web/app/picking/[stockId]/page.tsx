@@ -224,7 +224,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14 }}>הוזמן: <b>{l.qty}</b>{l.unit ? ` ${l.unit}` : ""}</span>
+                <span style={{ fontSize: 14 }}>הוזמן: {l.packs != null && l.packLabel
+                  ? <><b>{l.packs} {l.packLabel}</b> <span style={{ color: "var(--ink-muted)" }}>({l.units ?? l.qty} יח׳)</span></>
+                  : <><b>{l.units ?? l.qty}</b>{l.unit ? ` ${l.unit}` : " יח׳"}</>}</span>
                 <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <input type="number" inputMode="numeric" min={0} max={l.qty} value={q} disabled={readOnly}
                     onChange={(e) => setQty(l, Number(e.target.value))}
