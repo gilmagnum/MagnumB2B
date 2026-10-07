@@ -77,6 +77,9 @@ const STOCK_VIEWS = {
 };
 export const STOCK_VIEW = process.env.STOCK_VIEW === 'item' ? 'item' : 'byStock';
 const RETRY_AFTER_FAIL = 5 * 60_000; // a failed read is not retried for 5 min (no hammering a slow DB)
+// Readers reuse the map for STOCK_CACHE_MIN (default 30 = the stock-sync interval, which forces a fresh
+// read), so browsing never triggers extra all-items reads (reply 77; 5 min meant one every 5 min).
+const STOCK_CACHE_MS = Number(process.env.STOCK_CACHE_MIN || 30) * 60_000;
 let whStockCache;
 let whStockPending;
 let whStockFailedAt = 0;
@@ -102,7 +105,7 @@ function loadWarehouseStock() {
 // once and refreshed in the background; only the very first call waits.
 export async function getWarehouseStock({ fresh = false } = {}) {
   const age = whStockCache ? Date.now() - whStockCache.at : Infinity;
-  if (age < 5 * 60_000) return whStockCache.map;
+  if (age < (fresh ? 5 * 60_000 : STOCK_CACHE_MS)) return whStockCache.map;
   if (Date.now() - whStockFailedAt < RETRY_AFTER_FAIL) {
     if (whStockCache) return whStockCache.map;
     throw new Error('מלאי לא זמין כרגע (קריאת המלאי מחשבשבת נכשלה, ניסיון חוזר בעוד כמה דקות)');

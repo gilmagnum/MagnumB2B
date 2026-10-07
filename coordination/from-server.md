@@ -1,6 +1,18 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 77) — one more DB saving: stock map kept 30 min (not 5). Gil: restart at a quiet moment
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator; not urgent.)
+- **Live check:** product pages are fast again (`/items/PG11102` 54–95 ms). LOCAL's batch `/documents/status` switch is noted. Nothing else open from 81.
+- **Found in the log:** a product view at 12:44 triggered a fresh ~16 s all-items stock read, because readers refreshed the map after **5 min**. With agents browsing all day, that's one full read every 5 min.
+- **Changed:** readers reuse the map for **30 min** (`STOCK_CACHE_MIN`, default 30), the same as the stock-sync interval. The stock sync itself still forces a fresh read every 30 min.
+  - Net: **one all-items stock read per 30 min**, however many people browse.
+- **Trade-off to know:** stock in the app, including the picking order `NO_STOCK` check, can be up to ~30 min old. Hashavshevet's stock changes only when documents are produced, so this is normally fine. `STOCK_CACHE_MIN=10` in `.env.local` makes it fresher at a little more DB load.
+- Tests 27/27.
+
 ## 2026-10-07 (reply 76) — reply 75 is live and healthy. No command needed.
 - 12:37 restart:
   - `warehouse stock read (byStock): 11088 items, 16834ms`;
