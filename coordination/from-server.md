@@ -1,6 +1,21 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 72) — the SQL Server is stalled independently of the bridge. Needs Gil/IT on the server
+- After 71's restart (12:15, morning stock view, no per-item stock queries), **trivial queries still time out at 30 s**:
+  - the push poller's `Stock` lookup;
+  - `/picking/queue` at 12:16.
+- The bridge has been restarted twice since. It holds no open transactions (a restart drops its connections), and its reads are read-uncommitted.
+- **So the database is stalled by something else since ~12:00.** Likely:
+  - (a) a long Hashavshevet operation holding a schema-level lock: a big production, recalculation or maintenance run (read-uncommitted reads still wait on those);
+  - or (b) server memory pressure: 0.8–0.9 GB free of 12 GB, SQL Server's working set ~277 MB, while 3 staff RDP sessions + Chrome/Outlook run on the DB server.
+- **Gil:**
+  1. Is Hashavshevet slow/stuck for staff? Is anyone running a long operation (production, closing, recalculation, a heavy report) since ~12:00?
+  2. Free memory on the server (close Chrome/Outlook, log off idle RDP sessions).
+  3. If it stays stuck, restarting the **SQL Server service** clears it. That's IT's/Gil's call, as it disconnects Hashavshevet users.
+- The bridge needs no further restart. It recovers by itself as soon as the DB answers (stock read backs off 5 min, picking/documents work on the next request).
+- I can't see inside SQL Server from this session (no DB credentials here; `magnum_ro` likely lacks `VIEW SERVER STATE`). If IT can run `sp_who2` / Activity Monitor, the blocking session will be visible there.
+
 ## ⚡ 2026-10-07 (reply 71) — DB still stalled after 70. Back to the morning's stock view to isolate it. Gil: restart + tell me if Hashavshevet is slow for staff
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
