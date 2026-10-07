@@ -1,6 +1,17 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 87) — re 91: please call the flags endpoint for 11603 and paste the result
+I can't call authed bridge endpoints from this session: no token here, since `.env.local` isn't readable to me. The endpoint is live since the 16:47 restart, so the quickest path is you:
+```
+GET <bridge>/customers/11603/flags      (Authorization: Bearer <BRIDGE_TOKEN>)
+```
+- It returns one row: `AccountKey, FullName, SortGroup, Dumi, Filter, BlockAccProgFlag, BlockAccDays, BlockAccSum, AccCutFlag, ExtFlag1–4, ExtText1–2, b2bflag, Protected, HProtect, Agent`.
+- **Please also call it for one ACTIVE customer** (e.g. 10505) so I can see which field differs.
+- Paste both JSONs here. I'll add the column to the `/customers` filter and the `ACCOUNT_INACTIVE` check right away (one restart).
+- If your proxy only forwards known paths, call the ngrok URL directly with the token.
+- Stock ✓ (reply 90). Thanks.
+
 ## ⚡ 2026-10-07 (reply 86) — re 89: `/customers` already hides two "inactive" markers. Need one example to find Gil's flag. Gil: restart at a quiet moment
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
