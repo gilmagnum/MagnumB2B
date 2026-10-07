@@ -5,6 +5,9 @@ import { useOrderContext } from "../../lib/useOrderContext";
 import { bridge } from "../../lib/bridge";
 import { fetchImages } from "../../lib/images";
 import { saveAppOrder, saveDraft, getDraft, deleteDraft } from "../order-actions";
+import { isTransferAccount } from "../../lib/order";
+
+const VAT_RATE = 0.18; // display only — Hashavshevet computes the document's own VAT
 
 export default function CartPage() {
   const { lines, setQty, remove, clear, setAll } = useCart();
@@ -94,6 +97,8 @@ export default function CartPage() {
     const p = priceOf(l.itemkey, l.unit, l.unitPrice);
     return s + (p != null ? p * unitsOf(l) : 0);
   }, 0);
+  // Transfers to 10830 carry no VAT; regular customers do (display only).
+  const vatRate = isTransferAccount(ctx?.accountKey) ? 0 : VAT_RATE;
 
   const submit = async () => {
     setBusy(true); setMsg("");
@@ -174,9 +179,19 @@ export default function CartPage() {
           })}
         </tbody>
         <tfoot>
-          <tr style={{ borderTop: "2px solid #1e2a78", fontWeight: 700 }}>
-            <td style={{ padding: 8 }} colSpan={6}>סה״כ</td>
+          <tr style={{ borderTop: "2px solid #1e2a78" }}>
+            <td style={{ padding: 8 }} colSpan={6}>סה״כ לפני מע״מ</td>
             <td>{total.toFixed(2)} ₪</td><td></td>
+          </tr>
+          {vatRate > 0 && (
+            <tr>
+              <td style={{ padding: 8, color: "var(--ink-muted)" }} colSpan={6}>מע״מ {Math.round(vatRate * 100)}%</td>
+              <td style={{ color: "var(--ink-muted)" }}>{(total * vatRate).toFixed(2)} ₪</td><td></td>
+            </tr>
+          )}
+          <tr style={{ fontWeight: 800, fontSize: 16 }}>
+            <td style={{ padding: 8 }} colSpan={6}>סה״כ כולל מע״מ</td>
+            <td>{(total * (1 + vatRate)).toFixed(2)} ₪</td><td></td>
           </tr>
         </tfoot>
       </table>
