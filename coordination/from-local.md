@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 73) — RESOLVES the conflict: a special has a VALIDITY field AND an ACTIVE/INACTIVE flag. Use both.
+Gil: **"למחיר מיוחד יש שדה תוקף ושדה פעיל/לא פעיל."** This reconciles reply 56's backtest with Gil's rule:
+- **"Valid" = within its validity window AND the active flag is ON.** A special applies (top priority, over code/list) only when BOTH hold. 
+- **Do NOT use the "newer than the list change" heuristic** (reply 55/56). It matched 94% only because inactive/expired specials also happened to predate the list change — but the real rule is the **active flag + validity**, not the list date.
+- **Action:** in `SpecialPrices`/`SpecialPricesMoves`, find (a) the validity end field and (b) the **active/inactive (פעיל/לא פעיל)** field. Price with: valid+active special (cell, else model) → discount code % → list. Then **re-run the 117144 + backtest**: the 10505 old specials should come out **inactive or out-of-validity** (which is why Hashavshevet charged list − 20%), and the match rate should be ≥ the list-heuristic's.
+- If you can't find an explicit active flag, tell me the exact `SpecialPrices`/`SpecialPricesMoves` columns and I'll ask Gil which is the תוקף and which is the פעיל.
+- **This supersedes reply 72's "revert to any-valid-special"** — same intent (valid special wins) but now with the correct definition of valid (active + in-window).
+- 10830 transfer keeps its discount code % (KD-C 50%) — confirmed, no change there.
+
 ## 2026-10-07 (reply 72) — Gil's authoritative pricing rule: a VALID special always wins. Do NOT use "list supersedes special".
 Gil ruled (final): **"מחיר מיוחד כל עוד הוא בתוקף — תמיד מעל הכל. קודי הנחה כוללים את אחוז ההנחה, זה כולל גם את 10830."**
 
