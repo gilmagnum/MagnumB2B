@@ -21,7 +21,6 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const [catLoading, setCatLoading] = useState(true);
   const [item, setItem] = useState<Item | null>(null);
   const [bridgeErr, setBridgeErr] = useState(false);
-  const [unit, setUnit] = useState<Unit>("carton");
   const [finalPrice, setFinalPrice] = useState<number | null>(null);
   const [activeImg, setActiveImg] = useState(0);
   const [rulerSizes, setRulerSizes] = useState<string[]>([]);
@@ -51,12 +50,6 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
     return () => { alive = false; };
   }, [item?.rulerCode, item?.isMatrix]);
 
-  // Default the unit to the smallest available pack (bundle if it exists) once the item loads.
-  useEffect(() => {
-    if (!item) return;
-    if ((item.perBundle ?? 0) > 0) setUnit("bundle");
-    else if ((item.perCarton ?? 0) > 0) setUnit("carton");
-  }, [item?.itemkey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!ctx) { setFinalPrice(null); return; }
@@ -187,16 +180,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
         {!ctx && <p className="chip chip-warn" style={{ marginBottom: 12 }}>בחר לקוח לפני הזמנה — <a href="/customer" style={{ color: "inherit", textDecoration: "underline" }}>בחירת לקוח</a></p>}
         {ctx && !ctx.orderKind && <p className="chip chip-warn" style={{ marginBottom: 12 }}>בחר סוג הזמנה לפני הוספה לסל — <a href="/start" style={{ color: "inherit", textDecoration: "underline" }}>התחלת הזמנה</a></p>}
 
-        {/* Matrix keeps the carton/bundle selector; rulers show both options together (below). */}
-        {isMatrix && (perCarton > 0 || perBundle > 0) && (
-          <label style={{ display: "block", margin: "8px 0" }}>
-            יחידה:{" "}
-            <select value={unit} onChange={(e) => setUnit(e.target.value as Unit)} className="select" style={{ maxWidth: 200, display: "inline-block" }}>
-              {perCarton > 0 && <option value="carton">קרטון ({perCarton})</option>}
-              {perBundle > 0 && <option value="bundle">חבילה ({perBundle})</option>}
-            </select>
-          </label>
-        )}
+        {/* No unit selector — both carton and bundle are shown together (matrix: per cell; ruler: below). */}
         {totalUnits > 0 && (
           <div className="chip chip-info" style={{ display: "inline-block", margin: "4px 0 10px", fontSize: 14 }}>סה״כ להזמנה: <b>{totalUnits.toLocaleString("he-IL")}</b> יח׳</div>
         )}
@@ -223,10 +207,13 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
                         return (
                           <td key={s.i} style={td}>
                             {showStock && <div style={{ fontSize: 11, color: low ? "var(--danger)" : "var(--ink-muted)" }}>מלאי: {cell.stock ?? "-"}</div>}
-                            <div style={{ display: "flex", justifyContent: "center", marginTop: 2 }}>
+                            <div style={{ display: "grid", gap: 4, justifyItems: "center", marginTop: 2 }}>
                               {soldOut(cell.stock)
                                 ? <span className="chip chip-danger">אזל</span>
-                                : <Stepper itemkey={cell.itemkey} unit={unit} title={`${name} ${label}`.trim()} packSize={unit === "carton" ? perCarton : perBundle} price={effPrice} disabled={!canOrder} stock={cell.stock} />}
+                                : <>
+                                    {perCarton > 0 && <Stepper itemkey={cell.itemkey} unit="carton" title={`${name} ${label}`.trim()} packSize={perCarton} price={effPrice} disabled={!canOrder} stock={cell.stock} addLabel={`קרטון (${perCarton})`} />}
+                                    {perBundle > 0 && <Stepper itemkey={cell.itemkey} unit="bundle" title={`${name} ${label}`.trim()} packSize={perBundle} price={effPrice} disabled={!canOrder} stock={cell.stock} addLabel={`חבילה (${perBundle})`} />}
+                                  </>}
                             </div>
                           </td>
                         );

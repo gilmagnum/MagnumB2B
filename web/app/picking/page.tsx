@@ -51,7 +51,7 @@ export default function PickingPage() {
       <h1>ליקוט</h1>
       <div style={{ display: "flex", gap: 8, margin: "12px 0", flexWrap: "wrap" }}>
         <button onClick={() => setState("waiting")} style={tab(state === "waiting")}>ממתינות לליקוט</button>
-        <button onClick={() => setState("picked")} style={tab(state === "picked")}>לוקטו (ממתינות להפקה)</button>
+        <button onClick={() => setState("picked")} style={tab(state === "picked")}>לוקטו</button>
         <input placeholder="חיפוש (לקוח/מספר)…" value={q}
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") load(); }}
           style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc", minWidth: 200 }} />
