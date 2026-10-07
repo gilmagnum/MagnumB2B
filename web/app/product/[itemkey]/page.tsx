@@ -15,6 +15,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const { itemkey } = use(params);
   const key = decodeURIComponent(itemkey);
   const { ctx } = useOrderContext();
+  const { lines: cartLines } = useCart();
   const showStock = canSeeStock(useRole());
   const [cat, setCat] = useState<CatalogItem | null>(null);
   const [catLoading, setCatLoading] = useState(true);
@@ -115,6 +116,10 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   // Ruler product: single SKU, order per size (bundle) via the in-app ruler, or a whole carton (mixed).
   const isRuler = !isMatrix && rulerSizes.length > 0;
 
+  // Running total of units this product has in the cart (matrix: sum its cells; else this SKU).
+  const productKeys = isMatrix ? new Set((item?.cells ?? []).map((c) => c.itemkey)) : new Set([key]);
+  const totalUnits = cartLines.filter((l) => productKeys.has(l.itemkey)).reduce((s, l) => s + l.qty * (l.packSize ?? 1), 0);
+
   // Stock gating: out-of-stock can't be ordered — except a future order of an "ignore stock" item.
   const canIgnoreStock = ctx?.orderKind === "future" && !!item?.ignoreStock;
   const soldOut = (s?: number | null) => s != null && !canIgnoreStock && s <= 0;
@@ -182,14 +187,18 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
         {!ctx && <p className="chip chip-warn" style={{ marginBottom: 12 }}>בחר לקוח לפני הזמנה — <a href="/customer" style={{ color: "inherit", textDecoration: "underline" }}>בחירת לקוח</a></p>}
         {ctx && !ctx.orderKind && <p className="chip chip-warn" style={{ marginBottom: 12 }}>בחר סוג הזמנה לפני הוספה לסל — <a href="/start" style={{ color: "inherit", textDecoration: "underline" }}>התחלת הזמנה</a></p>}
 
-        {(isMatrix || isRuler) && (perCarton > 0 || perBundle > 0) && (
+        {/* Matrix keeps the carton/bundle selector; rulers show both options together (below). */}
+        {isMatrix && (perCarton > 0 || perBundle > 0) && (
           <label style={{ display: "block", margin: "8px 0" }}>
-            {isRuler ? "בחר יחידת מידה:" : "יחידה:"}{" "}
+            יחידה:{" "}
             <select value={unit} onChange={(e) => setUnit(e.target.value as Unit)} className="select" style={{ maxWidth: 200, display: "inline-block" }}>
               {perCarton > 0 && <option value="carton">קרטון ({perCarton})</option>}
               {perBundle > 0 && <option value="bundle">חבילה ({perBundle})</option>}
             </select>
           </label>
+        )}
+        {totalUnits > 0 && (
+          <div className="chip chip-info" style={{ display: "inline-block", margin: "4px 0 10px", fontSize: 14 }}>סה״כ להזמנה: <b>{totalUnits.toLocaleString("he-IL")}</b> יח׳</div>
         )}
 
         {isMatrix ? (
@@ -233,24 +242,33 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
         ) : isRuler ? (
           soldOut(item?.stock) ? (
             <p className="chip chip-danger">אזל מהמלאי{ctx?.orderKind === "picking" ? " — לא ניתן להזמין לליקוט" : ""}</p>
-          ) : unit === "bundle" ? (
-            <div style={{ display: "grid", gap: 8 }}>
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
               {!ctx && <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>בחר לקוח כדי להזמין.</span>}
               {showStock && (item?.stock != null) && <StockLine stock={item.stock} size="md" />}
-              {rulerSizes.map((size) => (
-                <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
-                  <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
-                  <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>חבילה{perBundle ? ` (${perBundle} יח׳)` : ""}</span>
+              {/* Whole mixed carton */}
+              {perCarton > 0 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "8px 10px" }}>
+                  <span style={{ fontWeight: 700 }}>קרטון מעורב{perCarton ? ` (${perCarton} יח׳)` : ""}</span>
                   <span style={{ marginInlineStart: "auto" }}>
-                    <Stepper itemkey={key} unit="bundle" sizeLabel={size} title={name} packSize={perBundle} price={effPrice} disabled={!canOrder} addLabel="חבילה" stock={item?.stock} />
+                    <Stepper itemkey={key} unit="carton" title={name} packSize={perCarton} price={effPrice} disabled={!canOrder} addLabel="קרטון" stock={item?.stock} />
                   </span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <Stepper itemkey={key} unit="carton" title={name} packSize={perCarton} price={effPrice} disabled={!canOrder} addLabel={`קרטון${perCarton ? ` (${perCarton})` : ""}`} stock={item?.stock} />
-              <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>קרטון מעורב — לפירוט לפי מידה בחר "חבילה"</span>
+              )}
+              {/* Per-size bundles — shown together with the carton option, no selector */}
+              {perBundle > 0 && rulerSizes.length > 0 && (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-muted)", marginTop: 2 }}>או לפי מידה — חבילה{perBundle ? ` (${perBundle} יח׳)` : ""}:</div>
+                  {rulerSizes.map((size) => (
+                    <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
+                      <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
+                      <span style={{ marginInlineStart: "auto" }}>
+                        <Stepper itemkey={key} unit="bundle" sizeLabel={size} title={name} packSize={perBundle} price={effPrice} disabled={!canOrder} addLabel="חבילה" stock={item?.stock} />
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           )
         ) : soldOut(item?.stock) ? (
