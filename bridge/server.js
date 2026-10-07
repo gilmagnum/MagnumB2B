@@ -5,6 +5,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
+import { warmPriceCache } from './pricing.js';
 import { ORDER_DOCUMENT_IDS, orderWriteEnabled, writeTestAccounts } from './config.js';
 import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
@@ -98,6 +99,25 @@ function parseDayParam(value, name) {
 }
 
 // --- routes ------------------------------------------------------------------------
+// Short-lived cache for polled reads (reply 81): same key within ttl -> the same promise, no DB hit.
+// A failed read is not kept. clear() after writes that change the result.
+function shortCache(ttlMs) {
+  const entries = new Map();
+  return {
+    get(keyText, load) {
+      const hit = entries.get(keyText);
+      if (hit && Date.now() - hit.at < ttlMs) return hit.value;
+      const value = load();
+      entries.set(keyText, { at: Date.now(), value });
+      value.catch(() => entries.delete(keyText));
+      if (entries.size > 200) entries.delete(entries.keys().next().value);
+      return value;
+    },
+    clear: () => entries.clear(),
+  };
+}
+const queueCache = shortCache(30_000);
+
 const routes = [
   ['GET', /^\/health$/, async () => ({ ok: true }), { public: true }],
 
@@ -196,20 +216,31 @@ const routes = [
   ['GET', /^\/picking\/queue$/, async ({ query }) => {
     const state = query.get('state') ?? 'waiting';
     if (!['waiting', 'picked'].includes(state)) throw new HttpError(400, 'BAD_REQUEST', 'מצב לא תקין');
-    return read.getPickingQueue({
+    // Cached 30 s per exact query (pickers poll it); cleared by any order write or finish.
+    return queueCache.get(query.toString(), () => read.getPickingQueue({
       agent: Number(query.get('agent') || 0),
       account: query.get('account')?.trim() || undefined,
       q: query.get('q')?.trim() || undefined,
       state,
       limit: query.get('limit') ?? 200,
       offset: query.get('offset') ?? 0,
-    });
+    }));
+  }],
+
+  // Status of many documents in one query: { stockIds: number[] (<= 500) } -> { [id]: open|produced|gone }
+  ['POST', /^\/documents\/status$/, async ({ body }) => {
+    const ids = Array.isArray(body?.stockIds) ? body.stockIds : [];
+    if (!ids.length) throw new HttpError(400, 'BAD_REQUEST', 'חסרים מספרי מסמכים');
+    if (ids.length > 500) throw new HttpError(400, 'BAD_REQUEST', 'עד 500 מסמכים בבקשה');
+    return read.getDocumentStatuses(ids);
   }],
 
   // Finish picking (WRITES to Hashavshevet): marker, shortages, notes. ?dryRun=1 = rolled back.
   ['POST', /^\/picking\/(\d+)\/finish$/, async ({ params: [stockId], query, body }) => {
     try {
-      return await finishPicking(stockId, body, { dryRun: query.get('dryRun') === '1' });
+      const result = await finishPicking(stockId, body, { dryRun: query.get('dryRun') === '1' });
+      queueCache.clear();
+      return result;
     } catch (err) {
       if (err instanceof PickingError) throw new HttpError(err.status, err.code, err.message);
       throw err;
@@ -289,12 +320,14 @@ const routes = [
         accountKey: body.accountKey,
         orderKind: body.orderKind ?? 'picking',
         remarks: body.remarks,
+        note: body.note, // agent's order note -> Stock.Remarks line 1 (reply 70/77)
         orderDiscountPct: body.orderDiscountPct,
         lines: body.lines,
         shipping: body.shipping,
       },
       { commit: !dryRun },
     );
+    if (!dryRun) queueCache.clear();
     return {
       stockId: dryRun ? null : result.orderId,
       dryRun,
@@ -412,8 +445,12 @@ server.listen(PORT, HOST, () => {
     console.log(`stock sync every ${stockMin} min`);
   }
   startEventPoller();
-  // Warm the warehouse-stock map (one ~7.5 s read) so the first product/document request doesn't wait.
-  read.getWarehouseStock().catch((err) => console.error(`warehouse stock read failed: ${err.message}`));
+  // Warm the warehouse-stock map (one all-items read) so the first product/document request doesn't
+  // wait, then the price cache (reply 81) - both on the single background connection, one after the other.
+  read.getWarehouseStock()
+    .catch((err) => console.error(`warehouse stock read failed: ${err.message}`))
+    .then(() => warmPriceCache())
+    .catch((err) => console.error(`price cache load failed: ${err.message}`));
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
   console.log(`writes: ${orderWriteEnabled() ? 'ENABLED for all accounts' : `test accounts only (${[...writeTestAccounts()].join(',')})`}`);
 });

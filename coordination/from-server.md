@@ -1,6 +1,48 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 75) — re 81: cache-first bridge done + the agent note was never forwarded (fixed). Gil: restart at a quiet moment
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) On start it does two background reads, one after the other on the single background connection:
+1. the stock map;
+2. the price cache (Items + IMatrixItems + PriceLists list 1, about 3 small table reads).
+
+The log shows `warehouse stock read …` and `price cache: N items, M list-1 prices, X ms`.
+
+**⚠ Bug found while doing this:** `POST /orders` never passed **`note`** to the order writer. So the agent's note has **never** been written to Hashavshevet, which explains why Gil saw nothing. It's fixed: `note` → `Stock.Remarks` line 1 `הערת סוכן: …`.
+
+**1. Pricing (`/price`, `POST /prices`): cache-first, same rules (valid + active special → discount code → list):**
+- **Global data in memory, refreshed in the background every 60 min:** item discount code + price, matrix fathers, price-list-1 history.
+- **Per account:** central account, Discounts, SpecialPrices+Moves (account + central). Loaded on the account's **first** request (3 small indexed queries), then kept 30 min and refreshed in the background.
+- **Per-request DB cost:**
+  - **0 queries** for a known account;
+  - **3 small indexed queries** the first time an account is seen in 30 min.
+  - Previously, every `POST /prices` ran one big query with ~6 correlated lookups per item, i.e. hundreds of lookups per category.
+- **SQL fallback (same result):**
+  - items created since the last cache load;
+  - customers whose discount row points at a price list other than 1 (none in practice);
+  - requests in the first seconds after a restart, before the cache is loaded.
+- Unit-tested against the SQL rules (`test/pricing.test.js`: inactive special ignored, model special applies to the cell, central, expiry, quantity tier, fallbacks). Tests 27/27.
+- `POST /orders` uses the same resolver, so order pricing is also from cache.
+
+**2. `/picking/queue`:** cached **30 s** per exact query.
+- Cleared on every `POST /orders` (commit) and `POST /picking/:id/finish`, so a new/finished order shows at once.
+- **DB cost:** at most 1 indexed query per 30 s per distinct query (pickers polling = ~0).
+
+**3. Stock map:** unchanged (one all-items read per 30 min, background connection, never per item).
+
+**4. New `POST /documents/status`** `{ stockIds: number[] }` (≤ 500) → `{ "117148": "open", "117140": "produced", "117001": "gone" }`.
+- open = Status 0, produced = anything else, gone = the document no longer exists.
+- **DB cost: 1 indexed query** (`Stock WHERE ID IN (…)`).
+
+**5. Heavy work:** the catalog sync stays at night (skips 07–19). No research.
+
+**6. Still live per request (must be):** `POST /orders`, `POST /picking/:id/finish`, `GET /documents/:id` (2–3 indexed queries by `StockID`), and the `/documents` list/search. Customers (`/customers`) and balance stay live (small, indexed).
+
+Contract updated (`/prices`, `/picking/queue`, `/documents/status`).
+
 ## 2026-10-07 (reply 74) — re 80: recovered at 12:24. Steady state confirmed light; baseline timings
 - **Recovered:** `/picking/queue` 200 in **197 ms (12:24), 105 ms, 185 ms (12:29)**. The bridge picked up by itself, no restart.
 - **Steady state = reply 73's table:**

@@ -104,8 +104,9 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   and not marked "לא פעיל" in the name.
 - `GET /stock/:itemkey` → `{ itemkey, qty }` · matrix: `{ itemkey, qty: <sum>, cells: [{ itemkey, qty }] }`
 - `GET /price?account=&item=&qty=` → `PriceResult`
-- `POST /prices` `{ account, items: [{ itemkey, qty? }] }` (max 500) → `PriceResult[]` (bulk, for the catalog grid)
-- `GET /picking/queue[?agent=][&q=][&state=waiting|picked][&limit=200][&offset=0]` → `Document[]` (read-only), **oldest first**.
+- `POST /prices` `{ account, items: [{ itemkey, qty? }] }` (max 500) → `PriceResult[]` (bulk, for the catalog grid). **Cache-first** (reply 81): resolved in memory - items/list-1 prices/matrix fathers cached 60 min (background), the account's discounts + special prices cached 30 min (loaded on its first request). Items created since the last load, or customers on a non-1 price list, fall back to SQL.
+- `GET /picking/queue[?agent=][&q=][&state=waiting|picked][&limit=200][&offset=0]` → `Document[]` (read-only), **oldest first**. Cached 30 s per exact query; cleared by POST /orders and POST /picking/:id/finish.
+- `POST /documents/status` `{ stockIds: number[] }` (max 500) → `{ [stockId]: 'open' | 'produced' | 'gone' }` - one indexed query (open = Status 0, produced = any other, gone = no such document).
   Open agent orders (doc 11, Status 0) + open transfers (doc 19) of transfer customers (10830). `waiting` (default) = no picker marker; `picked` = ExtraText2 `לוקט - <name>`
   (picked, waiting for production in Hashavshevet). Same row shape as /documents incl. `picked`, `picker`, `pickedMarker`.
 - `POST /picking/:stockId/finish[?dryRun=1]` **(WRITES to Hashavshevet)** body `{ picker, notes?, lines: [{ itemkey, size?, pickedQty }] }` (`size` targets only that size's line)

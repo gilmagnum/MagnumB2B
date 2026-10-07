@@ -30,7 +30,7 @@ const SPECIAL_RULE = SPECIAL_RULES.includes(process.env.PRICE_SPECIAL_RULE) ? pr
 
 const PRICE_BATCH = 500;
 
-export async function resolvePrices(
+export async function resolvePricesSql(
   accountKey,
   itemKeys,
   { date = new Date(), quantities = {}, activeOnly = false, specialRule = SPECIAL_RULE } = {},
@@ -41,7 +41,7 @@ export async function resolvePrices(
   if (keys.length > PRICE_BATCH) {
     const out = new Map();
     for (let i = 0; i < keys.length; i += PRICE_BATCH) {
-      const part = await resolvePrices(accountKey, keys.slice(i, i + PRICE_BATCH), { date, quantities, activeOnly, specialRule });
+      const part = await resolvePricesSql(accountKey, keys.slice(i, i + PRICE_BATCH), { date, quantities, activeOnly, specialRule });
       for (const [k, v] of part) out.set(k, v);
     }
     return out;
@@ -113,3 +113,143 @@ export async function resolvePrices(
     }),
   );
 }
+
+// --- cache-first pricing (reply 81: the DB server is a shared office PC) ------------------------
+// Same rules as resolvePricesSql, resolved in memory:
+//   global (background, bg pool, every 60 min): Items DiscountCode/Price, IMatrixItems fathers,
+//     PriceLists list 1 history;
+//   per account (first request, then 30 min): Accounts.AssignKey, Discounts, SpecialPrices+Moves
+//     of the account and its central account.
+// A bulk /prices call for a known account is pure memory. Fallback to SQL (same result) for: items
+// not in the cache (created since the load), customers on a price list other than 1, activeOnly,
+// and requests made before the global cache is loaded.
+const GLOBAL_TTL = 60 * 60_000;
+const ACCOUNT_TTL = 30 * 60_000;
+const DAY = 24 * 60 * 60_000;
+const norm = (v) => (typeof v === 'string' ? v.trim() : v) || null;
+const codeKey = (v) => (norm(v) ? norm(v).toUpperCase() : null);
+
+let globalCache;
+let globalPending;
+function loadGlobal() {
+  globalPending ??= (async () => {
+    const started = Date.now();
+    try {
+      const items = await query('SELECT ItemKey, DiscountCode, Price FROM Items', {}, 'bg');
+      const fathers = await query('SELECT ItemKey, FItemKey FROM IMatrixItems', {}, 'bg');
+      const lists = await query('SELECT ItemKey, Price, DatF, ID FROM PriceLists WHERE PriceListNumber = 1', {}, 'bg');
+      const g = { at: Date.now(), items: new Map(), fathers: new Map(), list1: new Map() };
+      for (const r of items) g.items.set(norm(r.ItemKey), { code: codeKey(r.DiscountCode), price: r.Price });
+      for (const r of fathers) g.fathers.set(norm(r.ItemKey), norm(r.FItemKey));
+      for (const r of lists) {
+        const k = norm(r.ItemKey);
+        if (!g.list1.has(k)) g.list1.set(k, []);
+        g.list1.get(k).push({ price: r.Price, datF: r.DatF, id: r.ID });
+      }
+      for (const rows of g.list1.values()) rows.sort((a, b) => b.datF - a.datF || b.id - a.id);
+      globalCache = g;
+      console.log(`price cache: ${g.items.size} items, ${lists.length} list-1 prices, ${Date.now() - started}ms`);
+      return g;
+    } finally {
+      globalPending = undefined;
+    }
+  })();
+  return globalPending;
+}
+
+const accountCache = new Map();
+const accountPending = new Map();
+function loadAccount(acc) {
+  if (!accountPending.has(acc)) {
+    accountPending.set(acc, (async () => {
+      try {
+        const [a] = await query('SELECT NULLIF(LTRIM(RTRIM(AssignKey)), \'\') AS central FROM Accounts WHERE AccountKey = @acc', { acc: key(acc) });
+        const central = norm(a?.central);
+        const discounts = new Map();
+        const drows = await query('SELECT ItemDiscountCode, PriceListNumber, DiscountPrc, ID FROM Discounts WHERE AccountKey = @acc', { acc: key(acc) });
+        for (const d of drows.sort((x, y) => x.ID - y.ID)) discounts.set(codeKey(d.ItemDiscountCode), d); // highest ID wins
+        const srows = await query(
+          `SELECT h.ID, h.AccountKey, h.ItemKey, h.ValidDate, h.EndDate, h.Active, m.Price, m.DiscountPrc, m.MinQuantity
+           FROM SpecialPrices h JOIN SpecialPricesMoves m ON m.SPID = h.ID
+           WHERE h.AccountKey IN (@acc, @central) AND m.Price > 0`,
+          { acc: key(acc), central: key(central ?? acc) },
+        );
+        const specials = new Map();
+        for (const s of srows) {
+          const k = norm(s.ItemKey);
+          if (!specials.has(k)) specials.set(k, []);
+          specials.get(k).push({ ...s, AccountKey: norm(s.AccountKey), ItemKey: k });
+        }
+        const entry = { at: Date.now(), central, discounts, specials };
+        accountCache.set(acc, entry);
+        return entry;
+      } finally {
+        accountPending.delete(acc);
+      }
+    })());
+  }
+  return accountPending.get(acc);
+}
+
+// Pure: one item's price from the cached data (null = needs the SQL path). Exported for tests.
+export function resolveFromCache(g, acct, accountKey, itemKey, qty, date, specialRule) {
+  const it = g.items.get(itemKey);
+  if (!it) return null;
+  const father = g.fathers.get(itemKey);
+  const fi = father ? g.items.get(father) : undefined;
+  const code = it.code ?? fi?.code ?? null;
+  const d = code ? acct.discounts.get(code) : undefined;
+  if ((d?.PriceListNumber ?? 1) !== 1) return null;
+  const latest = (rows) => rows?.find((r) => r.datF <= date);
+  const lp = latest(g.list1.get(itemKey));
+  const lpf = father ? latest(g.list1.get(father)) : undefined;
+  const listPrice = lp ? lp.price : lpf ? lpf.price : null;
+  const listDatF = lp?.datF ?? lpf?.datF ?? new Date(0);
+  const t = date.getTime();
+  const candidates = [...(acct.specials.get(itemKey) ?? []), ...(father ? acct.specials.get(father) ?? [] : [])].filter(
+    (s) => s.ValidDate && s.EndDate && s.ValidDate.getTime() <= t && t < s.EndDate.getTime() + DAY
+      && s.Price > 0 && (s.MinQuantity ?? 0) <= qty
+      && (specialRule === 'valid' ? s.Active === 0 : specialRule === 'newer' ? s.ValidDate >= listDatF : true),
+  );
+  candidates.sort((a, b) => (a.ItemKey === itemKey ? 0 : 1) - (b.ItemKey === itemKey ? 0 : 1)
+    || (a.AccountKey === accountKey ? 0 : 1) - (b.AccountKey === accountKey ? 0 : 1)
+    || b.ValidDate - a.ValidDate || (b.MinQuantity ?? 0) - (a.MinQuantity ?? 0) || b.ID - a.ID);
+  const sp = candidates[0];
+  if (sp) {
+    return {
+      price: sp.Price, discountPrc: sp.DiscountPrc ?? 0, source: sp.AccountKey === accountKey ? 'special' : 'special-central',
+      priceListNumber: d?.PriceListNumber ?? 1, ...(sp.ItemKey !== itemKey && { specialFrom: sp.ItemKey }),
+    };
+  }
+  const price = listPrice > 0 ? listPrice : it.price;
+  return { price, discountPrc: d?.DiscountPrc ?? 0, source: d ? 'discount' : 'base', priceListNumber: d?.PriceListNumber ?? 1 };
+}
+
+export async function resolvePrices(accountKey, itemKeys, opts = {}) {
+  const { date = new Date(), quantities = {}, activeOnly = false, specialRule = SPECIAL_RULE } = opts;
+  const keys = [...new Set(itemKeys.map((k) => String(k).trim()))];
+  if (!keys.length) return new Map();
+  const acc = String(accountKey).trim();
+  // Global cache: stale-while-revalidate; before the first load, use SQL (and start the load).
+  const gAge = globalCache ? Date.now() - globalCache.at : Infinity;
+  if (gAge >= GLOBAL_TTL) loadGlobal().catch((err) => console.error(`price cache load failed: ${err.message}`));
+  if (!globalCache || activeOnly) return resolvePricesSql(accountKey, keys, opts);
+  let acct = accountCache.get(acc);
+  if (!acct) acct = await loadAccount(acc);
+  else if (Date.now() - acct.at >= ACCOUNT_TTL) loadAccount(acc).catch(() => {});
+  const out = new Map();
+  const missing = [];
+  for (const k of keys) {
+    const r = resolveFromCache(globalCache, acct, acc, k, Number(quantities[k] ?? 0), date, specialRule);
+    if (r) out.set(k, r);
+    else missing.push(k); // new item or a non-default price list -> SQL
+  }
+  if (missing.length) {
+    const sqlPart = await resolvePricesSql(accountKey, missing, opts);
+    for (const [k, v] of sqlPart) out.set(k, v);
+  }
+  return out;
+}
+
+// Warm the global price cache (server start-up).
+export const warmPriceCache = () => loadGlobal();

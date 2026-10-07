@@ -718,3 +718,13 @@ export async function getRulerUsage() {
   }
   return rulerUsageCache.rows;
 }
+
+// Status of many documents in one indexed read (reply 81): { [stockId]: 'open' | 'produced' | 'gone' }.
+// open = Status 0 (temp), produced = anything else, gone = no such Stock row any more.
+export async function getDocumentStatuses(stockIds) {
+  const ids = [...new Set(stockIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return {};
+  const rows = await query(`SELECT ID, Status FROM Stock WHERE ID IN (${ids.join(',')})`);
+  const byId = new Map(rows.map((r) => [r.ID, r.Status === 0 ? 'open' : 'produced']));
+  return Object.fromEntries(ids.map((id) => [id, byId.get(id) ?? 'gone']));
+}
