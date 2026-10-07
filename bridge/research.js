@@ -1,66 +1,45 @@
 // TEMPORARY one-shot research at bridge start-up (read-only): writes logs/research-<name>.json once,
-// so the Claude session can read results without relays. Reply 75 (round 2): K345101_BLACK shows 30
-// in vBalByStockWH warehouse 1 (and -23 in 10830), Gil reads 0 in "מחסן 1". How does the view count,
-// what moved the item, and what is open on orders?
+// so the Claude session can read results without relays. Reply 75 (round 3): warehouse-1 stock with
+// produced transfers added back (vBalByStockWH ignores doc 19) - sample + timing of the full map.
 import fs from 'node:fs';
 import path from 'node:path';
 import { query, key } from './db.js';
+import { whStockSql, getWarehouseStock, STOCK_WAREHOUSE } from './read.js';
 
-const tryQuery = async (text, params) => {
-  try {
-    return await query(text, params);
-  } catch (err) {
-    return { error: err.message };
-  }
-};
-
-const ITEMS = ['K345101_BLACK', 'K345101_CAMEL'];
-
-async function wh1Moves() {
+async function wh1Corrected() {
   const started = Date.now();
-  const out = {};
-  out.viewDefinition = await tryQuery("SELECT OBJECT_DEFINITION(OBJECT_ID('vBalByStockWH')) AS def");
-  out.warehouseObjects = await tryQuery(
-    `SELECT o.name, o.type_desc, SUM(p.rows) AS rowsApprox FROM sys.objects o
-     LEFT JOIN sys.partitions p ON p.object_id = o.object_id AND p.index_id IN (0, 1)
-     WHERE o.type IN ('U', 'V') AND (o.name LIKE '%Store%' OR o.name LIKE '%Warehouse%' OR o.name LIKE '%Machsan%' OR o.name LIKE '%WH%')
-     GROUP BY o.name, o.type_desc ORDER BY o.name`,
+  const sample = await query(
+    `SELECT TOP 25 x.ItemKey FROM (
+       SELECT DISTINCT m.ItemKey FROM StockMoves m JOIN Stock s ON s.ID = m.StockID
+       WHERE s.DocumentID = 19 AND s.Status <> 0 AND m.Warehouse = ${STOCK_WAREHOUSE}
+     ) x ORDER BY NEWID()`,
   );
-  out.warehouseNames = await tryQuery('SELECT * FROM AgentWarehouseNames ORDER BY ID');
-  out.items = {};
-  for (const item of ITEMS) {
-    const k = { k: key(item) };
-    out.items[item] = {
-      byWarehouse: await tryQuery('SELECT Warehouse, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE ItemKey = @k ORDER BY Warehouse', k),
-      quantity: await tryQuery('SELECT Quantity FROM Items WHERE ItemKey = @k', k),
-      movesByDoc: await tryQuery(
-        `SELECT m.Warehouse, s.TransStore, s.Warehouse AS headerWarehouse, s.DocumentID, d.DocName, s.Status,
-                COUNT(*) AS lines, SUM(m.Quantity) AS qty, MIN(s.IssueDate) AS firstDate, MAX(s.IssueDate) AS lastDate
-         FROM StockMoves m JOIN Stock s ON s.ID = m.StockID LEFT JOIN DocumentsDef d ON d.DocumentID = s.DocumentID
-         WHERE m.ItemKey = @k
-         GROUP BY m.Warehouse, s.TransStore, s.Warehouse, s.DocumentID, d.DocName, s.Status
-         ORDER BY s.DocumentID, s.Status, m.Warehouse`,
-        k,
-      ),
-      lastMoves: await tryQuery(
-        `SELECT TOP 25 s.ID, s.DocNumber, s.DocumentID, s.Status, s.IssueDate, s.AccountKey, s.Warehouse AS hWh, s.TransStore,
-                m.Warehouse AS lineWh, m.Quantity, s.ExtraText3
-         FROM StockMoves m JOIN Stock s ON s.ID = m.StockID WHERE m.ItemKey = @k ORDER BY s.ID DESC`,
-        k,
-      ),
-    };
+  const keys = ['K345101_BLACK', 'K345101_CAMEL', ...sample.map((s) => s.ItemKey.trim())];
+  const rows = [];
+  for (const k of keys) {
+    const [r] = await query(
+      `SELECT (SELECT TOP 1 v.BALBYSTOCKWH FROM vBalByStockWH v WHERE v.ItemKey = @k AND v.Warehouse = ${STOCK_WAREHOUSE}) AS viewWh1,
+              ${whStockSql('@k')} AS corrected, (SELECT Quantity FROM Items WHERE ItemKey = @k) AS total`,
+      { k: key(k) },
+    );
+    rows.push({ item: k, ...r });
   }
-  // How documents of each type affect stock in Hashavshevet's definitions (sign / which warehouse).
-  out.documentsDef = await tryQuery(
-    `SELECT * FROM DocumentsDef WHERE DocumentID IN (
-       SELECT DISTINCT s.DocumentID FROM StockMoves m JOIN Stock s ON s.ID = m.StockID WHERE m.ItemKey IN ('K345101_BLACK', 'K345101_CAMEL'))`,
-  );
-  out.ms = Date.now() - started;
-  return out;
+  const t0 = Date.now();
+  const map = await getWarehouseStock();
+  const mapMs = Date.now() - t0;
+  const changed = rows.filter((r) => r.viewWh1 !== r.corrected).length;
+  return {
+    rows,
+    changed,
+    mapMs,
+    mapSize: map.size,
+    mapCheck: keys.slice(0, 5).map((k) => [k, map.get(k)]),
+    ms: Date.now() - started,
+  };
 }
 
 export async function runStartupResearch(logsDir, { log = console } = {}) {
-  const jobs = [['wh1-moves', wh1Moves]];
+  const jobs = [['wh1-corrected', wh1Corrected]];
   for (const [name, run] of jobs) {
     const file = path.join(logsDir, `research-${name}.json`);
     if (fs.existsSync(file)) continue;

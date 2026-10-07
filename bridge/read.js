@@ -64,14 +64,29 @@ function shapeItem(row, extra = {}) {
 // = Items.Quantity. STOCK_WAREHOUSE (default 1 = מחסן ראשי). Single items read it directly; the
 // all-items map is cached 5 min (the view aggregates movements).
 export const STOCK_WAREHOUSE = Number(process.env.STOCK_WAREHOUSE || 1);
-const WH_STOCK_SQL = `(SELECT TOP 1 v.BALBYSTOCKWH FROM vBalByStockWH v WHERE v.ItemKey = %KEY% AND v.Warehouse = ${STOCK_WAREHOUSE})`;
-export const whStockSql = (keyExpr) => WH_STOCK_SQL.replace('%KEY%', keyExpr);
+// Reply 75: vBalByStockWH does NOT count warehouse transfers (doc 19 "העברה בין מחסנים").
+// K345101_BLACK: view wh1 = 30 / wh10830 = -23, but 30 units went 1 -> 10830 on a produced transfer;
+// Gil's warehouse 1 = 0 = 30 - 30. So: stock = view + produced transfers into the warehouse - out of
+// it. A transfer line is "out" when its warehouse is the header's TransStore (source), else "in".
+const TRANSFER_DOCS = [...new Set(Object.values(TRANSFER_ACCOUNTS).map((t) => Number(t.documentId)))].join(',') || '19';
+const TRANSFER_ADJ_FROM = `FROM StockMoves tm JOIN Stock ts ON ts.ID = tm.StockID
+  WHERE ts.DocumentID IN (${TRANSFER_DOCS}) AND ts.Status <> 0 AND ts.TransStore <> ts.Warehouse
+    AND tm.Warehouse = ${STOCK_WAREHOUSE}`;
+const TRANSFER_ADJ_SUM = 'SUM(CASE WHEN tm.Warehouse = ts.TransStore THEN -tm.Quantity ELSE tm.Quantity END)';
+const WH_STOCK_SQL = `(ISNULL((SELECT TOP 1 v.BALBYSTOCKWH FROM vBalByStockWH v WHERE v.ItemKey = %KEY% AND v.Warehouse = ${STOCK_WAREHOUSE}), 0)
+  + ISNULL((SELECT ${TRANSFER_ADJ_SUM} ${TRANSFER_ADJ_FROM} AND tm.ItemKey = %KEY%), 0))`;
+export const whStockSql = (keyExpr) => WH_STOCK_SQL.replaceAll('%KEY%', keyExpr);
 let whStockCache;
 export async function getWarehouseStock() {
   if (!whStockCache || Date.now() - whStockCache.at > 5 * 60_000) {
-    const map = query(
-      `SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`,
-    ).then((rows) => new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0])));
+    const map = Promise.all([
+      query(`SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`),
+      query(`SELECT tm.ItemKey, ${TRANSFER_ADJ_SUM} AS adj ${TRANSFER_ADJ_FROM} GROUP BY tm.ItemKey`),
+    ]).then(([rows, adjustments]) => {
+      const m = new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0]));
+      for (const a of adjustments) m.set(trim(a.ItemKey), (m.get(trim(a.ItemKey)) ?? 0) + (a.adj ?? 0));
+      return m;
+    });
     whStockCache = { at: Date.now(), map };
     map.catch(() => (whStockCache = undefined));
   }

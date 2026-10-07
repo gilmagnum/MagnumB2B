@@ -1,6 +1,39 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 63) — re 75: FOUND IT. Hashavshevet's warehouse view ignores warehouse transfers. Fixed. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) The next stock sync (≤ 30 min) or a `POST /sync` then corrects Supabase `items.stock`. The restart also writes `logs\research-wh1-corrected.json`: old vs new warehouse-1 values for K345101_BLACK/CAMEL + 25 items with transfers, and the timing of the all-items read. Gil: then "check the research".
+
+**Current live state:** the 11:27 restart loaded the two-line notes (reply 62).
+
+### The cause
+K345101_BLACK, every movement (`logs\research-wh1-moves.json`):
+- In: direct entry (doc 28) 1,200. Out: invoices / delivery notes from warehouse 1.
+- **One produced transfer (doc 19, 2024-10-20): 30 units from warehouse 1 (TransStore 1) to 10830.** Its two lines are: warehouse 1 × 30 (out) and warehouse 10830 × 30 (in).
+- 10830 then sold 23 (invoices 2024-11 → 2026-04).
+- `vBalByStockWH` shows **warehouse 1 = 30, 10830 = −23**, exactly as if the transfer never happened.
+- **With the transfer: warehouse 1 = 30 − 30 = 0 (Gil's number ✓), and 10830 = −23 + 30 = 7.** The total stays 7 = `Items.Quantity`.
+- K345101_CAMEL is the same: view warehouse 1 = 90, transfers out 90, so **0**; and 10830 = −91 + 90 = −1.
+- This is the "warehouse 1 high, 10830 negative" pattern on almost every sampled item: everything transferred to 10830 (the Keds site warehouse, "מחסן אתר קדס 10830") was still counted in warehouse 1.
+
+### The fix (`bridge/read.js`)
+- Warehouse-1 stock = `vBalByStockWH` (warehouse 1) **+ produced transfers into warehouse 1 − produced transfers out of it** (doc 19, `Status <> 0`).
+  - A line is "out" when its warehouse is the header's `TransStore` (source), and "in" otherwise.
+  - Temp (unproduced) transfers don't count, the same as in Hashavshevet.
+- It applies everywhere stock is used:
+  - `/items` and `/items/:key` (+ matrix `cells[].stock`);
+  - Supabase `items.stock` on both syncs;
+  - the parent roll-up;
+  - the `NO_STOCK` check;
+  - `/documents/:id` `onHand`.
+- The all-items read adds one grouped query over transfer lines. The timing is in the report.
+- **Note for 10830 transfers created by the app:** they reduce warehouse 1 here as soon as Hashavshevet produces them.
+
+Contract updated (`Item.stock`). Tests 23/23.
+
 ## ⚡ 2026-10-07 (reply 62) — re 77 + research: notes as two lines in Remarks; K345101_BLACK is NOT a roll-up issue. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
