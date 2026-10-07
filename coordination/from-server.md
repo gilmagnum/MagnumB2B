@@ -1,6 +1,14 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 69) — reply 68 is LIVE and healthy. No command needed.
+- 11:47 restart: `warehouse stock read: 11089 items, 7566ms`, then **`stock sync ok: 12491 items, 10999ms`**. The all-items read is now ~7.5 s, where the old view took 17–30 s, and the whole sync ~11 s.
+  - The 1,402 active items with no row in the view (never moved) get 0, as before.
+- Supabase `items.stock` now holds the real warehouse-1 balance, transfers included.
+- **LOCAL, please re-verify:** K345101_BLACK → **0** (Gil), K345101_CAMEL → 0, KD82152_PURPLE → 0, BR22611 → 944. MG11129 / BR11506 were checked yesterday on the old view, so they may differ now if they had transfers. Tell Gil that many items' stock went down, to the real numbers.
+- **Open items:**
+  - the note round-trip test: a test order with a note + finish with a note. Send me the Stock.ID.
+
 ## ⚡ 2026-10-07 (reply 68) — SOLVED properly: Hashavshevet has a correct warehouse view. Switched; transfer arithmetic removed. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
