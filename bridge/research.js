@@ -52,8 +52,13 @@ async function specialRules() {
     for (const l of lines) qty[trim(l.ItemKey)] = (qty[trim(l.ItemKey)] ?? 0) + (l.Quantity ?? 0);
     const acc = trim(d.AccountKey);
     const res = {};
-    for (const rule of RULES) {
-      res[rule] = await resolvePrices(acc, Object.keys(qty), { date: id === 117144 ? new Date() : d.IssueDate, quantities: qty, specialRule: rule });
+    try {
+      for (const rule of RULES) {
+        res[rule] = await resolvePrices(acc, Object.keys(qty), { date: id === 117144 ? new Date() : d.IssueDate, quantities: qty, specialRule: rule });
+      }
+    } catch (err) {
+      sampleMiss.always.push({ doc: id, error: err.message });
+      continue;
     }
     for (const l of lines) {
       const k = trim(l.ItemKey);
@@ -78,7 +83,7 @@ async function specialRules() {
 }
 
 export async function runStartupResearch(logsDir, { log = console } = {}) {
-  const jobs = [['special-rules', specialRules]];
+  const jobs = [['special-rules-2', specialRules]];
   for (const [name, run] of jobs) {
     const file = path.join(logsDir, `research-${name}.json`);
     if (fs.existsSync(file)) continue;

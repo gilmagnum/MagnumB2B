@@ -1,6 +1,15 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 59) — the backtest crashed on a huge document; fixed. Gil: restart once more
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator; check that `logs\bridge-restarts.log` gets a new line.) Then "check the research". The output is now `logs\research-special-rules-2.json`, up to 5 min.
+- The 11:12 run stopped on a document with > 1,000 distinct items: SQL Server allows only 2,100 parameters per request. A big app order would have hit the same limit.
+- **Fixed for real:** `resolvePrices` now resolves item lists in batches of 500. The backtest also skips a failing document instead of aborting.
+- Pricing behavior is still unchanged (`always`) until the result is in.
+
 ## ⚡ 2026-10-07 (reply 58) — re 73: the fields are found. The "active" flag looks INVERTED. Backtest pending. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

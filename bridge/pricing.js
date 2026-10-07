@@ -27,6 +27,8 @@ const trim = (v) => (typeof v === 'string' ? v.trim() : v);
 const SPECIAL_RULES = ['always', 'newer', 'active0', 'minamt0'];
 const SPECIAL_RULE = SPECIAL_RULES.includes(process.env.PRICE_SPECIAL_RULE) ? process.env.PRICE_SPECIAL_RULE : 'always';
 
+const PRICE_BATCH = 500;
+
 export async function resolvePrices(
   accountKey,
   itemKeys,
@@ -34,6 +36,15 @@ export async function resolvePrices(
 ) {
   const keys = [...new Set(itemKeys.map((k) => String(k).trim()))];
   if (!keys.length) return new Map();
+  // SQL Server allows 2,100 parameters per request (2 per item): resolve big lists in batches.
+  if (keys.length > PRICE_BATCH) {
+    const out = new Map();
+    for (let i = 0; i < keys.length; i += PRICE_BATCH) {
+      const part = await resolvePrices(accountKey, keys.slice(i, i + PRICE_BATCH), { date, quantities, activeOnly, specialRule });
+      for (const [k, v] of part) out.set(k, v);
+    }
+    return out;
+  }
   const params = {
     acc: key(accountKey),
     asOf: { type: sql.DateTime, value: date },
