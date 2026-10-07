@@ -7,6 +7,7 @@ export default function StockLine({ stock, perSize, size = "sm" }: {
   const fs = size === "md" ? 13 : 12;
   if (perSize) return <div style={{ fontSize: fs, color: "var(--ink-muted)" }}>מלאי לפי מידה</div>;
   const n = stock ?? 0;
-  const color = n > 0 ? "var(--ok)" : "var(--danger)";
-  return <div style={{ fontSize: fs, color, fontWeight: 600 }}>מלאי: {n}</div>;
+  // Never show a confusing negative balance (oversold / parent-SKU artefact) — floor at 0.
+  if (n <= 0) return <div style={{ fontSize: fs, color: "var(--danger)", fontWeight: 600 }}>אזל מהמלאי</div>;
+  return <div style={{ fontSize: fs, color: "var(--ok)", fontWeight: 600 }}>מלאי: {n}</div>;
 }

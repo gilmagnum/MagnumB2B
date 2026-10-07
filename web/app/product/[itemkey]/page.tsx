@@ -236,7 +236,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
           ) : unit === "bundle" ? (
             <div style={{ display: "grid", gap: 8 }}>
               {!ctx && <span style={{ fontSize: 12, color: "var(--ink-muted)" }}>בחר לקוח כדי להזמין.</span>}
-              {showStock && (item?.stock != null) && <span style={{ fontSize: 12, color: (item.stock > 0) ? "var(--ok)" : "var(--danger)", fontWeight: 600 }}>מלאי: {item.stock}</span>}
+              {showStock && (item?.stock != null) && <StockLine stock={item.stock} size="md" />}
               {rulerSizes.map((size) => (
                 <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
                   <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
