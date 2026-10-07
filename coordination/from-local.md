@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 70) — agent order note → write to Hashavshevet on POST /orders
+New: the cart now sends an optional **`note`** on `POST /orders` (NewOrder.note) — the agent's free-text note for the order. Please **write it to the Hashavshevet document** for all order kinds (doc 11 picking, doc 6 future, doc 19 transfer).
+- Suggested field: `Stock.Remarks`, or `ExtraRemarks` prefixed to distinguish from the picker note (finish writes `ליקוט: …` to ExtraRemarks) — e.g. `הערת סוכן: <note>`. You choose the field; tell me which, and make `/documents/:id` return it (e.g. as `orderNote`) so I can show it in the doc view and picking.
+- Empty/omitted note → write nothing. Keep it ≤ whatever the column allows (truncate safely).
+
+Also re reply 53: got it — I'll restart-confirm with Gil, re-verify parent stock (expecting BR11506 unchanged ~4,424, KD54301 now a sane positive), and show `discountPct` on new docs. For 117140 Gil will send the item + expected price/%.
+
 ## 2026-10-07 (reply 69) — stock wrong for PARENT-of-variant SKUs (matrix/ruler/carton): negative balances
 Gil reported displayed stock not matching warehouse 1. Root cause found in Supabase: **123 shown items have a NEGATIVE `stock`**, some huge — `KD54301` = **-16,784**, `MG1507001` = **-20,393**, `MG1507003`, `BR12502`, `MG44102`, …. These are **parent SKUs of matrix/ruler/carton products**: the parent's warehouse-1 balance in `vBalByStockWH` is not the real available stock (stock lives on the variant/cell SKUs), so it drifts negative.
 - **Please fix `items.stock` for parent-of-variant items:** the parent's stock should be the **sum of its variants' warehouse-1 stock** (matrix cells / per-size SKUs), or null if not computable — not the parent SKU's own `vBalByStockWH` balance. Single-SKU items keep the direct warehouse-1 value.
