@@ -92,10 +92,16 @@ export default function CartPage() {
     const p = prices[itemkey + unit];
     return p != null ? p : fallback;
   };
+  const discOf = (itemkey: string, unit: string) => disc[itemkey + unit] ?? 0;
+  // Net unit price = base price after the customer's discount (what the line actually costs).
+  const netOf = (itemkey: string, unit: string, fallback?: number) => {
+    const p = priceOf(itemkey, unit, fallback);
+    return p == null ? undefined : p * (1 - discOf(itemkey, unit) / 100);
+  };
   const unitsOf = (l: typeof lines[number]) => l.qty * (l.packSize ?? 1);
   const total = lines.reduce((s, l) => {
-    const p = priceOf(l.itemkey, l.unit, l.unitPrice);
-    return s + (p != null ? p * unitsOf(l) : 0);
+    const n = netOf(l.itemkey, l.unit, l.unitPrice);
+    return s + (n != null ? n * unitsOf(l) : 0);
   }, 0);
   // Transfers to 10830 carry no VAT; regular customers do (display only).
   const vatRate = isTransferAccount(ctx?.accountKey) ? 0 : VAT_RATE;
@@ -148,6 +154,7 @@ export default function CartPage() {
         <tbody>
           {lines.map((l) => {
             const p = priceOf(l.itemkey, l.unit, l.unitPrice);
+            const n = netOf(l.itemkey, l.unit, l.unitPrice);
             return (
               <tr key={l.itemkey + l.unit + (l.sizeLabel ?? "")} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: 8 }}>
@@ -172,7 +179,7 @@ export default function CartPage() {
                 </td>
                 <td>{p != null ? `${p.toFixed(2)} ₪` : "—"}</td>
                 <td>{(disc[l.itemkey + l.unit] ?? 0) > 0 ? <span className="chip chip-ok">{disc[l.itemkey + l.unit]}%</span> : "—"}</td>
-                <td>{p != null ? `${(p * unitsOf(l)).toFixed(2)} ₪` : "—"}</td>
+                <td>{n != null ? `${(n * unitsOf(l)).toFixed(2)} ₪` : "—"}</td>
                 <td><button onClick={() => remove(l.itemkey, l.unit, l.sizeLabel)} style={{ color: "#b00", border: 0, background: "none", cursor: "pointer" }}>הסר</button></td>
               </tr>
             );
