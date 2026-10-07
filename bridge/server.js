@@ -11,6 +11,9 @@ import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
 import { getBalance, getStats, StatsError } from './stats.js';
 import { getTransferAdjustments } from './read.js';
+import { runStartupResearch } from './research.js';
+import path from 'node:path';
+import { ROOT } from './config.js';
 
 const TOKEN = process.env.BRIDGE_TOKEN;
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -413,8 +416,12 @@ server.listen(PORT, HOST, () => {
     console.log(`stock sync every ${stockMin} min`);
   }
   startEventPoller();
-  // Warm the warehouse-transfer adjustments (reply 75) so single-item stock has them early.
+  // Warm the warehouse-transfer adjustments (reply 75) so single-item stock has them early (STOCK_TRANSFER_ADJ=1 only).
   getTransferAdjustments().catch(() => {});
+  // TEMPORARY: read-only research 2 min after start-up, after the first stock sync (reply 66).
+  setTimeout(() => {
+    runStartupResearch(path.join(ROOT, 'logs')).catch((err) => console.error(`research: ${err.message}`));
+  }, 120_000).unref();
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
   console.log(`writes: ${orderWriteEnabled() ? 'ENABLED for all accounts' : `test accounts only (${[...writeTestAccounts()].join(',')})`}`);
 });

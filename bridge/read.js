@@ -82,13 +82,17 @@ export const whStockSql = (keyExpr) => WH_STOCK_SQL.replaceAll('%KEY%', keyExpr)
 // map is kept (or an empty one) so the stock sync never breaks on it.
 let transferCache;
 let transferPending;
+// Off unless STOCK_TRANSFER_ADJ=1: the first version made the stock sync time out (reply 66).
+export const TRANSFER_ADJ_ON = process.env.STOCK_TRANSFER_ADJ === '1';
 export function getTransferAdjustments() {
+  if (!TRANSFER_ADJ_ON) return Promise.resolve(new Map());
   if (transferCache?.map && Date.now() - transferCache.at < 30 * 60_000) return Promise.resolve(transferCache.map);
   transferPending ??= loadTransferAdjustments().finally(() => (transferPending = undefined));
   return transferPending;
 }
 // Non-blocking for single-item reads: the cached map, or empty while the first load runs.
 export function transferAdjNow() {
+  if (!TRANSFER_ADJ_ON) return new Map();
   if (!transferCache?.map || Date.now() - transferCache.at >= 30 * 60_000) getTransferAdjustments().catch(() => {});
   return transferCache?.map ?? new Map();
 }

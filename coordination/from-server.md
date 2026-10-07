@@ -1,6 +1,22 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 66) — stock sync still failing; the transfer correction is now OFF (back to the 11:27 state). Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Then tell me "check the log" after ~3 min.
+- **After 65's restart, the stock sync still timed out**, and a `POST /sync` returned 502 after 30.7 s. No `transfer adjustments` line was printed, so the transfer load was still running and slowing the database for the main stock read.
+- **Now:** the transfer correction is **off by default** (`STOCK_TRANSFER_ADJ=1` in `.env.local` turns it on). Stock reads are exactly as at 11:27, when the sync was OK (17 s):
+  - warehouse-1 view;
+  - matrix roll-up;
+  - the final pricing rule and the two-line notes stay.
+  - **K345101_BLACK will show 30 again** until the transfer fix is done properly.
+- **A light, read-only check runs 2 minutes after start-up** (after the first sync), one query at a time, few items only (`logs\research-stock-views.json`):
+  - whether Hashavshevet's **other** warehouse views, `vBalItemWarehouse` / `VSufItemWarehouse`, already include transfers. If one does, it's the correct source and no correction is needed.
+  - the timing of each transfer-query piece separately.
+- If the sync **still** fails with the correction off, the cause is database load rather than this code. Then I'll look at the timing of the view itself.
+
 ## ⚡ 2026-10-07 (reply 65) — stock sync still timed out after 64. Per-item query reverted, research removed. Gil: restart now
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
