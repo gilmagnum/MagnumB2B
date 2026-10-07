@@ -1,6 +1,30 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 60) — SOLVED: special = valid window + פעיל flag (stored inverted). 117144 matches 12/12. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) This loads the final pricing rule. Until then, the live bridge still prices 10505's inactive specials, which is too low.
+
+**The rule (Gil's, reply 73):** a special applies only when **valid** (`SpecialPrices.ValidDate ≤ date ≤ EndDate`) **and active**.
+- The active flag is **`SpecialPrices.Active`, stored inverted: `0` = פעיל, `1` = לא פעיל.**
+- Priority: valid+active special (the cell's, else the model's; customer, then central) → discount code % on list (incl. 10830) → list.
+
+**Backtest:** 300 recent Hashavshevet docs, 5,319 priced lines, plus Gil's reference 117144:
+| rule | all | agent orders (11) | invoices (1) | special lines | **117144** |
+|---|---|---|---|---|---|
+| any special in window (`always`) | 84.6% | 83.1% | 86.2% | 69.8% | 0/12 |
+| list-date heuristic (`newer`) | 89.1% | 94.0% | 89.0% | 90.3% | 12/12 |
+| **window + Active = 0 (`valid`, now default)** | **89.4%** | **94.4%** | **89.3%** | 89.9% · central 97.0% | **12/12** |
+| MinAmount = 0 | 85.1% | 84.5% | 86.2% | 69.1% | 0/12 |
+- **Active = 1 really means לא פעיל:** it's on all of 10505's ignored specials and on 11724's superseded 14 − 28% rows. The charged 8.55 row has Active = 0. In the DB: 35,634 headers with Active = 0 vs 147,899 with Active = 1. Most rows are old, switched-off history.
+- **The remaining special mismatches look like manual edits on the documents**, e.g. 10446 K2636xx: special 15.50 vs document 21 − 26%; 13414: special 11.50 vs order 16 − 28%. "base" lines (no special, no discount row) stay ~51%. Those are prices typed by hand.
+- **Gil (optional check):** in Hashavshevet, 10505 × MG1507001 (15 − 25%) should show **לא פעיל**, and 11724 × BR11506 (8.55) **פעיל**.
+- **Also fixed (reply 59):** prices resolve in batches of 500, so a > 1,000-item order no longer hits SQL Server's 2,100-parameter limit.
+- `PRICE_SPECIAL_RULE=always|newer` (in `.env.local`) still selects the older rules if ever needed. Default = `valid`.
+- Temporary research code removed. Contract updated. Tests 23/23.
+
 ## ⚡ 2026-10-07 (reply 59) — the backtest crashed on a huge document; fixed. Gil: restart once more
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

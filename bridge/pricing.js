@@ -15,17 +15,18 @@ const trim = (v) => (typeof v === 'string' ? v.trim() : v);
  *                 latest DatF <= date, minus Discounts % for (AccountKey, Items.DiscountCode).
  *
  * options.quantities: { [itemKey]: units } for quantity tiers (default 0).
- * options.activeOnly: only special-price rows with Active=1. Off by default: the
- *                 current 8.55 price of chain 11724 sits on an Active=0 row and is charged.
+ * options.activeOnly: only rows with Active=1 (diagnostics; Active=1 actually means NOT active).
  *
  * Returns Map<itemKey, { price, discountPrc, source, priceListNumber }>
  */
-// Gil (reply 72, final): a VALID special always wins - 'always' is the default. 'newer' (special only if
-// dated on/after the latest list change) stays available via PRICE_SPECIAL_RULE=newer.
-// Research-only rules (reply 73): 'active0' = only header rows with Active = 0, 'minamt0' = only rows
-// with MinAmount = 0 (the charged 11724 8.55 row has both; ignored rows have Active = 1, MinAmount = 1).
-const SPECIAL_RULES = ['always', 'newer', 'active0', 'minamt0'];
-const SPECIAL_RULE = SPECIAL_RULES.includes(process.env.PRICE_SPECIAL_RULE) ? process.env.PRICE_SPECIAL_RULE : 'always';
+// Special price = valid AND active (Gil, replies 72/73): ValidDate <= date <= EndDate and the
+// "פעיל" flag on. In the DB the flag is SpecialPrices.Active stored INVERTED: Active = 0 is פעיל
+// (11724 x BR11506 8.55 is charged with Active = 0; 10505's 2017-19 specials have Active = 1 and
+// Hashavshevet ignores them on 117144). Backtest (reply 60, 5,319 lines of 300 Hashavshevet docs):
+// 'valid' 89.4% (agent orders 94.4%, 117144 12/12) vs 'always' 84.6%, 'newer' 89.1%.
+// PRICE_SPECIAL_RULE=always|newer selects an older rule.
+const SPECIAL_RULES = ['valid', 'always', 'newer'];
+const SPECIAL_RULE = SPECIAL_RULES.includes(process.env.PRICE_SPECIAL_RULE) ? process.env.PRICE_SPECIAL_RULE : 'valid';
 
 const PRICE_BATCH = 500;
 
@@ -57,15 +58,10 @@ export async function resolvePrices(
   // Matrix cells (reply 68/71): special prices are often defined on the MODEL only, so a cell falls
   // back to its father (IMatrixItems): the cell's own special > the father's special > discount by
   // the cell's code (else the father's) > the cell's list price (else the father's).
-  // specialRule 'newer' (optional; default is 'always', reply 72): a special counts only if its ValidDate is on/after the
-  // item's latest price-list change (DatF) - a list update supersedes older specials. Matches
-  // Hashavshevet's own price pull on 117144 (10505: 2017-19 specials ignored after the 2024-09 list
-  // change) and the 11724 8.55 special (2024-09-22, after the 2024-08-29 list).
   const ruleSql = {
+    valid: 'AND h.Active = 0', // = פעיל (inverted flag, see SPECIAL_RULE)
     always: '',
-    newer: "AND h.ValidDate >= ISNULL(COALESCE(lp.DatF, lpf.DatF), '19000101')",
-    active0: 'AND h.Active = 0',
-    minamt0: 'AND ISNULL(h.MinAmount, 0) = 0',
+    newer: "AND h.ValidDate >= ISNULL(COALESCE(lp.DatF, lpf.DatF), '19000101')", // list change supersedes older specials
   }[specialRule] ?? '';
   const rows = await query(
     `SELECT i.ItemKey, i.Price AS itemPrice, d.PriceListNumber, d.DiscountPrc,

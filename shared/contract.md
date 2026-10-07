@@ -170,7 +170,8 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   - **Pricing is the bridge's (reply 68):** every line is priced by the resolver (same as /price: special → discount code → price list)
     and written as **base `Price` + `DiscountPrc`** (not a baked net). Matrix cells fall back to their model (IMatrixItems):
     cell special > model special > discount by the cell's code (else the model's) > cell list (else the model's). A special
-    always wins while valid (Gil, reply 72; `PRICE_SPECIAL_RULE=newer` = only if dated on/after the latest list change); `/price`
+    wins only when VALID + ACTIVE: `ValidDate <= date <= EndDate` and `SpecialPrices.Active = 0` (the DB flag is inverted: 0 = פעיל);
+    `PRICE_SPECIAL_RULE=always|newer` selects older rules; `/price`
     then adds `specialFrom: <model>` when the special came from the model. The app's `price`/`discountPct` are used only when the
     resolver has no price (`priceSource: 'web'`). If the app's net differs from the bridge's, the response line adds `webNet`
     and bridge.log records `price differs <acc>/<item>: web X vs bridge Y`.
