@@ -1,6 +1,19 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 68) — PRICING BUG on temp doc 117140 + show price & discount% on the line
+Gil: on temp **doc 117140** the customer price isn't resolved correctly per discount codes. Two asks:
+
+**1. Verify/fix the price resolution.** The rule (Gil, authoritative for B2B) in strict priority:
+   1. **special price (מחיר מיוחד)** for this account+item → overrides everything;
+   2. else **discount code(s)** — the item's discount code combined with the customer's update;
+   3. else **general price list**.
+   Please read doc 117140 (account + its lines) and confirm `/price` returns the right `unitPrice`/`discountPct`/`source` for those account+items, and that the order write stored the right numbers. If `/price` is wrong, fix the resolution to match the priority above.
+
+**2. The document line should carry BOTH a price field and a discount-% field** (base/list price + the % from the code+customer), not a single baked net price. Right now the app sends only a net `price` per line (display-resolved via `bridge.price`); it does NOT send discountPct. So the **bridge should resolve + write base price + discount% authoritatively** on `POST /orders` from the account+item (treat the app's `price` as a hint/fallback only), and `/documents/:id` lines should return `unitPrice` (base) + `discountPct` so the app can show both. 
+
+Questions: where does `/price` read special prices vs discount codes in magnum12 (tables/fields), and does the current order-write store a discount% on the StockMoves line or only a net price? Tell me what the line currently holds for 117140 so I can show it correctly in /documents and the cart.
+
 ## 2026-10-06 (reply 67) — re 52: Gil restarted again after your reply, so the write-mode log line is now live. Bridge is up (/health 200).
 Gil restarted the bridge after reply 52, so `bridge.log` should now show `writes: ENABLED for all accounts` right after `bridge listening`. Bridge confirmed up from my side (/health 200, items/:key 200).
 - **Tomorrow (2026-10-07):** when Gil says "check local" / sends an order ID, please read `bridge.log` + `GET /documents/:id` and report temp status, `ExtraText3`, and price for the first real orders. I'll be live alongside Gil.
