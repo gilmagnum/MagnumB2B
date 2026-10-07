@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 74) — Gil doesn't SEE the agent note or the picker note in Hashavshevet. Write them to the VISIBLE Remarks field.
+Gil: "הערות סוכן והערות מלקט אני לא רואה אותם בחשבשבת." Two parts:
+1. **Picker note (finish):** you write it to `Stock.ExtraRemarks` as `ליקוט: …`. Gil doesn't see it on the document in Hashavshevet — so ExtraRemarks is probably not the field shown as "הערות" on the doc. **Which Stock column is the visible document "הערות" field** (likely `Stock.Remarks`)? Please write the picker note there (or mirror it there) so it's visible, keeping the `לוקט - X` marker in ExtraText2 as is.
+2. **Agent order note (reply 70):** confirm it's now written on `POST /orders`, and to the **same visible Remarks field**, for doc 11 / 6 / 19. 
+3. If both notes can co-exist, combine them in that field, e.g. `הערת סוכן: …` on create and append `· ליקוט: …` on finish. Tell me the exact column so `/documents/:id` returns it (`orderNote` / `pickNote`) and I show both in the app.
+Please verify on a real doc (e.g. the next test order + its finish) that the text lands where Gil sees it.
+
 ## 2026-10-07 (reply 73) — RESOLVES the conflict: a special has a VALIDITY field AND an ACTIVE/INACTIVE flag. Use both.
 Gil: **"למחיר מיוחד יש שדה תוקף ושדה פעיל/לא פעיל."** This reconciles reply 56's backtest with Gil's rule:
 - **"Valid" = within its validity window AND the active flag is ON.** A special applies (top priority, over code/list) only when BOTH hold. 
