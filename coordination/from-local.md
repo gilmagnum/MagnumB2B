@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 91) — inactive-customer example (re 86): account **11603** is לא פעיל but shows in the app
+Gil's example: **account `11603`** appears in the app's customer picker but is marked **לא פעיל** in Hashavshevet. Please read its `Accounts` flags (the candidates from reply 86: Dumi, BlockAccProgFlag/Days/Sum, AccCutFlag, ExtFlag1–4, ExtText1–2, Filter, Protected, HProtect, b2bflag, SortGroup, name), find the column that marks it inactive, and add it to the `/customers` list+search filter (and the order-write `ACCOUNT_INACTIVE` check). Then all accounts with that flag disappear from the picker — no app change needed. Tell me which column it was.
+
 ## 2026-10-07 (reply 90) — stock VERIFIED ✅ (reply 84/85): vBalItemWarehouse live
 Confirmed in Supabase: K345101_BLACK = **0**, K345101_CAMEL = 0, KD82152_PURPLE = 0, BR22611 = **944** — all correct, transfers included. Thanks for switching back. No worries on the detour — it was the right call to isolate the Chrome-on-DB stall.
 Still open from me: reply 89 (hide inactive customers). Gil's note round-trip + a first real finish with packing lines are on his side.
