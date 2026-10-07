@@ -1,6 +1,40 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 58) — re 73: the fields are found. The "active" flag looks INVERTED. Backtest pending. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) The restart runs a ≤ 5 min read-only backtest (`logs\research-special-rules.json`). Pricing behavior is **unchanged** by this restart: still `always`. Gil: then tell me "check the research".
+
+**The columns** (`logs\research-special-validity.json`):
+- **`SpecialPrices`** (header, one per account × item): `ID, Detailes, ItemKey, AccountKey, Price (always 0), CurrencyCode, MinQuantity, PackQuantity, ValidDate, Active, SourceID, EndDate, MinDebit, MinDebitQuant, MinDebitItem, MinDebitQuantBy, CalcMethod, PrintMethod, ItemDesc, MinAmount, UseFID, ChangeDate, ChangeTime, Remarks`.
+- **`SpecialPricesMoves`** (the price): `ID, SPID → header, Price, DiscountPrc, CurrencyCode, MinQuantity, PackQuantity, Active, ItemKey, ItemName`.
+- **Validity (תוקף) = `SpecialPrices.ValidDate` → `EndDate`** (start → end). That's the only date window.
+- **Active (פעיל/לא פעיל) = `SpecialPrices.Active`**, with a copy on the move.
+
+**What the rows say:**
+| special | ValidDate → EndDate | Active | MinAmount | Hashavshevet |
+|---|---|---|---|---|
+| 10505 × MG1507001 (15 − 25%), MG1503102 (7), MG1507003 / MG15070031 (22) — every row | 2013…2019 → **2028-12-31** | **1** | **1** | **ignored** (117144, 116981/116983: list − 20%) |
+| 11724 × BR11506 **8.55** | 2024-09-22 → 2028-12-31 | **0** | **0** | **charged** |
+| 11724 × BR11506 14 − 28% / − 28.5% | 2022 → 2028 | **1** | **1** | not charged |
+
+- All of them are **inside** their validity window today (EndDate 2028). So validity doesn't explain 117144.
+- **The active flag does, read inverted:** the row Hashavshevet charges has `Active = 0`; the ignored ones have `Active = 1`. That also explains the Oct-1 backtest, where filtering on `Active = 1` dropped the match to 51.5%.
+- `MinAmount` (0 vs 1) correlates the same way, so it's tested too.
+- **Gil, to confirm on screen:** open the special price of 10505 × MG1507001 (15 − 25%) and of 11724 × BR11506 (8.55). Is the first shown **לא פעיל** and the second **פעיל**? If so, `Active = 0` means active in the DB.
+
+**The backtest after the restart** (300 recent Hashavshevet docs + 117144) compares four rules:
+- `always`: any special in its window, today's default;
+- `newer`;
+- **`active0`**: special in its window AND `SpecialPrices.Active = 0`;
+- `minamt0`.
+
+When `active0` wins and 117144 matches 14/14, I'll make it the default (validity window + active flag, per Gil), and the list-date heuristic goes away.
+
+Also seen in the log: `/documents` took 20.7 s and `POST /orders` 6.8 s once at 07:44–07:49, while the stock sync / `POST /sync` ran. I'll look at it if it repeats.
+
 ## ⚡ 2026-10-07 (reply 57) — re 72: Gil's rule is in (a valid special always wins). Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

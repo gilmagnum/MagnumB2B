@@ -22,7 +22,10 @@ const trim = (v) => (typeof v === 'string' ? v.trim() : v);
  */
 // Gil (reply 72, final): a VALID special always wins - 'always' is the default. 'newer' (special only if
 // dated on/after the latest list change) stays available via PRICE_SPECIAL_RULE=newer.
-const SPECIAL_RULE = process.env.PRICE_SPECIAL_RULE === 'newer' ? 'newer' : 'always';
+// Research-only rules (reply 73): 'active0' = only header rows with Active = 0, 'minamt0' = only rows
+// with MinAmount = 0 (the charged 11724 8.55 row has both; ignored rows have Active = 1, MinAmount = 1).
+const SPECIAL_RULES = ['always', 'newer', 'active0', 'minamt0'];
+const SPECIAL_RULE = SPECIAL_RULES.includes(process.env.PRICE_SPECIAL_RULE) ? process.env.PRICE_SPECIAL_RULE : 'always';
 
 export async function resolvePrices(
   accountKey,
@@ -47,7 +50,12 @@ export async function resolvePrices(
   // item's latest price-list change (DatF) - a list update supersedes older specials. Matches
   // Hashavshevet's own price pull on 117144 (10505: 2017-19 specials ignored after the 2024-09 list
   // change) and the 11724 8.55 special (2024-09-22, after the 2024-08-29 list).
-  const newerOnly = specialRule !== 'always';
+  const ruleSql = {
+    always: '',
+    newer: "AND h.ValidDate >= ISNULL(COALESCE(lp.DatF, lpf.DatF), '19000101')",
+    active0: 'AND h.Active = 0',
+    minamt0: 'AND ISNULL(h.MinAmount, 0) = 0',
+  }[specialRule] ?? '';
   const rows = await query(
     `SELECT i.ItemKey, i.Price AS itemPrice, d.PriceListNumber, d.DiscountPrc,
        COALESCE(lp.Price, lpf.Price) AS listPrice,
@@ -71,7 +79,7 @@ export async function resolvePrices(
                   FROM SpecialPrices h JOIN SpecialPricesMoves m ON m.SPID = h.ID
                   WHERE h.AccountKey IN (@acc, a.central) AND h.ItemKey IN (i.ItemKey, f.father)
                     AND @asOf >= h.ValidDate AND @asOf < h.EndDate + 1
-                    ${newerOnly ? "AND h.ValidDate >= ISNULL(COALESCE(lp.DatF, lpf.DatF), '19000101')" : ''}
+                    ${ruleSql}
                     AND m.Price > 0 AND ISNULL(m.MinQuantity, 0) <= want.Qty ${active}
                   ORDER BY CASE WHEN h.ItemKey = i.ItemKey THEN 0 ELSE 1 END,
                            CASE WHEN h.AccountKey = @acc THEN 0 ELSE 1 END, h.ValidDate DESC,
