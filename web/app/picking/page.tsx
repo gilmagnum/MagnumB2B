@@ -4,6 +4,7 @@ import { bridge, type Document } from "../../lib/bridge";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import { managerOrAbove } from "../../lib/roles";
 import { getActiveLocks } from "../picking-actions";
+import { listPickingLogs, type PickLogRow } from "../order-actions";
 
 // Picking queue. Warehouse screen (role picker/admin). Read-only for now —
 // "finish picking" (marking Hashavshevet) is deferred until Gil examines a live pick.
@@ -16,6 +17,21 @@ export default function PickingPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [locks, setLocks] = useState<Record<number, string>>({});
+  const [logs, setLogs] = useState<Record<number, PickLogRow>>({}); // picker notes + shortages by stockId
+  const [openLog, setOpenLog] = useState<number | null>(null);
+
+  // Load picking logs (notes + shortages) for the "picked" tab so a manager can expand each row.
+  useEffect(() => {
+    if (state !== "picked" || !managerOrAbove(role)) { setLogs({}); return; }
+    let alive = true;
+    listPickingLogs().then((ls) => {
+      if (!alive) return;
+      const by: Record<number, PickLogRow> = {};
+      for (const l of ls) if (l.stock_id != null && !by[l.stock_id]) by[l.stock_id] = l; // latest per order
+      setLogs(by);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [state, role]);
 
   useEffect(() => {
     (async () => {
@@ -77,6 +93,24 @@ export default function PickingPage() {
                 <div style={{ fontWeight: 600 }}>{d.customerName} <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}>({d.accountKey})</span></div>
                 <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>{d.docTypeName}{d.total != null ? ` · ${d.total.toFixed(2)} ₪` : ""}</div>
                 {d.produced && <span className="chip chip-ok" style={{ width: "fit-content" }}>הופק{d.producedDate ? ` · ${new Date(d.producedDate).toLocaleDateString("he-IL")}` : ""}</span>}
+                {state === "picked" && logs[d.stockId] && (
+                  <div>
+                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenLog(openLog === d.stockId ? null : d.stockId); }}
+                      className="btn btn-sm" style={{ padding: "2px 10px" }}>{openLog === d.stockId ? "− הערות וחוסרים" : "+ הערות וחוסרים"}</button>
+                    {openLog === d.stockId && (() => { const lg = logs[d.stockId]; return (
+                      <div style={{ marginTop: 6, fontSize: 13, background: "var(--surface-muted)", borderRadius: 8, padding: 8 }}>
+                        {lg.picker && <div>מלקט: <b>{lg.picker}</b></div>}
+                        {lg.notes && <div>הערת מלקט: {lg.notes}</div>}
+                        {lg.shortages?.length
+                          ? <div style={{ marginTop: 4 }}><b>חוסרים ({lg.shortages.length}):</b>
+                              <ul style={{ margin: "2px 0 0", paddingInlineStart: 16 }}>
+                                {lg.shortages.map((s, i) => <li key={i}>{s.itemkey}{s.size ? ` (${s.size})` : ""} — לוקט {s.picked}/{s.ordered}</li>)}
+                              </ul></div>
+                          : <div style={{ color: "var(--ok)" }}>אין חוסרים</div>}
+                      </div>
+                    ); })()}
+                  </div>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 2 }}>
                   <span style={{ color: canOpen ? "var(--brand)" : "var(--ink-muted)", fontWeight: 700 }}>
                     {d.produced ? "הופק — למעקב" : state === "waiting" ? "ליקוט ←" : managerOrAbove(role) ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}

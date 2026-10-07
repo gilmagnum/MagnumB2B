@@ -68,7 +68,7 @@ export type PickLogRow = {
   id: string; stock_id: number | null; doc_number: number | null; account_key: string | null;
   picker: string | null; notes: string | null; lines: PickLogLine[]; shortages: PickShortage[]; created_at: string;
 };
-export async function listPickingLogs(): Promise<PickLogRow[]> {
+export async function listPickingLogs(opts: { from?: string; to?: string } = {}): Promise<PickLogRow[]> {
   const me = await getProfile().catch(() => null);
   if (!me) return [];
   const { data: { user } } = await (await supabaseServer()).auth.getUser();
@@ -77,6 +77,8 @@ export async function listPickingLogs(): Promise<PickLogRow[]> {
     .order("created_at", { ascending: false }).limit(200);
   // Managers see all; a picker sees their own.
   if (!managerOrAbove(me.role)) qb = qb.eq("created_by", user?.id ?? "");
+  if (opts.from) qb = qb.gte("created_at", `${opts.from}T00:00:00`);
+  if (opts.to) qb = qb.lte("created_at", `${opts.to}T23:59:59`);
   const { data } = await qb;
   return (data as PickLogRow[]) ?? [];
 }
