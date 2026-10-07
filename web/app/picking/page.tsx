@@ -65,7 +65,8 @@ export default function PickingPage() {
         /* Responsive card list — no horizontal scroll on mobile/tablet. */
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 10 }}>
           {rows.map((d) => {
-            const canOpen = state === "waiting" || managerOrAbove(role);
+            // Produced orders are view-only for daily tracking — no re-opening picking.
+            const canOpen = (state === "waiting" || managerOrAbove(role)) && !d.produced;
             const href = `/picking/${d.stockId}`;
             const inner = (
               <div className="card card-pad" style={{ display: "grid", gap: 6, height: "100%" }}>
@@ -78,7 +79,7 @@ export default function PickingPage() {
                 {d.produced && <span className="chip chip-ok" style={{ width: "fit-content" }}>הופק{d.producedDate ? ` · ${new Date(d.producedDate).toLocaleDateString("he-IL")}` : ""}</span>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 2 }}>
                   <span style={{ color: canOpen ? "var(--brand)" : "var(--ink-muted)", fontWeight: 700 }}>
-                    {state === "waiting" ? "ליקוט ←" : managerOrAbove(role) ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}
+                    {d.produced ? "הופק — למעקב" : state === "waiting" ? "ליקוט ←" : managerOrAbove(role) ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}
                   </span>
                   {locks[d.stockId] && <span className="chip chip-warn" title="בליקוט כעת">🔒 {locks[d.stockId]}</span>}
                 </div>
