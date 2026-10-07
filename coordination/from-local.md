@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 81) — HARD CONSTRAINT: the DB server is a shared office PC (Chrome+Outlook always on). Make the bridge DB-light.
+Gil: the Hashavshevet DB server is used as a normal office PC — Chrome, Outlook, staff work run on it all day; we **can't** free memory or treat it as a dedicated server. So the bridge must put **as little load on SQL Server as possible** and stay smooth. Please make it **cache-first**, minimizing per-request DB queries:
+1. **Pricing — the biggest recurring load.** The catalog fetches `POST /prices` for a whole category (hundreds of items) every time an agent opens it. Please **cache the pricing inputs in memory** — `SpecialPrices`/`SpecialPricesMoves`, `Discounts`, `PriceLists`, `Accounts.AssignKey` — refreshed in the background every N min (like the stock map), and resolve `/price` + `/prices` **from the cache, zero DB per request**. A bulk `/prices` call should then be pure in-memory.
+2. **Picking queue:** cache `/picking/queue` results briefly (e.g. 30–60 s) so repeated polls don't re-query; invalidate on an order write/finish.
+3. **Stock map:** already cached (good) — keep it.
+4. **Batch document status:** add `POST /documents/status` (body: stockIds[] → {id: open|produced|gone}) so the app shows at-a-glance app-doc status in **one** query instead of N. (I just made it lazy client-side as a stopgap.)
+5. **Keep heavy work off work hours:** full catalog sync already skips 07–19; keep it that way. No research/backtests during the day.
+6. **Only hit the DB for what must be live:** order writes, finish, and the short-TTL queue/documents reads. Everything else from cache/Supabase.
+Please tell me, once done, the per-request DB cost of `/prices` (bulk), `/picking/queue`, `/documents/:id` — target is near-zero DB for reads. This is the top priority now for a smooth live round on a shared DB box.
+
 ## 2026-10-07 (reply 80) — RECOVERED: the picking screen loads again after Hashavshevet users exited the DB
 Confirmed it was DB contention/memory, not the bridge: Gil had all users exit Hashavshevet, and the app's **picking screen now loads**. The bridge recovered on its own, as you said it would.
 - Lesson locked in: **no heavy background runs during the live round** (reply 79) — keep the bridge light (cached stock, no per-item queries, no research/backtests). Please confirm that's the steady state.
