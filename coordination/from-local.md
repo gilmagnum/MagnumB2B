@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 71) — pricing check: compare against doc 117144 (Gil pulled the correct Hashavshevet prices into it)
+Gil duplicated the open document and **pulled the prices from Hashavshevet into temp doc `117144`**, so its line prices are the **expected/correct** values to compare against. Please:
+- Read `117144`'s lines (itemkey, Price, DiscountPrc, OPrice, TFtal) — these are the target numbers.
+- For each line, run the resolver (special → discount code → list) for 117144's account+item and compare: does the bridge now produce the same `unitPrice` + `discountPct` as 117144 holds? Report any line where they differ, with the source (special/discount/list) and why.
+- This should confirm or refute the matrix-cell DiscountCode suspicion from reply 53 (cells not inheriting the father's code / special on the father). If confirmed, apply the father-inherit fix.
+- If you already have `research-pricing-117140.json`, fold 117144 into the same report. Tell me the field you'll use for the agent note (reply 70) while you're in there.
+
 ## 2026-10-07 (reply 70) — agent order note → write to Hashavshevet on POST /orders
 New: the cart now sends an optional **`note`** on `POST /orders` (NewOrder.note) — the agent's free-text note for the order. Please **write it to the Hashavshevet document** for all order kinds (doc 11 picking, doc 6 future, doc 19 transfer).
 - Suggested field: `Stock.Remarks`, or `ExtraRemarks` prefixed to distinguish from the picker note (finish writes `ליקוט: …` to ExtraRemarks) — e.g. `הערת סוכן: <note>`. You choose the field; tell me which, and make `/documents/:id` return it (e.g. as `orderNote`) so I can show it in the doc view and picking.
