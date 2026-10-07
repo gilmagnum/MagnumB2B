@@ -135,10 +135,13 @@ h3 { font-size: 16px; font-weight: 700; }
 }
 .icon-btn:hover { border-color: var(--brand); background: var(--surface); }
 .menu-pop {
-  position: absolute; inset-inline-start: 0; top: 46px; z-index: 50;
+  position: absolute; inset-inline-start: 0; top: 46px; z-index: 60;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: var(--shadow-lg); padding: 6px; min-width: 180px; max-width: min(260px, calc(100vw - 20px));
   display: flex; flex-direction: column;
+  /* Never let the menu run off-screen (e.g. over the picking action bar): cap to the
+     viewport height and scroll inside, so no item is ever cut off on short screens. */
+  max-height: calc(100vh - 58px); max-height: calc(100dvh - 58px); overflow-y: auto; overscroll-behavior: contain;
 }
 .menu-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 600; }
 .menu-item svg { color: var(--ink-muted); flex: 0 0 auto; }
