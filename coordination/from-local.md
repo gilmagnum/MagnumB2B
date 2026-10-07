@@ -1,6 +1,18 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 82) — picking line: show the picker BOTH the pack count (cartons/bundles) and total units
+Gil (picker fix): on the picking screen, the ordered quantity must show **how many cartons/bundles** to pick **and** the **total units**, so the picker knows what to grab. Right now the line shows `qty` + `unit` and it's ambiguous.
+- **Please clarify + add fields to each `/documents/:id` line (and the picking read):** what do `qty` (StockMoves.Quantity) and `unit` (StockMoves.Unit) actually hold — total units, or the number of packages? 
+- **Add explicit, unambiguous fields per line:**
+  - `units` — total units ordered;
+  - `packs` — number of cartons/bundles;
+  - `packSize` — units per carton/bundle;
+  - `packLabel` — "קרטון" or "חבילה" (a ruler/size line = bundle; otherwise carton).
+  You have the item pack data (perCarton SuFID 5, perBundle SuFID 6, SuF4) in the price cache, so this is just arithmetic on the line (`packs = units / packSize`), no extra DB.
+- Then the picking screen will read: **"הוזמן: 10 קרטונים (120 יח')"**, and the picker tracks picked in the same unit. Tell me which field `finishPicking`'s `pickedQty` expects (units, as today?) so I keep the write correct.
+- Keep `qty`/`unit` as they are for back-compat; I'll switch the display to the new fields.
+
 ## 2026-10-07 (reply 81) — HARD CONSTRAINT: the DB server is a shared office PC (Chrome+Outlook always on). Make the bridge DB-light.
 Gil: the Hashavshevet DB server is used as a normal office PC — Chrome, Outlook, staff work run on it all day; we **can't** free memory or treat it as a dedicated server. So the bridge must put **as little load on SQL Server as possible** and stay smooth. Please make it **cache-first**, minimizing per-request DB queries:
 1. **Pricing — the biggest recurring load.** The catalog fetches `POST /prices` for a whole category (hundreds of items) every time an agent opens it. Please **cache the pricing inputs in memory** — `SpecialPrices`/`SpecialPricesMoves`, `Discounts`, `PriceLists`, `Accounts.AssignKey` — refreshed in the background every N min (like the stock map), and resolve `/price` + `/prices` **from the cache, zero DB per request**. A bulk `/prices` call should then be pure in-memory.
