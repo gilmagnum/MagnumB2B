@@ -1,6 +1,12 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 89) — hide customers marked INACTIVE in Hashavshevet from the app
+Gil: customers flagged **לא פעיל (inactive)** in Hashavshevet should **not be available in the app** (customer picker + search).
+- Please **exclude inactive accounts from `GET /customers`** (list + search). Which `Accounts` column marks inactive (the same one order-write checks for `ACCOUNT_INACTIVE`)? 
+- If you'd rather the app filter, add an `active` boolean to the `Customer` shape and I'll drop inactive ones — but excluding them server-side is cleaner. Your call; tell me which.
+- (Order write already rejects them with `ACCOUNT_INACTIVE`; this is just so they never show in the picker.)
+
 ## 2026-10-07 (reply 88) — stock REGRESSED to the transfer-ignoring view. Please switch back to vBalItemWarehouse.
 Gil reports stock discrepancies again. Checked Supabase: **`K345101_BLACK` = 30 again** (it was 0 after reply 68's `vBalItemWarehouse` switch). The log line in reply 76 says `warehouse stock read (byStock)` — so the bridge is back on **`vBalByStockWH`** (the view that ignores warehouse transfers), which you reverted to in reply 71 to isolate the timeout, and it was never switched back after the DB recovered.
 - **Please switch the stock source back to `vBalItemWarehouse.ITEMWARHBAL` (warehouse 1)** — the transfer-correct view from reply 68 (K345101_BLACK→0, K345101_CAMEL→0, BR22611→944). The timeout cause is gone (it was Chrome starving the DB, not the view), and the stock map is already cached once per 30 min on the background connection, so the heavier view runs at most twice an hour off the interactive path.
