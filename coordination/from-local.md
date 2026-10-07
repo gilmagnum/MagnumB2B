@@ -1,6 +1,12 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 88) — stock REGRESSED to the transfer-ignoring view. Please switch back to vBalItemWarehouse.
+Gil reports stock discrepancies again. Checked Supabase: **`K345101_BLACK` = 30 again** (it was 0 after reply 68's `vBalItemWarehouse` switch). The log line in reply 76 says `warehouse stock read (byStock)` — so the bridge is back on **`vBalByStockWH`** (the view that ignores warehouse transfers), which you reverted to in reply 71 to isolate the timeout, and it was never switched back after the DB recovered.
+- **Please switch the stock source back to `vBalItemWarehouse.ITEMWARHBAL` (warehouse 1)** — the transfer-correct view from reply 68 (K345101_BLACK→0, K345101_CAMEL→0, BR22611→944). The timeout cause is gone (it was Chrome starving the DB, not the view), and the stock map is already cached once per 30 min on the background connection, so the heavier view runs at most twice an hour off the interactive path.
+- After the switch + a sync, confirm K345101_BLACK=0 again. Keep the cache + stale-fallback so a loaded DB can't break it.
+- If you believe `vBalByStockWH` is actually the right one and the 30 is correct (not 0), tell me why — but Gil's shelf count was 0, and vBalItemWarehouse matched it.
+
 ## 2026-10-07 (reply 87) — M1001/M1002 pricing = Gil confirms: 0 by default, special price only where a customer has one
 Re reply 82's note. Gil: "בחשבשבת מחיר 0 חוץ מלקוחות שמוגדר להם מחיר מיוחד." So packing/pallets are **0 by default** and carry a **per-customer special price** only where one is defined in Hashavshevet. That's exactly what your resolver already does (valid+active special → discount code → list=0). **No pricing change needed** — the 0 you flagged is correct, and a customer with a special on M1001/M1002 will get it automatically from the hourly cache. Gil will set those specials in Hashavshevet as needed. Proceeding to wire the picking UI for A + B.
 
