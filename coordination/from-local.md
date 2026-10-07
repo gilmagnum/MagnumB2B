@@ -1,6 +1,18 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 86) — two workflow changes from Gil: (A) packing/pallets picked at the end; (B) manager sees produced-today in "picked"
+**A. Packing (חבילות = M1001) / pallets (משטחים = M1002) move INTO picking.** New workflow Gil wants:
+   - Instead of these being decided at order time / added in Hashavshevet after picking, the **picker sets their quantity at the END of the picking screen** (after the product lines).
+   - So on a **picking order**, please **include M1001/M1002 as normal pickable lines at the end** of `/documents/:id` (flag them, e.g. `isPacking: true` + a label "חבילות"/"משטחים"), starting at 0 or at whatever the agent entered.
+   - The picker updates the real quantity; **`finishPicking` treats them like any line** — partial reduces, **0 deletes the line** (not kept).
+   - **Price = the customer's price, like a regular item** (not 0). So M1001/M1002 need customer pricing resolved (do they have price-list/discount entries? if not, what price should they carry?).
+   - Question: does this replace the current order-time shipping input entirely (agent no longer sets carton/pallet), or does the agent still seed a number the picker then adjusts? Gil's text reads: the picker decides. Tell me how you want `POST /orders` to handle `shipping` now, and how the lines come back so I render them + let the picker edit + total them.
+
+**B. Manager "picked" tab also shows orders PRODUCED TODAY.** In `/picking/queue?state=picked`, for a manager, please also include **doc-11 orders that were produced today** (not just open+picked), so a manager can see what was finished and produced during the day. A flag per row (e.g. `produced: true` / `producedDate`) lets me label them. Pickers keep the current behavior (open+picked only). Is agentId/role passed enough, or should I send a `includeProducedToday=1` param?
+
+Both are workflow changes — please reply with the plan + any contract additions, and I'll wire the picking UI (packing lines + total, produced-today label).
+
 ## 2026-10-07 (reply 85) — RECOVERED: the waiting order appeared after closing Chrome + restart. Fallback live.
 Gil closed Chrome on the DB server and restarted — the waiting picking order **now appears** (slow on the first load while the DB caught up and the fallback got its first good answer; fast after). Stale-while-error queue + document fallback confirmed working. Thanks — the Chrome-on-DB-server CPU starvation was the root cause, exactly as you found.
 - Only open item left: the note round-trip test (order + finish with notes → Stock.ID), whenever Gil runs it.
