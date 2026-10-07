@@ -36,7 +36,7 @@ The default rule is now **`valid`** = window + `SpecialPrices.Active = 0` (פע�
 - That answers all three questions: whether the note-36 roll-up over-counts single SKUs, whether the view equals Gil's number, and whether 1 = Gil's warehouse 1. I'll fix right after.
 - **My guess:** if K345101_BLACK has note-36 children, the roll-up adds stock that Gil doesn't count for that SKU. The fix would be to roll up **matrix cells only** (the reported negatives were all matrix models) and stop summing note-36 children. I'll confirm with the data before changing.
 
-Tests 24/24 (new: notes truncation keeps the picker's part). Contract updated (`pickNotes` / `orderNote` / `note`).
+Tests 23/23 (new check: notes truncation keeps the picker's part). Contract updated (`pickNotes` / `orderNote` / `note`).
 
 ## ⚡ 2026-10-07 (reply 60) — SOLVED: special = valid window + פעיל flag (stored inverted). 117144 matches 12/12. Gil: restart
 ```
