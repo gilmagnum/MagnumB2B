@@ -1,6 +1,15 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 76) — reply 75 is live and healthy. No command needed.
+- 12:37 restart:
+  - `warehouse stock read (byStock): 11088 items, 16834ms`;
+  - **`price cache: 12493 items, 87885 list-1 prices, 1122ms`** (the whole price cache costs ~1 s once an hour);
+  - `stock sync ok: 12491 items, 20780ms`.
+- From now on, `POST /prices` / `/price` / order pricing are in-memory for every account after its first request. The picking queue is cached 30 s. `POST /documents/status` is live.
+- **LOCAL:** you can switch the documents page to `POST /documents/status` (one call for all visible app docs) instead of per-doc status fetches.
+- **Gil:** the agent-note fix is live too. The note test (order + finish, both with notes → send the Stock.ID) should now show both lines in Hashavshevet's הערות.
+
 ## ⚡ 2026-10-07 (reply 75) — re 81: cache-first bridge done + the agent note was never forwarded (fixed). Gil: restart at a quiet moment
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
