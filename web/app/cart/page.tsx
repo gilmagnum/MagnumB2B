@@ -4,6 +4,7 @@ import { useCart, type CartLine } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
 import { bridge } from "../../lib/bridge";
 import { fetchImages } from "../../lib/images";
+import { supabaseBrowser } from "../../lib/supabase/browser";
 import { saveAppOrder, saveDraft, getDraft, deleteDraft } from "../order-actions";
 import { isTransferAccount } from "../../lib/order";
 
@@ -21,13 +22,23 @@ export default function CartPage() {
   const [disc, setDisc] = useState<Record<string, number>>({}); // discount % per line (itemkey+unit)
   const [priceErr, setPriceErr] = useState(false);
   const [images, setImages] = useState<Record<string, string>>({});
+  const [parentOf, setParentOf] = useState<Record<string, string>>({}); // variant SKU -> parent product
   const [note, setNote] = useState(""); // agent's order note → written to Hashavshevet
 
   // Thumbnails for the cart lines.
   useEffect(() => {
     if (!lines.length) return;
     fetchImages(lines.map((l) => l.itemkey)).then(setImages).catch(() => {});
+    // Resolve the parent product for matrix-cell lines so the row links to the right product page.
+    const keys = [...new Set(lines.map((l) => l.itemkey))];
+    supabaseBrowser().from("item_variants").select("itemkey,parent_itemkey").in("itemkey", keys)
+      .then(({ data }) => {
+        const m: Record<string, string> = {};
+        for (const r of (data ?? []) as { itemkey: string; parent_itemkey: string | null }[]) if (r.parent_itemkey) m[r.itemkey] = r.parent_itemkey;
+        setParentOf(m);
+      });
   }, [lines]);
+  const productHref = (itemkey: string) => `/product/${encodeURIComponent(parentOf[itemkey] ?? itemkey)}`;
 
   // Resolve the customer's final price for each line (display-only; Hashavshevet
   // recomputes at production). Keyed by itemkey|unit.
@@ -158,15 +169,15 @@ export default function CartPage() {
             return (
               <tr key={l.itemkey + l.unit + (l.sizeLabel ?? "")} style={{ borderBottom: "1px solid #eee" }}>
                 <td style={{ padding: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <a href={productHref(l.itemkey)} title="לעמוד המוצר" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "inherit" }}>
                     {images[l.itemkey] ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={images[l.itemkey]} alt="" style={{ width: 40, height: 40, objectFit: "contain", borderRadius: 6, background: "var(--surface-muted)" }} />
                     ) : (
                       <div style={{ width: 40, height: 40, borderRadius: 6, background: "var(--surface-muted)" }} />
                     )}
-                    <div>{l.title}{l.sizeLabel ? <span className="chip" style={{ marginInlineStart: 6, background: "var(--brand-soft)" }}>מידה {l.sizeLabel}</span> : null}<div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.itemkey}</div></div>
-                  </div>
+                    <div><span style={{ color: "var(--brand)", fontWeight: 600 }}>{l.title}</span>{l.sizeLabel ? <span className="chip" style={{ marginInlineStart: 6, background: "var(--brand-soft)" }}>מידה {l.sizeLabel}</span> : null}<div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.itemkey}</div></div>
+                  </a>
                 </td>
                 <td>{l.unit === "carton" ? "קרטון" : "חבילה"}{l.packSize ? <div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.packSize} יח׳</div> : null}</td>
                 <td>
