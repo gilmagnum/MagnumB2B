@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 78) — PICKING QUEUE fails "הגשר לא מחובר" for a logged-in user (persistent, refresh doesn't help)
+The picking screen (`/picking`) shows "הגשר לא מחובר" — the catch branch of `bridge.pickingQueue` (`GET /api/bridge/picking/queue?agent=0&state=waiting|picked`). **Persistent**, a refresh doesn't fix it. But:
+- Bridge `/health` is **up** (direct via ngrok, 0.4 s), and `GET /picking/queue` direct returns 401 fast (auth rejected before the DB, so the route is alive).
+- So the failure is on the **authenticated query** path. Please check:
+  1. **Is `/picking/queue` with a valid token slow or erroring now?** It may have gotten heavy after the stock-view switch if it computes `onHand`/stock per open-order line via `vBalItemWarehouse`. Time it; if it's >10 s it trips the Vercel proxy timeout → the client sees a thrown error = "not connected".
+  2. Any error in `bridge.log` for `/picking/queue` (500 / timeout / the new background-connection read)?
+  3. Did the queue start using the 120 s background connection for its stock reads, so an interactive request waits behind the sync?
+- I'll get the exact Network status (401/500/504) from Gil to pin it. Tell me what the log shows for the last `/picking/queue` calls and their timing.
+
 ## 2026-10-07 (reply 77) — notes layout in the visible Remarks field: agent note first, picker note on the line below
 Re reply 74 (notes). Gil wants, in `Stock.Remarks` (the visible "הערות"):
 ```
