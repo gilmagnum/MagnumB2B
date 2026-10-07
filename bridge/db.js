@@ -8,10 +8,13 @@ export const key = (value) => ({ type: sql.VarChar(50), value: value == null ? n
 
 const pools = {};
 
-// role: 'ro' (magnum_ro, all reads) | 'rw' (magnumapp, order insert only)
+// role: 'ro' (magnum_ro, all reads) | 'rw' (magnumapp, order insert only) |
+// 'bg' (magnum_ro, background reads - the all-items warehouse view and the transfer load can take
+// 20-45 s under load, so they get 120 s instead of the interactive 30 s; one connection).
+const TIMEOUTS = { ro: 30000, rw: 30000, bg: 120000 };
 export function getPool(role = 'ro') {
   if (!pools[role]) {
-    const creds = sqlConfig.users[role];
+    const creds = sqlConfig.users[role === 'bg' ? 'ro' : role];
     if (!creds?.password) {
       throw new Error(`Missing SQL password for role "${role}" - fill .env.local (see .env.example)`);
     }
@@ -21,15 +24,15 @@ export function getPool(role = 'ro') {
       database: sqlConfig.database,
       user: creds.user,
       password: creds.password,
-      pool: { max: role === 'rw' ? 2 : 5, min: 0, idleTimeoutMillis: 30000 },
-      requestTimeout: 30000,
+      pool: { max: { rw: 2, bg: 1 }[role] ?? 5, min: 0, idleTimeoutMillis: 30000 },
+      requestTimeout: TIMEOUTS[role] ?? 30000,
       options: {
         encrypt: false,
         trustServerCertificate: true,
         appName: `MagnumB2B-bridge-${role}`,
         // Reads never take or wait for locks (= WITH (NOLOCK) on every query), so the bridge
         // can never block Hashavshevet users. Display data only; the write pool keeps the default.
-        ...(role === 'ro' && { connectionIsolationLevel: sql.ISOLATION_LEVEL.READ_UNCOMMITTED }),
+        ...(role !== 'rw' && { connectionIsolationLevel: sql.ISOLATION_LEVEL.READ_UNCOMMITTED }),
       },
     });
     pools[role] = pool.connect().catch((err) => {

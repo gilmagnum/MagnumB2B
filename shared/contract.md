@@ -29,7 +29,7 @@ type Item = {
   ignoreStock: boolean;       // NoteID 31
   isMatrix: boolean;          // detected via IMatrixItems
   isCartonSizeItem: boolean;  // NoteID 26 'פריט קרטון מידה' - each carton is one size; order per size inside the product
-  stock: number;              // warehouse 1 only: vBalByStockWH (Warehouse = STOCK_WAREHOUSE, default 1) + produced transfers (doc 19) into it - out of it (the view ignores transfers). Items WITH children (matrix cells via IMatrixItems, or items whose parentSku = this item): max(own,0) + Σ max(child,0). Others: own balance (may be < 0 = oversold)
+  stock: number;              // warehouse 1 only: vBalByStockWH (Warehouse = STOCK_WAREHOUSE, default 1) + produced transfers (doc 19) into it - out of it (the view ignores transfers; cached map refreshed after each stock sync; STOCK_TRANSFER_ADJ=0 = off). Items WITH children (matrix cells via IMatrixItems, or items whose parentSku = this item): max(own,0) + Σ max(child,0). Others: own balance (may be < 0 = oversold)
   imageUrl?: string;          // app layer (not from Hashavshevet)
   cells?: MatrixCell[];       // GET /items/:itemkey only, when isMatrix
 };

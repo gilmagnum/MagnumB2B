@@ -82,19 +82,23 @@ export const whStockSql = (keyExpr) => WH_STOCK_SQL.replaceAll('%KEY%', keyExpr)
 // map is kept (or an empty one) so the stock sync never breaks on it.
 let transferCache;
 let transferPending;
-// Off unless STOCK_TRANSFER_ADJ=1: the first version made the stock sync time out (reply 66).
-export const TRANSFER_ADJ_ON = process.env.STOCK_TRANSFER_ADJ === '1';
-export function getTransferAdjustments() {
+// The load takes ~45 s (4,255 transfers); run in parallel with the 17 s warehouse view it pushed the
+// view past the 30 s timeout (reply 66). So it is NEVER loaded on demand: the server refreshes it
+// right after each stock sync (sequential), and every reader uses the cached map.
+// STOCK_TRANSFER_ADJ=0 turns the correction off.
+export const TRANSFER_ADJ_ON = process.env.STOCK_TRANSFER_ADJ !== '0';
+export const transferAdjAge = () => (transferCache ? Date.now() - transferCache.at : Infinity);
+export function refreshTransferAdjustments() {
   if (!TRANSFER_ADJ_ON) return Promise.resolve(new Map());
-  if (transferCache?.map && Date.now() - transferCache.at < 30 * 60_000) return Promise.resolve(transferCache.map);
-  transferPending ??= loadTransferAdjustments().finally(() => (transferPending = undefined));
+  transferPending ??= loadTransferAdjustments().finally(() => {
+    transferPending = undefined;
+    whStockCache = undefined; // next stock read picks up the new map
+  });
   return transferPending;
 }
-// Non-blocking for single-item reads: the cached map, or empty while the first load runs.
+// The cached map (empty until the first load).
 export function transferAdjNow() {
-  if (!TRANSFER_ADJ_ON) return new Map();
-  if (!transferCache?.map || Date.now() - transferCache.at >= 30 * 60_000) getTransferAdjustments().catch(() => {});
-  return transferCache?.map ?? new Map();
+  return TRANSFER_ADJ_ON ? transferCache?.map ?? new Map() : new Map();
 }
 // stock + the item's transfer adjustment (null stays null).
 export const adjustStock = (itemKey, stock) => (stock == null ? stock : stock + (transferAdjNow().get(trim(itemKey)) ?? 0));
@@ -102,13 +106,15 @@ export const adjustStock = (itemKey, stock) => (stock == null ? stock : stock + 
 async function loadTransferAdjustments() {
   const started = Date.now();
   try {
-    const ids = (await query(TRANSFER_STOCK_IDS)).map((r) => Number(r.ID));
+    const ids = (await query(TRANSFER_STOCK_IDS, {}, 'bg')).map((r) => Number(r.ID));
     const map = new Map();
     for (let i = 0; i < ids.length; i += 500) {
       const rows = await query(
         `SELECT tm.ItemKey, ${TRANSFER_ADJ_SUM} AS adj FROM StockMoves tm JOIN Stock ts ON ts.ID = tm.StockID
          WHERE tm.StockID IN (${ids.slice(i, i + 500).join(',')}) AND tm.Warehouse = ${STOCK_WAREHOUSE}
          GROUP BY tm.ItemKey`,
+        {},
+        'bg',
       );
       for (const r of rows) map.set(trim(r.ItemKey), (map.get(trim(r.ItemKey)) ?? 0) + (r.adj ?? 0));
     }
@@ -127,8 +133,8 @@ let whStockCache;
 export async function getWarehouseStock() {
   if (!whStockCache || Date.now() - whStockCache.at > 5 * 60_000) {
     const map = (async () => {
-      const rows = await query(`SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`);
-      const adjustments = await getTransferAdjustments();
+      const rows = await query(`SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`, {}, 'bg');
+      const adjustments = transferAdjNow();
       const m = new Map(rows.map((x) => [trim(x.ItemKey), x.qty ?? 0]));
       for (const [k, adj] of adjustments) m.set(k, (m.get(k) ?? 0) + adj);
       return m;
@@ -173,7 +179,8 @@ const groupChildren = (rows) => {
 
 // Warehouse stock for every item, parents rolled up: Map<itemKey, stock>.
 async function getRolledStock() {
-  const [whStock, rel] = await Promise.all([getWarehouseStock(), query(CHILDREN_SQL())]);
+  const whStock = await getWarehouseStock();
+  const rel = await query(CHILDREN_SQL(), {}, 'bg');
   return rollUpStock(whStock, groupChildren(rel), (k) => whStock.get(k));
 }
 

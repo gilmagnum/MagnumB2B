@@ -10,7 +10,7 @@ import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
 import { finishPicking, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
 import { getBalance, getStats, StatsError } from './stats.js';
-import { getTransferAdjustments } from './read.js';
+import { refreshTransferAdjustments, transferAdjAge, TRANSFER_ADJ_ON } from './read.js';
 import { runStartupResearch } from './research.js';
 import path from 'node:path';
 import { ROOT } from './config.js';
@@ -407,6 +407,20 @@ server.listen(PORT, HOST, () => {
         }
       } catch (err) {
         console.error(`stock sync failed: ${err.message}`);
+      }
+      // Warehouse transfers (reply 75): refreshed AFTER the sync, never alongside it. After the first
+      // load, sync once more so Supabase gets the corrected values right away.
+      try {
+        if (TRANSFER_ADJ_ON && transferAdjAge() > 25 * 60_000) {
+          const first = transferAdjAge() === Infinity;
+          await refreshTransferAdjustments();
+          if (first && transferAdjAge() < 60_000) {
+            const r = await syncStock();
+            if (!r.skipped) console.log(`stock sync ok (with transfers): ${r.items} items, ${r.ms}ms`);
+          }
+        }
+      } catch (err) {
+        console.error(`stock sync failed: ${err.message}`);
       } finally {
         stockRunning = false;
       }
@@ -416,12 +430,14 @@ server.listen(PORT, HOST, () => {
     console.log(`stock sync every ${stockMin} min`);
   }
   startEventPoller();
-  // Warm the warehouse-transfer adjustments (reply 75) so single-item stock has them early (STOCK_TRANSFER_ADJ=1 only).
-  getTransferAdjustments().catch(() => {});
-  // TEMPORARY: read-only research 2 min after start-up, after the first stock sync (reply 66).
+  // Without the stock schedule, load the transfer adjustments once, a minute after start-up.
+  if (!(stockMin > 0 && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+    setTimeout(() => refreshTransferAdjustments().catch(() => {}), 60_000).unref();
+  }
+  // TEMPORARY: read-only research 4 min after start-up, after the stock sync + transfer load (reply 66).
   setTimeout(() => {
     runStartupResearch(path.join(ROOT, 'logs')).catch((err) => console.error(`research: ${err.message}`));
-  }, 120_000).unref();
+  }, 240_000).unref();
   console.log(`bridge listening on http://${HOST}:${PORT} (order kinds: ${Object.keys(ORDER_DOCUMENT_IDS).join(', ')})`);
   console.log(`writes: ${orderWriteEnabled() ? 'ENABLED for all accounts' : `test accounts only (${[...writeTestAccounts()].join(',')})`}`);
 });

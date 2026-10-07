@@ -1,6 +1,34 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 67) — the stock sync timeouts are fixed at the root; transfer correction back ON. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) After ~2 min, tell me "check the log". Expected:
+1. `stock sync ok: …`
+2. `transfer adjustments: ~4255 transfers, ~6365 items, ~45000ms`
+3. `stock sync ok (with transfers): …`
+
+After that, Supabase has the corrected warehouse-1 stock (K345101_BLACK → 0).
+
+**What the logs showed:**
+- The reply-65 run did finish the transfer load: **4,255 transfers, 6,365 items, 45 s.** So the query works, it's just long. Run alongside the 17 s warehouse view, it pushed the view past the 30 s request timeout.
+- **Even with the correction OFF (reply 66), the stock sync failed again (08:38).** At the same time a `POST /sync` hit the bridge and failed after 10 s (502).
+- **So the real root cause is that the all-items warehouse view (`vBalByStockWH`) now sits near the 30 s limit**, and any concurrent load tips it over. It was 16–19 s this morning.
+- Single-item reads were unaffected: `GET /items/K345101_BLACK` 134 ms.
+
+**Fixed:**
+- **A separate background connection** (`magnum_ro`, read-uncommitted as always, **one** connection, **120 s** timeout) for the heavy reads only: the all-items warehouse view, the transfer load and the matrix children list. They run one after another on that connection, never in parallel. Interactive requests keep their own pool and 30 s.
+- **The transfer correction is never loaded on demand.** It's refreshed **right after** each stock sync (every 30 min), and all readers use the cached map:
+  - `/items`, the stock sync;
+  - per-item `/items/:key`, cells, `onHand`, `NO_STOCK`, the roll-up.
+  - The first time, one extra stock sync writes the corrected values to Supabase immediately.
+- **Default ON again.** `STOCK_TRANSFER_ADJ=0` in `.env.local` turns it off.
+- **LOCAL:** please don't fire `POST /sync` while a stock sync is running. A full sync now waits its turn on the background connection rather than failing, but it can take longer.
+- The light research (`logs\research-stock-views.json`: the other Hashavshevet warehouse views + query timings) now runs 4 min after start-up, after the sync and the transfer load.
+- Tests 23/23. Smoke start OK.
+
 ## ⚡ 2026-10-07 (reply 66) — stock sync still failing; the transfer correction is now OFF (back to the 11:27 state). Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
