@@ -101,22 +101,40 @@ function parseDayParam(value, name) {
 // --- routes ------------------------------------------------------------------------
 // Short-lived cache for polled reads (reply 81): same key within ttl -> the same promise, no DB hit.
 // A failed read is not kept. clear() after writes that change the result.
-function shortCache(ttlMs) {
+// Stale fallback (reply 83): when the DB doesn't answer within staleAfterMs and a good result from
+// the last staleMaxMs exists, that result is served at once (logged); the query keeps running and
+// refreshes the cache when it finishes. A loaded office-PC DB then shows a slightly old list
+// instead of an error.
+function shortCache(ttlMs, { staleAfterMs = 8000, staleMaxMs = 30 * 60_000 } = {}) {
   const entries = new Map();
+  const good = new Map();
   return {
     get(keyText, load) {
       const hit = entries.get(keyText);
       if (hit && Date.now() - hit.at < ttlMs) return hit.value;
-      const value = load();
-      entries.set(keyText, { at: Date.now(), value });
-      value.catch(() => entries.delete(keyText));
+      const fresh = load();
+      entries.set(keyText, { at: Date.now(), value: fresh });
+      fresh.then((data) => good.set(keyText, { at: Date.now(), data }), () => entries.delete(keyText));
       if (entries.size > 200) entries.delete(entries.keys().next().value);
-      return value;
+      if (good.size > 200) good.delete(good.keys().next().value);
+      const last = good.get(keyText);
+      if (!last || Date.now() - last.at > staleMaxMs) return fresh;
+      let settled = false;
+      const stale = () => {
+        if (!settled) console.log(`serving cached result (${Math.round((Date.now() - last.at) / 1000)} s old): DB slow`);
+        settled = true;
+        return last.data;
+      };
+      return Promise.race([
+        fresh.then((data) => { settled = true; return data; }, stale),
+        new Promise((resolve) => setTimeout(() => resolve(settled ? last.data : stale()), staleAfterMs).unref()),
+      ]);
     },
-    clear: () => entries.clear(),
+    clear: () => entries.clear(), // the stale fallback (good) is kept on purpose
   };
 }
 const queueCache = shortCache(30_000);
+const docCache = shortCache(15_000);
 
 const routes = [
   ['GET', /^\/health$/, async () => ({ ok: true }), { public: true }],
@@ -240,6 +258,7 @@ const routes = [
     try {
       const result = await finishPicking(stockId, body, { dryRun: query.get('dryRun') === '1' });
       queueCache.clear();
+      docCache.clear();
       return result;
     } catch (err) {
       if (err instanceof PickingError) throw new HttpError(err.status, err.code, err.message);
@@ -284,7 +303,8 @@ const routes = [
 
   // One document + lines for export. ?agent=:id = only if the customer is that agent's (else 404).
   ['GET', /^\/documents\/(\d+)$/, async ({ params: [stockId], query }) => {
-    const doc = await read.getDocument(stockId);
+    // 15 s cache + the same stale fallback as the queue (the picking screen opens it repeatedly).
+    const doc = await docCache.get(String(Number(stockId)), () => read.getDocument(stockId));
     const agent = Number(query.get('agent') || 0);
     if (!doc || (agent && doc.agent !== agent)) throw new HttpError(404, 'DOC_NOT_FOUND', `מסמך ${stockId} לא נמצא`);
     return doc;
@@ -327,7 +347,10 @@ const routes = [
       },
       { commit: !dryRun },
     );
-    if (!dryRun) queueCache.clear();
+    if (!dryRun) {
+      queueCache.clear();
+      docCache.clear();
+    }
     return {
       stockId: dryRun ? null : result.orderId,
       dryRun,

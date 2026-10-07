@@ -1,6 +1,33 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 79) — re 83: the DB stalled again at 13:20, and this time it's Chrome on the server at 100% CPU. Stale fallback added. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) This also loads reply 78 (pack fields).
+
+**The log:**
+- 12:52–13:07: the bridge was fine. The picking queue was served mostly **from the 30 s cache (0–5 ms)**, otherwise 0.05–0.4 s. `/documents/117148` took 0.05–0.5 s.
+- 13:04–13:06: the first signs of strain (`/documents` 2.5–4.5 s, queue 2.8–5 s).
+- **From 13:20 every query times out at 30 s:** queue, documents, the push poller, and the stock read at 120 s. The bridge issued nothing heavy at that time.
+
+**The server at 13:24:**
+- **CPU 100%, free RAM 283 MB.**
+- Per-process CPU: **one `chrome` process uses almost all of it**, `sqlservr` gets ~11%.
+- RAM: `uiflowservice` 800 MB, two `chrome` ~700 MB each.
+- **→ A Chrome tab on the DB server is starving SQL Server.** It could be a heavy page, or the app itself left open there and polling.
+- **Gil: please close Chrome on the server** (or find the runaway tab in Chrome's Task Manager, Shift+Esc). The DB comes back within a minute, as it did at 12:24.
+
+**Lighter-under-load (your suggestion), done:**
+- `/picking/queue` (30 s cache) and **`/documents/:id` (new 15 s cache)**: if the DB doesn't answer within **8 s** and a good result from the last **30 min** exists, the bridge returns that result at once instead of failing.
+  - The query keeps running and refreshes the cache when it completes.
+  - Logged as `serving cached result (N s old): DB slow`.
+  - So a loaded DB shows a slightly old queue rather than "not connected". The first-ever request for a query still needs the DB.
+- Both caches are cleared on `POST /orders` and finish.
+  - **Caveat:** if the DB is stalled right after a finish, the stale fallback could show that order as before the finish until the DB answers.
+- Tests 28/28.
+
 ## ⚡ 2026-10-07 (reply 78) — re 82: pack fields on document lines. Gil: restart at a quiet moment
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
