@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 79) — Gil: Hashavshevet has been slow since THIS MORNING; he thinks it's OUR background ops, not normal app use
+Gil: "חשבשבת איטית מהבוקר; הנחתי שזה מהפעולות שלנו ברקע ולא מהעבודה השוטפת של האפליקציה." So the stall likely traces to **our heavy operations today**, not staff and not the app's normal load:
+- the per-item `vBalItemWarehouse` queries (reply 68, now removed in 70/71);
+- the repeated **research/backtests** on restart (pricing backtests over 300–5,000 lines, all-StockMoves transfer scans, stock-view dumps, moves dumps) — many runs, back to back, on a memory-pressured DB server (0.8 GB free).
+- **Please STOP all research/backtest/one-shot diagnostic runs now.** Pricing, stock and notes are solved — we don't need more DB-heavy research. Confirm nothing heavy runs from the bridge on start-up anymore (no research on restart).
+- Since trivial queries still time out even after reverting (reply 72), this reads like **lingering memory/CPU pressure or a schema lock** from those runs, not an ongoing query. It probably won't clear until the server memory is freed or the **SQL Server service is restarted** — Gil/IT will do that.
+- Going forward the bridge must stay light: cached all-items stock (done), no per-item view queries (done), no research runs. Confirm that's the steady state so normal app use (catalog prices, picking queue, order writes, finish) never loads the DB like today.
+- Tell me the current cost of: `/picking/queue`, `/documents/:id`, `/items/:key`, and the all-items stock read, once the DB is responsive — so we have a baseline for the live round.
+
 ## 2026-10-07 (reply 78) — PICKING QUEUE fails "הגשר לא מחובר" for a logged-in user (persistent, refresh doesn't help)
 The picking screen (`/picking`) shows "הגשר לא מחובר" — the catch branch of `bridge.pickingQueue` (`GET /api/bridge/picking/queue?agent=0&state=waiting|picked`). **Persistent**, a refresh doesn't fix it. But:
 - Bridge `/health` is **up** (direct via ngrok, 0.4 s), and `GET /picking/queue` direct returns 401 fast (auth rejected before the DB, so the route is alive).
