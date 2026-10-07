@@ -15,6 +15,7 @@ export default function CartPage() {
   const [draftMsg, setDraftMsg] = useState("");
   // Final per-unit price for each line, resolved for the entered customer.
   const [prices, setPrices] = useState<Record<string, number>>({});
+  const [disc, setDisc] = useState<Record<string, number>>({}); // discount % per line (itemkey+unit)
   const [priceErr, setPriceErr] = useState(false);
   const [images, setImages] = useState<Record<string, string>>({});
   const [note, setNote] = useState(""); // agent's order note → written to Hashavshevet
@@ -28,7 +29,7 @@ export default function CartPage() {
   // Resolve the customer's final price for each line (display-only; Hashavshevet
   // recomputes at production). Keyed by itemkey|unit.
   useEffect(() => {
-    if (!ctx || !lines.length) { setPrices({}); return; }
+    if (!ctx || !lines.length) { setPrices({}); setDisc({}); return; }
     let cancelled = false;
     (async () => {
       setPriceErr(false);
@@ -36,16 +37,17 @@ export default function CartPage() {
         try {
           const unitsQty = l.qty * (l.packSize ?? 1); // price tiers are by unit quantity
           const r = await bridge.price(ctx.accountKey, l.itemkey, unitsQty);
-          return [l.itemkey + l.unit, r.unitPrice] as const;
+          return [l.itemkey + l.unit, r.unitPrice, r.discountPct] as const;
         } catch {
-          return [l.itemkey + l.unit, NaN] as const;
+          return [l.itemkey + l.unit, NaN, 0] as const;
         }
       }));
       if (cancelled) return;
       const map: Record<string, number> = {};
+      const dmap: Record<string, number> = {};
       let anyErr = false;
-      for (const [k, v] of entries) { if (Number.isNaN(v)) anyErr = true; else map[k] = v; }
-      setPrices(map); setPriceErr(anyErr);
+      for (const [k, v, d] of entries) { if (Number.isNaN(v)) anyErr = true; else { map[k] = v; dmap[k] = d; } }
+      setPrices(map); setDisc(dmap); setPriceErr(anyErr);
     })();
     return () => { cancelled = true; };
   }, [ctx, lines]);
@@ -135,7 +137,7 @@ export default function CartPage() {
       <table style={{ borderCollapse: "collapse", width: "100%", maxWidth: 760, minWidth: 560 }}>
         <thead>
           <tr style={{ textAlign: "right", borderBottom: "2px solid #1e2a78" }}>
-            <th style={{ padding: 8 }}>פריט</th><th>יחידה</th><th>כמות</th><th>יח׳</th><th>מחיר יח׳</th><th>סה״כ שורה</th><th></th>
+            <th style={{ padding: 8 }}>פריט</th><th>יחידה</th><th>כמות</th><th>יח׳</th><th>מחיר יח׳</th><th>הנחה</th><th>סה״כ שורה</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -164,6 +166,7 @@ export default function CartPage() {
                   {l.stock != null && unitsOf(l) > l.stock && <div style={{ fontSize: 11, color: "var(--danger)", fontWeight: 400 }}>מלאי {l.stock} — חוסר</div>}
                 </td>
                 <td>{p != null ? `${p.toFixed(2)} ₪` : "—"}</td>
+                <td>{(disc[l.itemkey + l.unit] ?? 0) > 0 ? <span className="chip chip-ok">{disc[l.itemkey + l.unit]}%</span> : "—"}</td>
                 <td>{p != null ? `${(p * unitsOf(l)).toFixed(2)} ₪` : "—"}</td>
                 <td><button onClick={() => remove(l.itemkey, l.unit, l.sizeLabel)} style={{ color: "#b00", border: 0, background: "none", cursor: "pointer" }}>הסר</button></td>
               </tr>
@@ -172,7 +175,7 @@ export default function CartPage() {
         </tbody>
         <tfoot>
           <tr style={{ borderTop: "2px solid #1e2a78", fontWeight: 700 }}>
-            <td style={{ padding: 8 }} colSpan={5}>סה״כ</td>
+            <td style={{ padding: 8 }} colSpan={6}>סה״כ</td>
             <td>{total.toFixed(2)} ₪</td><td></td>
           </tr>
         </tfoot>

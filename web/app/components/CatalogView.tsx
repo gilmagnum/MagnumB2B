@@ -21,6 +21,7 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
   const [group, setGroup] = useState<string>("");
   const [q, setQ] = useState<string>("");
   const [priceMap, setPriceMap] = useState<Record<string, number>>({});
+  const [discMap, setDiscMap] = useState<Record<string, number>>({}); // customer discount % per item
 
   const subs = useMemo(() => uniq(items.map((i) => i.category_sub)), [items]);
   const brands = useMemo(() => uniq(items.map((i) => i.brand)), [items]);
@@ -29,18 +30,19 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
 
   // Customer pricing: when a customer is entered, fetch this category's prices in bulk.
   useEffect(() => {
-    if (!ctx) { setPriceMap({}); return; }
+    if (!ctx) { setPriceMap({}); setDiscMap({}); return; }
     let cancelled = false;
     (async () => {
       const keys = items.map((i) => i.itemkey);
       const map: Record<string, number> = {};
+      const disc: Record<string, number> = {};
       for (let i = 0; i < keys.length; i += 500) {
         try {
           const res = await bridge.prices(ctx.accountKey, keys.slice(i, i + 500).map((k) => ({ itemkey: k })));
-          for (const r of res) map[r.itemkey] = r.unitPrice;
+          for (const r of res) { map[r.itemkey] = r.unitPrice; disc[r.itemkey] = r.discountPct; }
         } catch { /* keep general price on failure */ }
       }
-      if (!cancelled) setPriceMap(map);
+      if (!cancelled) { setPriceMap(map); setDiscMap(disc); }
     })();
     return () => { cancelled = true; };
   }, [ctx, items]);
@@ -125,6 +127,7 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
               <div style={{ marginTop: 6, fontWeight: 800, color: "var(--ink)" }}>
                 {p != null ? `${Number(p).toFixed(2)} ₪` : ""} {it.per_carton ? <span style={{ fontWeight: 400, color: "var(--ink-muted)", fontSize: 12 }}>· {it.per_carton} בקרטון</span> : ""}
               </div>
+              {ctx && (discMap[it.itemkey] ?? 0) > 0 && <div style={{ fontSize: 12, color: "var(--ok)", fontWeight: 600 }}>הנחת לקוח: {discMap[it.itemkey]}%</div>}
               {showStock && <StockLine stock={it.stock} perSize={!!it.matrix_flag || !!it.is_carton_size_item} />}
               <div className="card-action">
                 {(it.matrix_flag || it.is_carton_size_item) ? (

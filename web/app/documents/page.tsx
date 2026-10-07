@@ -220,7 +220,7 @@ export default function DocumentsPage() {
                             </div>
                           )}
                           <table className="data-table" style={{ background: "var(--surface)", borderRadius: 8 }}>
-                            <thead><tr><th style={{ width: 54 }}>תמונה</th><th>מק״ט</th><th>תיאור</th><th>כמות</th><th>מחיר יח׳</th><th>סה״כ</th></tr></thead>
+                            <thead><tr><th style={{ width: 54 }}>תמונה</th><th>מק״ט</th><th>תיאור</th><th>כמות</th><th>מחיר יח׳</th><th>הנחה</th><th>סה״כ</th></tr></thead>
                             <tbody>
                               {(dd.lines ?? []).filter((l) => !l.isShipping).map((l, i) => (
                                 <tr key={i}>
@@ -234,6 +234,7 @@ export default function DocumentsPage() {
                                   <td>{l.name}</td>
                                   <td>{l.qty}{l.unit ? ` ${l.unit}` : ""}</td>
                                   <td>{l.unitPrice != null ? `${l.unitPrice.toFixed(2)} ₪` : ""}</td>
+                                  <td>{(l.discountPct ?? 0) > 0 ? <span className="chip chip-ok">{l.discountPct}%</span> : "—"}</td>
                                   <td>{l.lineTotal != null ? `${l.lineTotal.toFixed(2)} ₪` : ""}</td>
                                 </tr>
                               ))}

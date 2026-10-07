@@ -2,8 +2,17 @@
 import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { listAppOrders, type AppOrderRow } from "../order-actions";
+import { bridge } from "../../lib/bridge";
 import { useCart, type CartLine, type Unit } from "../../lib/useCart";
 import { useOrderContext } from "../../lib/useOrderContext";
+
+type DocStatus = "sent" | "produced" | "deleted" | "?";
+const STATUS_CHIP: Record<DocStatus, { label: string; cls: string }> = {
+  sent: { label: "נשלח", cls: "chip-info" },
+  produced: { label: "הופק", cls: "chip-ok" },
+  deleted: { label: "נמחק", cls: "chip-danger" },
+  "?": { label: "—", cls: "chip-info" },
+};
 
 // Copy intent carried to /customer when copying an order to a DIFFERENT customer.
 const COPY_KEY = "magnumb2b_copy";
@@ -15,11 +24,28 @@ export default function AppOrdersList() {
   const [rows, setRows] = useState<AppOrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
+  const [statuses, setStatuses] = useState<Record<number, DocStatus>>({});
   const router = useRouter();
   const { setAll } = useCart();
   const { select } = useOrderContext();
 
   useEffect(() => { listAppOrders().then((r) => { setRows(r); setLoading(false); }).catch(() => setLoading(false)); }, []);
+
+  // Resolve each order's current Hashavshevet status: open=נשלח, produced=הופק, gone=נמחק.
+  useEffect(() => {
+    const ids = [...new Set(rows.map((r) => r.stock_id).filter((x): x is number => x != null))];
+    if (!ids.length) return;
+    let alive = true;
+    (async () => {
+      const out: Record<number, DocStatus> = {};
+      await Promise.all(ids.map(async (id) => {
+        try { const d = await bridge.document(id); out[id] = d.status === "produced" ? "produced" : "sent"; }
+        catch { out[id] = "deleted"; }
+      }));
+      if (alive) setStatuses(out);
+    })();
+    return () => { alive = false; };
+  }, [rows]);
 
   // Copy to the SAME customer: load the lines into the cart and go review.
   const copySame = (r: AppOrderRow) => {
@@ -43,7 +69,7 @@ export default function AppOrdersList() {
     <div className="table-wrap">
       <table className="data-table" style={{ minWidth: 640 }}>
         <thead>
-          <tr><th></th><th>תאריך</th><th>לקוח</th><th>סוג</th><th>מס׳ הזמנה</th><th>שורות</th><th>סך</th></tr>
+          <tr><th></th><th>תאריך</th><th>לקוח</th><th>סוג</th><th>מס׳ הזמנה</th><th>סטטוס</th><th>שורות</th><th>סך</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => {
@@ -57,11 +83,12 @@ export default function AppOrdersList() {
                   <td>{r.customer_name} <span style={{ color: "var(--ink-muted)" }}>({r.account_key})</span></td>
                   <td>{kind(r.order_kind)}</td>
                   <td>{r.stock_id ?? "—"}</td>
+                  <td>{(() => { const s = STATUS_CHIP[(r.stock_id != null ? statuses[r.stock_id] : undefined) ?? "?"]; return <span className={`chip ${s.cls}`}>{s.label}</span>; })()}</td>
                   <td>{lines.length}</td>
                   <td>{r.totals?.total != null ? `${Math.round(r.totals.total).toLocaleString("he-IL")} ₪` : "—"}</td>
                 </tr>
                 {isOpen && (
-                  <tr><td colSpan={7} style={{ background: "var(--surface-muted)" }}>
+                  <tr><td colSpan={8} style={{ background: "var(--surface-muted)" }}>
                     <table className="data-table" style={{ width: "100%" }}>
                       <thead><tr><th>מק״ט</th><th>תיאור</th><th>מידה</th><th>יחידה</th><th>כמות</th><th>מחיר יח׳</th></tr></thead>
                       <tbody>
