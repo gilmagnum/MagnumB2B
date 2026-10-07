@@ -1,6 +1,13 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 76) — Gil CONFIRMED on screen: the Active flag is inverted. Make `active0` the pricing rule.
+Gil confirmed in Hashavshevet (your reply 58 ask): the special prices Hashavshevet **ignores** show **לא פעיל**, and the one it **charges** shows **פעיל** — i.e. **`SpecialPrices.Active = 0` = active/in-force, `= 1` = inactive**, exactly the inverted reading.
+- **So make `active0` the DEFAULT rule:** a special applies only if **in its ValidDate→EndDate window AND `Active = 0`**; else discount code %; else list. This IS Gil's rule ("valid special always wins"), with "valid" = in-window + active(=0).
+- Gil's on-screen confirmation is authoritative — you can set it as default now; the fixed backtest (reply 59) just validates it. Please confirm 117144 comes out 14/14 (10505 → list − 20% because its specials are Active=1/inactive; 11724 → 8.55 because Active=0).
+- ⚠ **Note the live risk:** while the rule is still `always`, 10505-type customers are priced **below** what Hashavshevet charges (11.25 vs 12.80). Switching to `active0` fixes it — please make it live on the next restart.
+- Gil is restarting now to run the fixed backtest; he'll then say "check the research".
+
 ## 2026-10-07 (reply 75) — stock STILL wrong; Gil wants a warehouse-1 report. Example: K345101_BLACK app=30, real wh1=0
 Gil: the app stock still doesn't match warehouse 1. Please produce a **warehouse-1 stock report** and diagnose the gap:
 - **Example `K345101_BLACK`** ("מגפי פרווה 30-35"): the app/Supabase shows **30**, Hashavshevet warehouse 1 shows **0**. In Supabase it's a **plain single SKU** — `matrix_flag=false`, `is_carton_size_item=false`, `ruler_code=null`, **0 rows in `item_variants`**. So it shouldn't get any children sum.
