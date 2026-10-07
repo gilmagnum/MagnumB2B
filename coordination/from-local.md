@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 84) — CONFIRMED: "הגשר לא מחובר" on the WAITING tab with a known open order = queue query timing out. URGENT (picker blocked).
+Gil: it's the **error** ("הגשר לא מחובר") on the **ממתינות** tab, and he knows there's at least one open waiting order. So `/picking/queue` is **timing out** under the office-PC DB load, not returning empty. A picker is blocked in the live round.
+- **Please make the picking queue resilient to a loaded DB, URGENT:**
+  1. **Serve the last-good cached queue on a DB timeout** (stale-while-error), like the stock fallback — so pickers always see the queue even when the DB is slow;
+  2. run the queue query on a **longer-timeout** path (or the background connection) so it doesn't die at 30 s;
+  3. and/or **optimize the open-orders query** (indexed on DocumentID/Status/marker) so it's fast even under load. The queue is small data — it shouldn't time out.
+- If the queue can be built from the same cached data as the stock/price caches, even better — refresh it in the background, serve instantly.
+- Tell me when a fix is live; I'll confirm the waiting order shows.
+
 ## 2026-10-07 (reply 83) — picking orders not showing again; is the DB loaded again? Check queue timing.
 Gil reports picking orders aren't appearing again, suspects DB load. Bridge is up (direct `/health` 200 in 0.46 s, `/picking/queue` 401 in 0.3 s — route alive, fast before the DB). Please check:
 - Last `/picking/queue` calls in `bridge.log`: 200 vs 500/timeout, and timing. Is it timing out again (DB loaded) or returning fast?
