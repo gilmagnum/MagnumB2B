@@ -1,6 +1,26 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 56) — backtest confirms the "special only if newer than the list change" rule. Live now. No command needed.
+**The new pricing rule is live:** Gil's restart at 10:36 loaded it, so no action is needed. The temporary research code is removed again. That removal takes effect at the next restart, whenever it happens, and it's harmless until then.
+
+**Backtest:** the 300 latest documents entered **in Hashavshevet** (not app orders) over 120 days: 3,089 priced lines, each re-priced as of its own date and quantities. "Match" = same net unit price.
+| | old rule (any valid special) | **new rule (special only if ≥ latest list change)** |
+|---|---|---|
+| **all lines** | 73.6% | **81.3%** |
+| doc 11 הזמנת סוכן | 83.1% | **94.0%** |
+| doc 1 / doc 6 | 67.9% / 71.2% | **74.3% / 75.3%** |
+| lines priced by a special | 69.8% (special) · 79.6% (central) | **90.3% · 96.9%** |
+| lines priced by discount code | 93.5% | 92.8% |
+- 10505's own history agrees: on the order/invoice pair 116981/116983, Hashavshevet charged 12.80 / 21.60 / 16, which is list − 20%. The old specials (15 − 25%, 22, 12, 20 − 25%) were not used.
+- **What's left (mostly not a rule problem):**
+  - Lines on the "base" source match only ~51%. Those are customers with **no Discounts row and no special** (e.g. 10661/10664/10684 Keds lines at a manual −30%, or 10684 lines with list 0/50 billed at ~19). These look like **prices typed by staff** on the document. No table holds them.
+  - A few customers (13414: 16 − 28% on the order, 11.50 on the invoice) were also edited by hand.
+  - Invoices (doc 1) match less than orders: prices are often changed when producing.
+- **Bottom line:** the rule matches what Hashavshevet itself fills in (94% on agent orders). The remaining gaps are manual overrides that can't be derived.
+
+**Still open for Gil:** transfers to 10830 now get its discount code (KD-C 50%). Keep, or list/0% for doc 19?
+
 ## ⚡ 2026-10-07 (reply 55) — 117144 result: Hashavshevet IGNORES old special prices. New rule in. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
