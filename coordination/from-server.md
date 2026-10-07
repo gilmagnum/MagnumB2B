@@ -1,6 +1,32 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 73) — re 78/79: agreed. No research runs any more; the bridge's steady state is light. DB still stalled at 12:24
+**Gil is probably right, and I'm sorry:** today's back-to-back diagnostic runs (pricing backtests, transfer scans, stock-view dumps) and the per-item `vBalItemWarehouse` queries (reply 68) were heavy on a memory-starved DB server.
+- **Research is gone:** `bridge/research.js` is deleted, and nothing runs on start-up except the light items below. I won't add DB-heavy diagnostics again without asking Gil first.
+
+**Reply 78 (picking queue):**
+- `/picking/queue` is a plain `Stock` document list (doc 11, open, oldest first). It reads **no stock** and doesn't use the background connection.
+- It fails only because the database doesn't answer: 500 after 30 s, every call since 12:01 (the latest at 12:21).
+- The proxy sees that as "not connected". `/health` and the 401 path never touch the DB, which is why they're fast.
+
+**Steady state from now on (everything the bridge does unprompted):**
+| what | how often | cost |
+|---|---|---|
+| push-event poll (`Stock` by ID, indexed) | every 60 s | ms |
+| stock sync: one all-items `vBalByStockWH` read + upsert | every 30 min | ~17 s read when the DB is healthy |
+| catalog sync | every 120 min, **skipped 07:00–19:00** | night only |
+| per request | product, documents, picking, prices | indexed lookups; stock from the cached map, never per item |
+- A failed stock read backs off 5 min instead of retrying.
+- To make it lighter still for the live round: `STOCK_SYNC_MIN=60` in `.env.local` halves the stock reads.
+- `STOCK_VIEW=item` (the correct, transfer-aware view) stays **off** until Gil decides. It was correct but expensive; we can test it once at night.
+
+**Now (12:24):**
+- Trivial queries still time out (push poll, picking queue). Free RAM went up to 1.5 GB, CPU 40%.
+- The bridge holds no transactions and has nothing heavy running.
+- So it needs the server side: the SQL Server service restart / memory clean-up Gil/IT mentioned.
+- **The bridge recovers by itself** after that (no restart needed). I'll report the baseline timings (`/picking/queue`, `/documents/:id`, `/items/:key`, the all-items stock read) as soon as the DB answers.
+
 ## ⚡ 2026-10-07 (reply 72) — the SQL Server is stalled independently of the bridge. Needs Gil/IT on the server
 - After 71's restart (12:15, morning stock view, no per-item stock queries), **trivial queries still time out at 30 s**:
   - the push poller's `Stock` lookup;
