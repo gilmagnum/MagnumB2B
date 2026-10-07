@@ -17,6 +17,7 @@ export default function CartPage() {
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [priceErr, setPriceErr] = useState(false);
   const [images, setImages] = useState<Record<string, string>>({});
+  const [note, setNote] = useState(""); // agent's order note → written to Hashavshevet
 
   // Thumbnails for the cart lines.
   useEffect(() => {
@@ -98,6 +99,7 @@ export default function CartPage() {
       const res = await bridge.createOrder({
         accountKey: ctx.accountKey,
         orderKind: ctx.orderKind,
+        note: note.trim() || undefined,
         lines: lines.map((l) => ({ itemkey: l.itemkey, qty: l.qty, unit: l.unit, price: priceOf(l.itemkey, l.unit, l.unitPrice), size: l.sizeLabel || undefined })),
       });
       setMsg(`ההזמנה נשלחה ✓ מספר הזמנה: ${res.stockId}`);
@@ -116,7 +118,7 @@ export default function CartPage() {
           body: `${ctx.customerName} · הזמנה ${res.stockId}`, url: "/picking",
         }),
       }).catch(() => {});
-      clear(); setDraft(null);
+      clear(); setDraft(null); setNote("");
     } catch (e) {
       setMsg("שגיאה בשליחה (ייתכן שהגשר עדיין לא מחובר): " + (e as Error).message);
     } finally {
@@ -176,6 +178,10 @@ export default function CartPage() {
         </tfoot>
       </table>
       </div>
+      <label style={{ display: "block", marginTop: 16, fontSize: 13, fontWeight: 600 }}>הערה להזמנה (תיכתב בחשבשבת)
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="input"
+          style={{ marginTop: 4, resize: "vertical", maxWidth: 520 }} placeholder="לא חובה — הערה שתופיע במסמך בחשבשבת…" />
+      </label>
       <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={submit} disabled={busy} style={{ background: "#1e2a78", color: "#fff", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "שולח…" : "שלח הזמנה"}</button>
         <button onClick={saveDraftNow} className="btn">שמירת טיוטה</button>

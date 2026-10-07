@@ -54,6 +54,7 @@ export type DocumentDetail = Document & {
 export type OrderKind = "picking" | "future";
 export type NewOrder = {
   accountKey: string; orderKind: OrderKind;
+  note?: string; // agent's free-text note for the order → written to Hashavshevet
   lines: { itemkey: string; qty: number; unit: "carton" | "bundle"; price?: number; size?: string }[];
   shipping?: { carton?: number; pallet?: number };
 };
