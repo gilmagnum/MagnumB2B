@@ -69,14 +69,15 @@ function shapeItem(row, extra = {}) {
 // the all-items map (~7.5 s, background pool) is cached and refreshed in the background every 5 min;
 // every reader - single items, cells, document lines - takes its numbers from that map.
 export const STOCK_WAREHOUSE = Number(process.env.STOCK_WAREHOUSE || 1);
-// STOCK_VIEW: 'byStock' (default) = vBalByStockWH - ran all morning without load problems, but
-// ignores transfers; 'item' = vBalItemWarehouse - correct, but the DB stalled after it went live
-// (reply 71), so it is opt-in until that is understood.
+// STOCK_VIEW: 'item' (default) = vBalItemWarehouse - the real warehouse balance, transfers
+// included (matches Gil's screen). 'byStock' = vBalByStockWH ignores transfers (K345101_BLACK 30 vs
+// real 0). The 12:00 stall blamed on the view was Chrome starving the DB server (reply 79); the view
+// is read once per 30 min on the background connection, never per item (reply 88).
 const STOCK_VIEWS = {
   byStock: `SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`,
   item: `SELECT ITEMKEY AS ItemKey, ITEMWARHBAL AS qty FROM vBalItemWarehouse WHERE WAREHOUSE = ${STOCK_WAREHOUSE}`,
 };
-export const STOCK_VIEW = process.env.STOCK_VIEW === 'item' ? 'item' : 'byStock';
+export const STOCK_VIEW = process.env.STOCK_VIEW === 'byStock' ? 'byStock' : 'item';
 const RETRY_AFTER_FAIL = 5 * 60_000; // a failed read is not retried for 5 min (no hammering a slow DB)
 // Readers reuse the map for STOCK_CACHE_MIN (default 30 = the stock-sync interval, which forces a fresh
 // read), so browsing never triggers extra all-items reads (reply 77; 5 min meant one every 5 min).

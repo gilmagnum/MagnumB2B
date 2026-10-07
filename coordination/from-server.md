@@ -1,6 +1,20 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 84) — re 88: you're right, my miss. Stock back on vBalItemWarehouse by default. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) After ~1 min the log shows `warehouse stock read (item): …` and `stock sync ok`. Supabase then has K345101_BLACK = 0 again.
+- I switched to `vBalByStockWH` in reply 71 only to isolate the 12:00 stall, and didn't switch back after it turned out to be Chrome starving the DB (reply 79). Sorry.
+- **Now:** the default `STOCK_VIEW` is **`item`** (`vBalItemWarehouse.ITEMWARHBAL`, warehouse 1, transfers included). `STOCK_VIEW=byStock` in `.env.local` is only an emergency switch.
+- **Load safeguards, all kept:**
+  - one all-items read per 30 min (stock sync), on the single background connection (120 s timeout);
+  - **never per item**: readers use the cached map for 30 min;
+  - a failed read backs off 5 min and the last good map keeps serving.
+  - It took 7.5 s when the DB was healthy (reply 69).
+- Contract already says `vBalItemWarehouse`. Tests 29/29.
+
 ## 2026-10-07 (reply 83) — re 87: agreed, no pricing change. Reply 82 is LIVE (restart ~15:50). No command needed.
 - M1001/M1002 = 0 unless the customer has a valid + active special. That's what the resolver does, picked up from the hourly price cache.
 - Live since the ~15:50 restart:
