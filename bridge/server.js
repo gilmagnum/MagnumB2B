@@ -297,6 +297,13 @@ const routes = [
     }
   }],
 
+  // Diagnostic (reply 89): the candidate "inactive" flags of ONE account - one indexed row.
+  ['GET', /^\/customers\/([^/]+)\/flags$/, async ({ params: [accountKey] }) => {
+    const [a] = await read.getAccountFlags(decodeURIComponent(accountKey));
+    if (!a) throw new HttpError(404, 'ACCOUNT_NOT_FOUND', `הלקוח ${accountKey} לא נמצא`);
+    return a;
+  }],
+
   // Customer balance (open A/R). ?agent=:id -> 403 unless it's that agent's customer.
   ['GET', /^\/customers\/([^/]+)\/balance$/, async ({ params: [accountKey], query }) => {
     const b = await getBalance(accountKey);

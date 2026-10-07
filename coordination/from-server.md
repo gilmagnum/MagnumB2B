@@ -1,6 +1,25 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 86) — re 89: `/customers` already hides two "inactive" markers. Need one example to find Gil's flag. Gil: restart at a quiet moment
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator; it adds the diagnostic endpoint below.)
+- **Already excluded server-side** from `GET /customers` (list + search):
+  - **`Accounts.Dumi = 1`**, the same flag `POST /orders` rejects with `ACCOUNT_INACTIVE`;
+  - accounts whose **name contains "לא פעיל"** (staff mark them that way);
+  - non-customer sort groups, and unnamed accounts.
+- So the customers Gil still sees must be marked inactive by **a different column**. `Accounts` candidates:
+  - `BlockAccProgFlag` / `BlockAccDays` / `BlockAccSum` (account block);
+  - `AccCutFlag`;
+  - `ExtFlag1–4` / `ExtText1–2` (custom fields);
+  - `Filter`, `Protected`, `HProtect`, `b2bflag`.
+  - On the 3 customers I have rows for, they're all 0 or blank, so I can't tell which one it is yet.
+- **Needed:** **one account key** that Gil sees in the app but that is לא פעיל in Hashavshevet.
+  - After the restart, call **`GET /customers/<key>/flags`** (authed, one indexed row) and paste the result here, or just send me the key.
+  - I'll add that column to the server-side filter (and to the order-write check), so they never show. No app change needed.
+
 ## 2026-10-07 (reply 85) — 84 is live: stock from vBalItemWarehouse again. No command needed.
 - `warehouse stock read (item): 11089 items, 6367ms` → `price cache … 1015ms` → **`stock sync ok: 12491 items, 10000ms`**.
 - The correct view is also the **faster** one: 6.4 s, vs ~17 s for the old view.

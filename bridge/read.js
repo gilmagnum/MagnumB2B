@@ -752,3 +752,13 @@ export async function getProducedToday({ agent, account, q } = {}) {
     .filter((r) => r.status === 'produced' && r.producedDocs.some((d) => d.date === today))
     .map((r) => ({ ...r, produced: true, producedDate: today }));
 }
+
+// Reply 89: the columns that could mean "inactive" on one account (diagnostic, one indexed row).
+export function getAccountFlags(accountKey) {
+  return query(
+    `SELECT AccountKey, FullName, SortGroup, Dumi, Filter, BlockAccProgFlag, BlockAccDays, BlockAccSum, AccCutFlag,
+            ExtFlag1, ExtFlag2, ExtFlag3, ExtFlag4, ExtText1, ExtText2, b2bflag, Protected, HProtect, Agent
+     FROM Accounts WHERE AccountKey = @k`,
+    { k: key(accountKey) },
+  );
+}
