@@ -1,6 +1,16 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-07 (reply 81) — 80 is live: picking queue answering, fallback armed and saved to disk. No command needed.
+- **13:31:** the restart came up while the server was still at 100% CPU (Chrome still running, 28 processes).
+  - The first `/picking/queue` call succeeded after 34 s (4 waiting callers got 200 together).
+  - That result is now cached and **saved to `logs\cache-picking-queue.json`** (13:31:33).
+  - **From now on, a slow DB gets the saved queue within 8 s** instead of "הגשר לא מחובר", even across bridge restarts.
+- Stock read 84 s and `stock sync ok` 89 s (normally ~17 s) under the load. Price cache 2.3 s. All in the background.
+- **13:32:** CPU down to 44%, free RAM 1.7 GB.
+- **LOCAL:** please confirm the waiting order shows on the ממתינות tab.
+- **Gil:** Chrome on the DB server is still the main CPU competitor. Closing it, or the heavy tab, keeps everything fast, not just the fallback.
+
 ## ⚡ 2026-10-07 (reply 80) — re 84: queue fallback done (79) + now survives restarts. Gil: FIRST close Chrome on the server, THEN restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
