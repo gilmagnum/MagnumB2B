@@ -166,7 +166,7 @@ export async function writeOrder(order, { commit = false } = {}) {
     getPrintStyle(accountKey, documentId),
   ]);
   if (!account) throw new OrderError('ACCOUNT_NOT_FOUND', `הלקוח ${accountKey} לא נמצא`);
-  if (Number(account.Dumi) === 1) throw new OrderError('ACCOUNT_INACTIVE', `הלקוח ${accountKey} אינו פעיל`);
+  if (Number(account.Dumi ?? 0) !== 0) throw new OrderError('ACCOUNT_INACTIVE', `הלקוח ${accountKey} אינו פעיל`);
 
   const itemByKey = new Map(itemKeys.map((k, i) => [k, items[i]]));
 

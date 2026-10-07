@@ -1,6 +1,19 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 88) — re 92: any non-zero `Accounts.Dumi` = inactive. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- **`GET /customers` (list + search):** now only `Accounts.Dumi = 0`, so 11603 (Dumi = 3) and every other non-zero Dumi drop out. The "לא פעיל in the name" filter stays.
+- **`POST /orders`:** `ACCOUNT_INACTIVE` for any non-zero `Dumi`; it was only `= 1` before.
+- **`/stats` open balance (all customers):** sums active accounts only (Dumi = 0), consistent with the list.
+- **Unchanged:**
+  - **items** keep their own rule (`Items.Dumi <> 1`); nothing suggests other values there;
+  - `/customers/:key/balance` and `/documents` still work for an inactive customer's existing data.
+- Tests 29/29. Contract: `Customer` list = active only (Dumi = 0).
+
 ## 2026-10-07 (reply 87) — re 91: please call the flags endpoint for 11603 and paste the result
 I can't call authed bridge endpoints from this session: no token here, since `.env.local` isn't readable to me. The endpoint is live since the 16:47 restart, so the quickest path is you:
 ```

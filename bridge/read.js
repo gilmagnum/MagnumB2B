@@ -2,7 +2,9 @@ import { query, key, sql } from './db.js';
 import { packInfo } from './pricing.js';
 import { NOTE_FIELDS, SUM_FIELDS, FLAG_FIELDS, CUSTOMER_SORT_GROUPS, SHIPPING_ITEMS, TRANSFER_ACCOUNTS } from './config.js';
 
-const ACTIVE = 'ISNULL(Dumi, 0) <> 1';
+const ACTIVE = 'ISNULL(Dumi, 0) <> 1'; // Items
+// Accounts: ANY non-zero Dumi = לא פעיל (reply 92: 11603 has Dumi = 3, active customers 0).
+export const ACCOUNT_ACTIVE = 'ISNULL(Dumi, 0) = 0';
 const ITEM_COLUMNS =
   'ID, ItemKey, ItemName, ForignName, Price, BarCode, DiscountCode, MatrixFlag, SuF4, Quantity, SalesUnit, SortGroup';
 
@@ -306,7 +308,7 @@ export async function getMatrixCells(fatherItemKey) {
 
 // Active accounts; pass agent to get only that agent's customers.
 // Active customers (not ledger/supplier accounts): Accounts.SortGroup in CUSTOMER_SORT_GROUPS,
-// Dumi<>1, named, and not marked "לא פעיל" in the name (staff do that instead of Dumi).
+// Dumi = 0 (any other value = לא פעיל), named, and not marked "לא פעיל" in the name (staff do that instead of Dumi).
 // agent: only that agent's customers (0 / missing = all, for admin).
 // q: name or account key contains q.
 export function getAccounts({ agent, q } = {}) {
@@ -323,7 +325,7 @@ export function getAccounts({ agent, q } = {}) {
   return query(
     `SELECT AccountKey, FullName, Agent, DiscountCode, TFtalDiscount, CreditTermsCode
      FROM Accounts
-     WHERE ${ACTIVE} AND SortGroup IN (${CUSTOMER_SORT_GROUPS.map(Number).join(',')})
+     WHERE ${ACCOUNT_ACTIVE} AND SortGroup IN (${CUSTOMER_SORT_GROUPS.map(Number).join(',')})
        AND LTRIM(RTRIM(ISNULL(FullName, ''))) <> ''
        AND FullName NOT LIKE N'%לא פעיל%'${where}
      ORDER BY FullName`,

@@ -302,7 +302,7 @@ async function openBalance(scope) {
     where += ' AND a.Agent = @agent';
     params.agent = Number(scope.agent);
   }
-  const [r] = await query(`SELECT SUM(a.Balance) AS total FROM Accounts a WHERE ISNULL(a.Dumi, 0) <> 1${where}`, params);
+  const [r] = await query(`SELECT SUM(a.Balance) AS total FROM Accounts a WHERE ISNULL(a.Dumi, 0) = 0${where}`, params);
   return round2(BALANCE_SIGN * (r?.total ?? 0));
 }
 

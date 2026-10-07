@@ -98,7 +98,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /health` → `{ ok: true }` (no auth)
 - `GET /items?shownOnSite=1[&category=<main or sub>][&search=<key/name/barcode>]` → `Item[]` (cached 60s)
 - `GET /items/:itemkey` → `Item` (with `cells` + stock per cell if matrix) · 404 if unknown
-- `GET /customers[?agent=:agentId][&q=]` → `Customer[]`, ordered: for an all-digit `q` exact accountKey → starts with → contains
+- `GET /customers[?agent=:agentId][&q=]` → `Customer[]` - **active only** (`Accounts.Dumi = 0`; any other value = לא פעיל, reply 92) - ordered: for an all-digit `q` exact accountKey → starts with → contains
   → others; then `active` before dormant; then name (he). `agent=0` or missing = **all** customers (admin); `agent=:id` = that agent's
   customers. `q` = name or accountKey contains (works with both). Customers = Accounts.SortGroup 10/11/12, Dumi≠1, named,
   and not marked "לא פעיל" in the name.
