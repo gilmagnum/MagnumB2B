@@ -20,7 +20,13 @@ const trim = (v) => (typeof v === 'string' ? v.trim() : v);
  *
  * Returns Map<itemKey, { price, discountPrc, source, priceListNumber }>
  */
-export async function resolvePrices(accountKey, itemKeys, { date = new Date(), quantities = {}, activeOnly = false } = {}) {
+const SPECIAL_RULE = process.env.PRICE_SPECIAL_RULE === 'always' ? 'always' : 'newer';
+
+export async function resolvePrices(
+  accountKey,
+  itemKeys,
+  { date = new Date(), quantities = {}, activeOnly = false, specialRule = SPECIAL_RULE } = {},
+) {
   const keys = [...new Set(itemKeys.map((k) => String(k).trim()))];
   if (!keys.length) return new Map();
   const params = {
@@ -32,19 +38,17 @@ export async function resolvePrices(accountKey, itemKeys, { date = new Date(), q
   const values = keys.map((_, i) => `(@k${i}, @q${i})`).join(',');
   const active = activeOnly ? 'AND h.Active = 1 AND m.Active = 1' : '';
 
-  // Matrix cells (reply 68/71): special prices are often defined on the MODEL only (10505:
-  // MG1507001 = 15 -25%, its cells have none), so a cell falls back to its father (IMatrixItems):
-  // the cell's own special > the father's special > discount by the cell's code (else the
-  // father's) > the cell's list price (else the father's).
+  // Matrix cells (reply 68/71): special prices are often defined on the MODEL only, so a cell falls
+  // back to its father (IMatrixItems): the cell's own special > the father's special > discount by
+  // the cell's code (else the father's) > the cell's list price (else the father's).
+  // specialRule 'newer' (default, reply 72): a special counts only if its ValidDate is on/after the
+  // item's latest price-list change (DatF) - a list update supersedes older specials. Matches
+  // Hashavshevet's own price pull on 117144 (10505: 2017-19 specials ignored after the 2024-09 list
+  // change) and the 11724 8.55 special (2024-09-22, after the 2024-08-29 list). 'always' = old rule.
+  const newerOnly = specialRule !== 'always';
   const rows = await query(
     `SELECT i.ItemKey, i.Price AS itemPrice, d.PriceListNumber, d.DiscountPrc,
-       COALESCE(
-         (SELECT TOP 1 p.Price FROM PriceLists p
-           WHERE p.ItemKey = i.ItemKey AND p.PriceListNumber = ISNULL(d.PriceListNumber, 1) AND p.DatF <= @asOf
-           ORDER BY p.DatF DESC, p.ID DESC),
-         (SELECT TOP 1 p.Price FROM PriceLists p
-           WHERE p.ItemKey = f.father AND p.PriceListNumber = ISNULL(d.PriceListNumber, 1) AND p.DatF <= @asOf
-           ORDER BY p.DatF DESC, p.ID DESC)) AS listPrice,
+       COALESCE(lp.Price, lpf.Price) AS listPrice,
        sp.Price AS specialPrice, sp.DiscountPrc AS specialDiscount, sp.AccountKey AS specialAccount,
        sp.ItemKey AS specialItem
      FROM (VALUES ${values}) AS want(ItemKey, Qty)
@@ -55,10 +59,17 @@ export async function resolvePrices(accountKey, itemKeys, { date = new Date(), q
      OUTER APPLY (SELECT NULLIF(LTRIM(RTRIM(AssignKey)), '') AS central FROM Accounts WHERE AccountKey = @acc) a
      OUTER APPLY (SELECT TOP 1 PriceListNumber, DiscountPrc FROM Discounts
                   WHERE AccountKey = @acc AND ItemDiscountCode = dc.code ORDER BY ID DESC) d
+     OUTER APPLY (SELECT TOP 1 p.Price, p.DatF FROM PriceLists p
+                  WHERE p.ItemKey = i.ItemKey AND p.PriceListNumber = ISNULL(d.PriceListNumber, 1) AND p.DatF <= @asOf
+                  ORDER BY p.DatF DESC, p.ID DESC) lp
+     OUTER APPLY (SELECT TOP 1 p.Price, p.DatF FROM PriceLists p
+                  WHERE p.ItemKey = f.father AND p.PriceListNumber = ISNULL(d.PriceListNumber, 1) AND p.DatF <= @asOf
+                  ORDER BY p.DatF DESC, p.ID DESC) lpf
      OUTER APPLY (SELECT TOP 1 m.Price, m.DiscountPrc, h.AccountKey, h.ItemKey
                   FROM SpecialPrices h JOIN SpecialPricesMoves m ON m.SPID = h.ID
                   WHERE h.AccountKey IN (@acc, a.central) AND h.ItemKey IN (i.ItemKey, f.father)
                     AND @asOf >= h.ValidDate AND @asOf < h.EndDate + 1
+                    ${newerOnly ? "AND h.ValidDate >= ISNULL(COALESCE(lp.DatF, lpf.DatF), '19000101')" : ''}
                     AND m.Price > 0 AND ISNULL(m.MinQuantity, 0) <= want.Qty ${active}
                   ORDER BY CASE WHEN h.ItemKey = i.ItemKey THEN 0 ELSE 1 END,
                            CASE WHEN h.AccountKey = @acc THEN 0 ELSE 1 END, h.ValidDate DESC,

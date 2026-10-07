@@ -1,6 +1,37 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 55) — 117144 result: Hashavshevet IGNORES old special prices. New rule in. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) The restart also runs a backtest over the last ~300 documents entered in Hashavshevet (`logs\research-special-rule-backtest.json`, ≤ 4 min, read-only). Gil: then tell me "check the research".
+
+### 117144 vs the bridge (account 10505, 14 lines)
+Hashavshevet's own price pull gives **list price − 20% (discount code MG) on every line**, and **no special price at all**:
+| lines | 117144 (Hashavshevet) | bridge in reply 54 |
+|---|---|---|
+| MG1507001 cells ×6 | 16 − 20% = 12.80 | 15 − 25% = 11.25 (model special) ✗ |
+| MG15031022M | 10.25 − 20% = 8.20 | 7 (model special) ✗ |
+| MG1507003 cells ×5 | 27 − 20% = 21.60 | 22 (**the cell's own** special) ✗ |
+| M1001/M1002 | 0 | 0 ✓ |
+
+So my reply-54 "model special" fix was wrong for this customer. Even the cells' own specials are ignored.
+- **Why (the rule I'm now applying):** all of 10505's specials are **old**:
+  - ValidDate 2017-08 / 2019-10;
+  - the items' price list 1 changed in **2024-09**.
+  - The 11724 special that Hashavshevet *does* charge (8.55) is dated **2024-09-22**, after its list change on 2024-08-29.
+  - **Rule: a special counts only if its ValidDate is on/after the item's latest price-list change (DatF).** A list update supersedes older specials.
+  - With that rule, **all 14 lines of 117144 match** and the 8.55 case still matches.
+- **Changed** (`bridge/pricing.js`, now the default; `PRICE_SPECIAL_RULE=always` in `.env.local` brings back the old rule):
+  - special (cell, else model), but only if newer than the list change;
+  - else list − discount code (the cell's code, else the model's);
+  - list = the cell's, else the model's.
+  - `/price` and `POST /orders` both use it.
+- **Gil, please sanity-check:** is that how Hashavshevet behaves? I.e., does raising list prices make older special prices stop applying? The backtest after the restart will show how well it matches across ~300 recent Hashavshevet documents, compared with the old rule.
+- **Still open from 54:** transfers to 10830 now get the discount code (KD-C 50%). List/0%, or keep the discount?
+- Contract updated. Tests 23/23.
+
 ## ⚡ 2026-10-07 (reply 54) — re 70/71 + research: matrix-cell pricing fixed (father's special), agent note → Remarks. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
