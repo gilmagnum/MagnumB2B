@@ -86,6 +86,26 @@ export function planShortages(lines, picked, shipping = new Set()) {
   return { changes, shortages };
 }
 
+// Pure plan for the packing/pallet lines: set to the picker's quantity (0 -> delete).
+export function planPacking(lines, picked, shipping) {
+  const changes = [];
+  const result = [];
+  for (const line of lines) {
+    const itemKey = trim(line.ItemKey);
+    if (!shipping.has(itemKey) || !picked.has(itemKey)) continue;
+    const qty = picked.get(itemKey);
+    picked.delete(itemKey); // only the first line of that item takes it
+    if (qty === line.Quantity) {
+      result.push({ itemkey: itemKey, qty, action: 'unchanged' });
+      continue;
+    }
+    const action = qty <= 0 ? 'deleted' : 'set';
+    changes.push({ lineId: line.ID, action: action === 'set' ? 'reduced' : 'deleted', qty: Math.max(qty, 0), price: line.Price, discountPrc: line.DiscountPrc ?? 0 });
+    result.push({ itemkey: itemKey, qty: Math.max(qty, 0), action });
+  }
+  return { changes, result };
+}
+
 /**
  * pickedQty per itemkey is spread over that item's lines in line order. Items not listed in
  * the request (and shipping lines) are left untouched. dryRun: everything runs, then ROLLBACK.
@@ -133,6 +153,10 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
 
     const vat = 1 + (order.VatPrc ?? VAT_PRC) / 100;
     const { changes, shortages } = planShortages(lines, picked, shipping);
+    // Packing/pallet lines (M1001/M1002, reply 86): the picker's quantity is the real one - it may be
+    // higher than the agent's seed; 0 deletes the line. Lines not sent are left as they are.
+    const packing = planPacking(lines, picked, shipping);
+    changes.push(...packing.changes);
     for (const c of changes) {
       const r = req().input('line', sql.Int, c.lineId);
       if (c.action === 'deleted') {
@@ -185,6 +209,7 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
       notesField: PICK_NOTES_FIELD,
       notes: noteText ?? trim(order.notes) ?? null,
       shortages,
+      packing: packing.result,
       totals: { net, gross },
     };
   } catch (err) {

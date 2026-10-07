@@ -642,8 +642,10 @@ export async function getDocument(stockId) {
       email: trim(o.EMail) || undefined,
       taxId: trim(o.TaxFileNum) || undefined,
     },
+    // Packing/pallet lines (M1001/M1002) always come last: the picker sets them at the end (reply 86).
     lines: lines
       .filter((l) => l.Tree !== 2) // matrix cells under a tree parent would double-count
+      .sort((a, b) => Number(shipping.has(trim(a.ItemKey))) - Number(shipping.has(trim(b.ItemKey))))
       .map((l) => ({
         itemkey: trim(l.ItemKey),
         lineId: l.ID,
@@ -656,7 +658,11 @@ export async function getDocument(stockId) {
         discountPct: l.DiscountPrc || 0,
         lineTotal: l.TFtal,
         onHand: parentStock.get(trim(l.ItemKey)) ?? whStockOf(wh, l.ItemKey), // warehouse-1 stock (parents: rolled up)
-        ...(shipping.has(trim(l.ItemKey)) && { isShipping: true }),
+        ...(shipping.has(trim(l.ItemKey)) && {
+          isShipping: true,
+          isPacking: true, // picker sets the quantity at the end; finish writes it (0 deletes the line)
+          packingLabel: Object.values(SHIPPING_ITEMS).find((s) => s.itemKey === trim(l.ItemKey))?.label,
+        }),
       })),
   };
 }
@@ -732,4 +738,16 @@ export async function getDocumentStatuses(stockIds) {
   const rows = await query(`SELECT ID, Status FROM Stock WHERE ID IN (${ids.join(',')})`);
   const byId = new Map(rows.map((r) => [r.ID, r.Status === 0 ? 'open' : 'produced']));
   return Object.fromEntries(ids.map((id) => [id, byId.get(id) ?? 'gone']));
+}
+
+// Manager view (reply 86): picked agent orders that were PRODUCED today - a document produced from
+// them (ת.משלוח / חשבונית, via BaseMoveID) is dated today. Recent picked orders only (30 days),
+// one indexed read + the produced-doc links. Rows carry produced: true, producedDate.
+export async function getProducedToday({ agent, account, q } = {}) {
+  const today = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD, server local time
+  const from = new Date(Date.now() - 30 * 24 * 60 * 60_000);
+  const rows = await getDocuments({ agent, account, q, picked: true, orderDocIds: [11], from, limit: 200 });
+  return rows
+    .filter((r) => r.status === 'produced' && r.producedDocs.some((d) => d.date === today))
+    .map((r) => ({ ...r, produced: true, producedDate: today }));
 }

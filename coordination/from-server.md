@@ -1,6 +1,36 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-07 (reply 82) — re 86: packing/pallet lines in picking + manager "produced today". Gil: restart at a quiet moment
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) This also loads reply 78 (pack fields on lines).
+
+### A. Packing (M1001 "חבילות") / pallets (M1002 "משטחים") picked at the end
+- **`POST /orders`:** unchanged input. `shipping: { carton, pallet }` is now just an optional **seed** (default 0).
+  - Every picking order still gets **both** lines, written **last**.
+  - **Price = the customer's price**, resolved like any item (special → discount code → list), no longer 0.
+  - **⚠ Today M1001/M1002 have `Items.Price = 0`** and, as far as I saw, no list price, so they'll resolve to **0 until Gil gives them a price** (price list 1 or a special per customer) in Hashavshevet. The bridge picks that up from the hourly price cache.
+  - Transfers (10830) and future orders: no packing lines, as before.
+- **`GET /documents/:id`:** the two lines always come **last**, flagged `isShipping: true, isPacking: true, packingLabel: "חבילות" | "משטחים"`, with `qty` = the current quantity (the agent's seed or 0), `unitPrice`, `discountPct`, `lineTotal`. Render them after the product lines with an editable quantity.
+- **`POST /picking/:id/finish`:** send them like any line, `{ itemkey: "M1001", pickedQty: 3 }`:
+  - the line is **set** to that quantity, which **may be higher** than the seed (unlike product lines, which only go down);
+  - **0 deletes** the line;
+  - not sent → left as is.
+  - The header totals are recomputed with them.
+  - The response adds `packing: [{ itemkey, qty, action: "set" | "deleted" | "unchanged" }]`.
+  - The quantity is in **units of the item** (packages / pallets), not cartons of something.
+- **Old orders** created before this restart carry M1001/M1002 at price 0. A picker's quantity still writes, but the line total stays 0 for those.
+
+### B. Manager: picked tab includes orders produced today
+- `GET /picking/queue?state=picked&includeProducedToday=1` → the usual picked-and-open orders, **plus** picked agent orders (doc 11) with a document produced from them (ת.משלוח / חשבונית) **dated today**.
+  - Those rows add `produced: true, producedDate: "YYYY-MM-DD"`, and `producedDocs` lists the documents.
+- Send the param only for managers; pickers keep today's behavior.
+- **Cost:** one indexed read of recent picked orders (last 30 days, ≤ 200) + the produced-doc links. It's inside the 30 s queue cache with the same stale fallback.
+
+Contract updated. Tests 29/29 (new: packing plan).
+
 ## 2026-10-07 (reply 81) — 80 is live: picking queue answering, fallback armed and saved to disk. No command needed.
 - **13:31:** the restart came up while the server was still at 100% CPU (Chrome still running, 28 processes).
   - The first `/picking/queue` call succeeded after 34 s (4 waiting callers got 200 together).

@@ -204,7 +204,10 @@ export async function writeOrder(order, { commit = false } = {}) {
   });
 
   // Quantity tiers of special prices count the total units per item.
-  const prices = await resolvePrices(accountKey, itemKeys, { quantities: Object.fromEntries(unitsByItem) });
+  // Packing/pallet lines (M1001/M1002) are priced like any item for this customer (reply 86).
+  const prices = await resolvePrices(accountKey, [...itemKeys, ...(transfer ? [] : shippingKeys)], {
+    quantities: Object.fromEntries(unitsByItem),
+  });
   // Reply 68: the bridge's resolution is authoritative (special > discount code > price list) and
   // the line carries the BASE price + discount % separately. The app's price is only a fallback
   // when the resolver has no price; a disagreement is logged (net per unit) for follow-up.
@@ -239,17 +242,21 @@ export async function writeOrder(order, { commit = false } = {}) {
     }
   }
 
-  // Like the app: picking orders always carry both shipping lines (qty 0 when unused,
-  // price 0 - priced manually in Hashavshevet). Future orders never get shipping lines.
-  const shippingLines = orderKind !== 'picking' || transfer ? [] : Object.entries(SHIPPING_ITEMS).map(([kind, s]) => ({
-    itemKey: s.itemKey,
-    quantity: order.shipping?.[kind] ?? 0,
-    price: 0,
-    discountPrc: 0,
-    fallbackName: s.name,
-    priceSource: 'shipping',
-    shipping: true,
-  }));
+  // Picking orders always carry both packing/pallet lines, last (qty = the agent's seed, default 0;
+  // the picker sets the real quantity on finish - reply 86). Priced at the customer's price.
+  // Future orders and transfers never get them.
+  const shippingLines = orderKind !== 'picking' || transfer ? [] : Object.entries(SHIPPING_ITEMS).map(([kind, s]) => {
+    const p = prices.get(s.itemKey);
+    return {
+      itemKey: s.itemKey,
+      quantity: order.shipping?.[kind] ?? 0,
+      price: p?.price ?? 0,
+      discountPrc: p?.discountPrc ?? 0,
+      fallbackName: s.name,
+      priceSource: p?.source ?? 'shipping',
+      shipping: true,
+    };
+  });
   const allLines = [...orderLines, ...shippingLines];
 
   // Hashavshevet stores dates as midnight; the driver sends Date objects as UTC.

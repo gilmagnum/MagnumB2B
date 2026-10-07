@@ -55,8 +55,8 @@ export const TRANSFER_ACCOUNTS = { '10830': { documentId: 19, fromWarehouse: 1, 
 
 // Picking orders always get both lines (qty 0 when unused); price 0 (priced manually in Hashavshevet). API shipping.carton -> parcel line.
 export const SHIPPING_ITEMS = {
-  carton: { itemKey: 'M1001', name: 'משלוח חבילה B2B' },
-  pallet: { itemKey: 'M1002', name: 'משלוח משטח B2B' },
+  carton: { itemKey: 'M1001', name: 'משלוח חבילה B2B', label: 'חבילות' },
+  pallet: { itemKey: 'M1002', name: 'משלוח משטח B2B', label: 'משטחים' },
 };
 
 // Every order line is flat (Tree=0), matrix cells included - see SERVER-CONTEXT §4/§5.

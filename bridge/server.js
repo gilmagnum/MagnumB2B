@@ -261,14 +261,19 @@ const routes = [
     const state = query.get('state') ?? 'waiting';
     if (!['waiting', 'picked'].includes(state)) throw new HttpError(400, 'BAD_REQUEST', 'מצב לא תקין');
     // Cached 30 s per exact query (pickers poll it); cleared by any order write or finish.
-    return queueCache.get(query.toString(), () => read.getPickingQueue({
+    const filter = {
       agent: Number(query.get('agent') || 0),
       account: query.get('account')?.trim() || undefined,
       q: query.get('q')?.trim() || undefined,
-      state,
-      limit: query.get('limit') ?? 200,
-      offset: query.get('offset') ?? 0,
-    }));
+    };
+    // includeProducedToday=1 (manager, picked tab - reply 86): also the picked orders produced today.
+    const withProduced = state === 'picked' && query.get('includeProducedToday') === '1';
+    return queueCache.get(query.toString(), async () => {
+      const queue = await read.getPickingQueue({ ...filter, state, limit: query.get('limit') ?? 200, offset: query.get('offset') ?? 0 });
+      if (!withProduced) return queue;
+      const seen = new Set(queue.map((d) => d.stockId));
+      return [...queue, ...(await read.getProducedToday(filter)).filter((d) => !seen.has(d.stockId))];
+    });
   }],
 
   // Status of many documents in one query: { stockIds: number[] (<= 500) } -> { [id]: open|produced|gone }

@@ -87,7 +87,7 @@ type DocumentDetail = Document & {
   orderNote?: string;         // agent's note (prefix removed) - line 'הערת סוכן: …' of Stock.Remarks, from POST /orders `note`
   customer: { address?: string; city?: string; phone?: string; email?: string; taxId?: string };
   lines: { itemkey: string; name: string; qty: number; unit?: string; unitPrice: number;
-           discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; units: number /* = qty, total units */; packs?: number; packSize?: number; packLabel?: 'קרטון' | 'חבילה' /* inferred: size line = bundle, else the pack dividing units evenly (carton first); absent when unknown */; isShipping?: true; lineId: number; size?: string }[];  // onHand = warehouse-1 stock now; M1001/M1002 flagged, not removed
+           discountPct: number; lineTotal: number; onHand?: number /* warehouse-1 stock */; units: number /* = qty, total units */; packs?: number; packSize?: number; packLabel?: 'קרטון' | 'חבילה' /* inferred: size line = bundle, else the pack dividing units evenly (carton first); absent when unknown */; isShipping?: true; isPacking?: true; packingLabel?: 'חבילות' | 'משטחים'; lineId: number; size?: string }[];  // onHand = warehouse-1 stock now; M1001/M1002 flagged, not removed
 };
 
 type ApiError = { error: { code: string; message: string } };  // message in Hebrew, show as-is
@@ -106,6 +106,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `GET /price?account=&item=&qty=` → `PriceResult`
 - `POST /prices` `{ account, items: [{ itemkey, qty? }] }` (max 500) → `PriceResult[]` (bulk, for the catalog grid). **Cache-first** (reply 81): resolved in memory - items/list-1 prices/matrix fathers cached 60 min (background), the account's discounts + special prices cached 30 min (loaded on its first request). Items created since the last load, or customers on a non-1 price list, fall back to SQL.
 - `GET /picking/queue[?agent=][&q=][&state=waiting|picked][&limit=200][&offset=0]` → `Document[]` (read-only), **oldest first**. Cached 30 s per exact query; cleared by POST /orders and POST /picking/:id/finish.
+- `GET /picking/queue?state=picked&includeProducedToday=1` (manager): also the picked doc-11 orders with a document produced from them **today**; those rows add `produced: true, producedDate: 'YYYY-MM-DD'`.
 - `POST /documents/status` `{ stockIds: number[] }` (max 500) → `{ [stockId]: 'open' | 'produced' | 'gone' }` - one indexed query (open = Status 0, produced = any other, gone = no such document).
   Open agent orders (doc 11, Status 0) + open transfers (doc 19) of transfer customers (10830). `waiting` (default) = no picker marker; `picked` = ExtraText2 `לוקט - <name>`
   (picked, waiting for production in Hashavshevet). Same row shape as /documents incl. `picked`, `picker`, `pickedMarker`.

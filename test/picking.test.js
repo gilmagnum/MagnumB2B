@@ -61,3 +61,20 @@ test('ruler sizes: a size entry targets only that size line', async () => {
   const all = plan(lines, new Map([['BR19625', 30]]), ship);
   assert.deepEqual(all.changes.map((c) => [c.lineId, c.action, c.qty]), [[2, 'reduced', 5]]);
 });
+
+test('planPacking: picker quantity on M1001/M1002 (increase, 0 deletes, untouched when absent)', async () => {
+  const { planPacking } = await import('../bridge/picking.js');
+  const lines = [
+    { ID: 1, ItemKey: 'A', Quantity: 10, Price: 5 },
+    { ID: 2, ItemKey: 'M1001', Quantity: 0, Price: 20, DiscountPrc: 0 },
+    { ID: 3, ItemKey: 'M1002', Quantity: 1, Price: 90, DiscountPrc: 10 },
+  ];
+  const shipping = new Set(['M1001', 'M1002']);
+  const r = planPacking(lines, new Map([['A', 10], ['M1001', 3], ['M1002', 0]]), shipping);
+  assert.deepEqual(r.changes, [
+    { lineId: 2, action: 'reduced', qty: 3, price: 20, discountPrc: 0 },
+    { lineId: 3, action: 'deleted', qty: 0, price: 90, discountPrc: 10 },
+  ]);
+  assert.deepEqual(r.result, [{ itemkey: 'M1001', qty: 3, action: 'set' }, { itemkey: 'M1002', qty: 0, action: 'deleted' }]);
+  assert.deepEqual(planPacking(lines, new Map([['A', 10]]), shipping).changes, []);
+});
