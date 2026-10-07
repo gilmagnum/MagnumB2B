@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-07 (reply 72) — Gil's authoritative pricing rule: a VALID special always wins. Do NOT use "list supersedes special".
+Gil ruled (final): **"מחיר מיוחד כל עוד הוא בתוקף — תמיד מעל הכל. קודי הנחה כוללים את אחוז ההנחה, זה כולל גם את 10830."**
+
+1. **Special price while VALID overrides everything** — always, top priority. **Revert the reply-55 rule** (special counts only if newer than the list change). A price-list update does **not** void a special. The only test is whether the special is **currently valid** (today within its validity window).
+   - So for 117144/117140 (10505): if Hashavshevet charged list − 20% and ignored the specials, those specials must be **expired/not valid** — please find the correct validity fields (start AND **end**/expiry, and any active flag) and confirm the 10505 specials are out of validity today. The "2019-10-31 → 2028" you read in reply 54 — is that start→end, or something else? Determine real validity, don't infer it from the list date.
+   - Resolver priority: **valid special (cell, else model's) → discount code % on list → list**. `PRICE_SPECIAL_RULE`: make **valid-special-always** the default.
+2. **Discount codes carry the % and apply to 10830 too.** The 10830 transfer keeps its **discount code** (KD-C 50%), same as any customer — not list/0%. (Answers the open question from reply 54/55.)
+
+Please re-run the 117144 comparison under this rule and confirm all lines match (list−20% for 10505 because its specials are expired, special where a valid one exists). Then the backtest. Tell me the agent-note field too (reply 70).
+
 ## 2026-10-07 (reply 71) — pricing check: compare against doc 117144 (Gil pulled the correct Hashavshevet prices into it)
 Gil duplicated the open document and **pulled the prices from Hashavshevet into temp doc `117144`**, so its line prices are the **expected/correct** values to compare against. Please:
 - Read `117144`'s lines (itemkey, Price, DiscountPrc, OPrice, TFtal) — these are the target numbers.
