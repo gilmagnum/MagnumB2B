@@ -87,6 +87,10 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
   }, [mainItems, sub, brand, season, group, q, sortBy, ctx, stockSynced, priceMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chip = (active: boolean) => (active ? "btn btn-primary btn-sm" : "btn btn-sm");
+  // Start with just search + the category bar; show products only once the user searches,
+  // picks a category, or applies a filter. On /search the page already has results → always show.
+  const active = !!mainFilter || !!q.trim() || !!sub || !!brand || !!season || !!group;
+  const showGrid = hideSearch || active;
 
   return (
     <>
@@ -102,14 +106,9 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
 
       {heading !== "" && <h1 style={{ marginBottom: 10 }}>{heading ?? mainFilter ?? "קטלוג"}</h1>}
 
-      {/* Sub-category chips for the selected main */}
-      {subs.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-          <button onClick={() => setSub("")} className={chip(!sub)}>הכל</button>
-          {subs.map((s) => (
-            <button key={s} onClick={() => setSub(s)} className={chip(sub === s)}>{s}</button>
-          ))}
-        </div>
+      {/* Prominent search — always available */}
+      {!hideSearch && (
+        <input placeholder="חיפוש מוצר (שם / מק״ט / מותג)…" value={q} onChange={(e) => setQ(e.target.value)} className="input" style={{ maxWidth: 440, marginBottom: 14 }} />
       )}
 
       <div className="card" style={{ marginBottom: 14, padding: "10px 14px", fontSize: 13, background: ctx ? "var(--brand-soft)" : "var(--surface-muted)", borderColor: ctx ? "var(--brand-soft)" : "var(--border)" }}>
@@ -117,22 +116,35 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
              : <>מוצג <b>מחירון כללי</b>. לכניסה למחיר לקוח — <a href="/customer">בחר לקוח</a>.</>}
       </div>
 
-      {/* search + filters + sort */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        {!hideSearch && <input placeholder="חיפוש חופשי…" value={q} onChange={(e) => setQ(e.target.value)} className="input" style={{ maxWidth: 240 }} />}
-        <select value={group} onChange={(e) => setGroup(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">קבוצה</option>{groups.map((x) => <option key={x}>{x}</option>)}</select>
-        <select value={brand} onChange={(e) => setBrand(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">מותג</option>{brands.map((x) => <option key={x}>{x}</option>)}</select>
-        <select value={season} onChange={(e) => setSeason(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">עונה</option>{seasons.map((x) => <option key={x}>{x}</option>)}</select>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as Sort)} className="select" style={{ maxWidth: 170 }}>
-          <option value="default">מיון: חדש קודם</option>
-          <option value="price-asc">מחיר: נמוך לגבוה</option>
-          <option value="price-desc">מחיר: גבוה לנמוך</option>
-          <option value="name">שם: א׳–ת׳</option>
-        </select>
-      </div>
+      {!showGrid ? (
+        <p style={{ color: "var(--ink-muted)", padding: "20px 4px" }}>חפש מוצר למעלה, או בחר קטגוריה — כדי להציג מוצרים.</p>
+      ) : (
+        <>
+          {/* Sub-category chips — horizontal scroll (like the main bar) so they never wrap on mobile */}
+          {subs.length > 0 && (
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 14 }}>
+              <button onClick={() => setSub("")} className={chip(!sub)} style={{ flex: "0 0 auto" }}>הכל</button>
+              {subs.map((s) => (
+                <button key={s} onClick={() => setSub(s)} className={chip(sub === s)} style={{ flex: "0 0 auto", whiteSpace: "nowrap" }}>{s}</button>
+              ))}
+            </div>
+          )}
 
-      <div style={{ color: "var(--ink-muted)", fontSize: 13, marginBottom: 10 }}>{shown.length} מוצרים{shown.length > limit ? ` · מוצגים ${limit}` : ""}</div>
-      <div className="card-grid">
+          {/* filters + sort */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+            <select value={group} onChange={(e) => setGroup(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">קבוצה</option>{groups.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={brand} onChange={(e) => setBrand(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">מותג</option>{brands.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={season} onChange={(e) => setSeason(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">עונה</option>{seasons.map((x) => <option key={x}>{x}</option>)}</select>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as Sort)} className="select" style={{ maxWidth: 170 }}>
+              <option value="default">מיון: חדש קודם</option>
+              <option value="price-asc">מחיר: נמוך לגבוה</option>
+              <option value="price-desc">מחיר: גבוה לנמוך</option>
+              <option value="name">שם: א׳–ת׳</option>
+            </select>
+          </div>
+
+          <div style={{ color: "var(--ink-muted)", fontSize: 13, marginBottom: 10 }}>{shown.length} מוצרים{shown.length > limit ? ` · מוצגים ${limit}` : ""}</div>
+          <div className="card-grid">
         {shown.slice(0, limit).map((it) => {
           const p = priceOf(it);
           return (
@@ -163,10 +175,12 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
           );
         })}
       </div>
-      {shown.length > limit && (
-        <div style={{ textAlign: "center", marginTop: 16 }}>
-          <button onClick={() => setLimit((l) => l + 150)} className="btn btn-primary">הצג עוד ({shown.length - limit})</button>
-        </div>
+          {shown.length > limit && (
+            <div style={{ textAlign: "center", marginTop: 16 }}>
+              <button onClick={() => setLimit((l) => l + 150)} className="btn btn-primary">הצג עוד ({shown.length - limit})</button>
+            </div>
+          )}
+        </>
       )}
     </>
   );
