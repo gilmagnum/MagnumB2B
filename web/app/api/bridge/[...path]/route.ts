@@ -18,26 +18,47 @@ function baseUrl(): string {
   return u.replace(/\/+$/, "");
 }
 
-// The middleware leaves /api public, so the proxy checks the caller itself:
+// The middleware leaves this route public, so the proxy identifies the caller itself:
 // only a signed-in user with an app profile may reach the bridge.
-async function signedIn(): Promise<boolean> {
+type Caller = { id: string; role: string; agentId: number | null };
+async function caller(): Promise<Caller | null> {
   const { data: { user } } = await (await supabaseServer()).auth.getUser();
-  if (!user) return false;
-  const { data: profile } = await supabaseAdmin().from("profiles").select("id").eq("id", user.id).maybeSingle();
-  return !!profile;
+  if (!user) return null;
+  const { data: p } = await supabaseAdmin().from("profiles").select("role, agent_id").eq("id", user.id).maybeSingle();
+  if (!p) return null;
+  return { id: user.id, role: (p.role as string) ?? "", agentId: (p.agent_id as number | null) ?? null };
 }
 
 async function forward(req: NextRequest, path: string[]) {
-  if (!(await signedIn())) return Response.json({ error: "unauthorized" }, { status: 401 });
+  const me = await caller();
+  if (!me) return Response.json({ error: "unauthorized" }, { status: 401 });
   const base = baseUrl();
   if (!base) return Response.json({ error: "BRIDGE_URL not configured" }, { status: 503 });
-  const url = `${base}/${path.join("/")}${req.nextUrl.search}`;
+
+  // H1 (proxy half): agent scoping is enforced on the server, never trusted from the browser.
+  const isManager = me.role === "admin" || me.role === "superadmin";
+  const p0 = path[0] ?? "";
+  const params = new URLSearchParams(req.nextUrl.search);
+  // Sync/admin routes and cross-agent ("scope=all") views are managers only.
+  if (!isManager && (p0 === "sync" || p0 === "admin")) return Response.json({ error: "forbidden" }, { status: 403 });
+  if (!isManager && params.get("scope") === "all") params.delete("scope");
+  if (me.role === "agent") {
+    // An agent only ever sees their own customers/documents/stats — force their agent id, drop any client value.
+    if (me.agentId == null) return Response.json({ error: "agent not configured" }, { status: 403 });
+    if (p0 === "customers" || p0 === "documents" || p0 === "stats") params.set("agent", String(me.agentId));
+  }
+  const qs = params.toString();
+  const url = `${base}/${path.join("/")}${qs ? "?" + qs : ""}`;
+
   const init: RequestInit = {
     method: req.method,
     headers: {
       Authorization: `Bearer ${BRIDGE_TOKEN}`,
       // Free ngrok shows an interstitial to browsers; this header skips it for our API calls.
       "ngrok-skip-browser-warning": "1",
+      // Trusted identity for the bridge's per-customer ownership check (the proxy holds BRIDGE_TOKEN).
+      "x-app-role": me.role,
+      "x-app-agent": me.agentId != null ? String(me.agentId) : "",
       ...(req.headers.get("content-type") ? { "Content-Type": req.headers.get("content-type") as string } : {}),
     },
     cache: "no-store",
