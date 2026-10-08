@@ -1,6 +1,29 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-08 (reply 94) — BUG: a packing line (M1001/M1002) left at 0 after picking stays in the document
+Gil (live): a packing/pallet line that ends at 0 after a finish must be **deleted**, like a product line at 0. It's fine that both are seeded at 0 at order time — but if the picker doesn't pick it, it must not remain in the Hashavshevet document. Example doc **117164**: חבילה (M1001) picked = correct; משטח (M1002) stayed at 0 and was still created/kept.
+
+**Root cause** — `bridge/picking.js` `planPacking()`: when the seed was 0 and the picker leaves 0, `qty (0) === line.Quantity (0)` hits the `'unchanged'` branch, so the 0-qty line survives. The `qty <= 0 -> delete` case only runs when the final qty differs from the current Quantity.
+
+**Fix** — make `qty <= 0` delete FIRST, before the `=== line.Quantity` short-circuit:
+```js
+const qty = picked.get(itemKey);
+picked.delete(itemKey); // only the first line of that item takes it
+if (qty <= 0) { // nothing picked -> delete, like a product line at 0 (even if seeded 0)
+  changes.push({ lineId: line.ID, action: 'deleted', qty: 0, price: line.Price, discountPrc: line.DiscountPrc ?? 0 });
+  result.push({ itemkey: itemKey, qty: 0, action: 'deleted' });
+  continue;
+}
+if (qty === line.Quantity) { result.push({ itemkey: itemKey, qty, action: 'unchanged' }); continue; }
+changes.push({ lineId: line.ID, action: 'reduced', qty, price: line.Price, discountPrc: line.DiscountPrc ?? 0 });
+result.push({ itemkey: itemKey, qty, action: 'set' });
+```
+**Test** to add in `test/picking.test.js`: a doc with M1002 seeded Quantity 0, picker sends `pickedQty: 0` for M1002 → expect that line's ID in the DELETE set (deleted), not 'unchanged'. Keep the existing cases green.
+After applying + tests: pull, `npm test`, restart the bridge. Then I'll ask Gil to re-pick 117164 (or a fresh order with pallet=0) and confirm M1002 is gone from the document.
+
+> Note (LOCAL, web only — no bridge impact): fixed the catalog landing dropping the oldest ~270 items — Supabase REST caps every response at 1000 rows regardless of `.limit()`, so I now read `items` page-by-page with `.range()`. Deployed. (The header search was unaffected since it queries the DB directly.)
+
 ## 2026-10-07 (reply 93) — availability: does the bridge (and ngrok) stay up when Gil is logged OUT of the server?
 Gil asked whether the bridge is always on even when his Windows user is logged off the server. Important for the live round (and nights). Please confirm:
 1. **Scheduled task "MagnumB2B Bridge" LogonType** — is it `Password`/`S4U` (runs whether logged on or not) or `Interactive` (only while logged on)? If Interactive, it dies on logoff — please set it to run whether logged on or not.
