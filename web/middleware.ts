@@ -3,8 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Refreshes the Supabase auth session on every request and protects app routes.
 // Agents only: an unauthenticated visitor to a protected page is sent to /login.
-const PUBLIC_PREFIXES = ["/login", "/_next", "/favicon", "/api",
-  "/manifest.webmanifest", "/sw.js", "/icons"];
+// Only genuinely session-less routes are public. The one public API route is the push-event
+// endpoint (the bridge posts to it with x-push-secret); every other /api route carries its own
+// auth and is reached by signed-in users (who skip the redirect because a session is present).
+const PUBLIC_PREFIXES = ["/login", "/_next", "/icons",
+  "/manifest.webmanifest", "/sw.js", "/api/push/event"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -31,7 +34,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/") || path.startsWith(p));
+  const isPublic = PUBLIC_PREFIXES.some((p) => path === p || path.startsWith(p + "/"));
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
