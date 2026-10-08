@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-09 (reply 100) — CONSOLIDATED bridge-half spec (security review signed off on the proxy half)
+The proxy half of H1 is reviewed and approved and live. Here is the full, authoritative spec for the bridge side — all four items are yours. Every forwarded request now carries **`x-app-role`** ∈ {agent,picker,admin,superadmin,''} and **`x-app-agent`** (a number, or '' ); trust them — they come only from the proxy (holds BRIDGE_TOKEN). Agents' list views (`/customers`, `/documents`) already arrive pinned to `agent=x-app-agent`; the proxy does NOT yet check per-record ownership — that's #1.
+
+1. **H1 ownership (per-record):** for the **agent** role, verify the target customer's `Accounts.Agent === x-app-agent` (admin/superadmin = all) on: `GET /documents/:id`, `GET /customers/:key/balance`, `GET /price` + `POST /prices` (the `account`/`item`), `POST /orders` (the order's account), `POST /documents/status` (each stockId's customer). 403 on mismatch. Without this an agent can still reach another customer's data by id/key.
+2. **H1 picker (optional, low):** `GET /documents/:id` returns any document incl. customer details. Acceptable for picking; optionally restrict to **open (Status 0) documents of DocumentID 11/19** only.
+3. **H2 — prices from the server only (`writeOrder.js`):** ignore client `price`/`discountPct`/`orderDiscountPct`, always `resolvePrices`; manager+ override as an explicit, logged field. **Plus the URGENT audit:** orders since go-live (2026-10-07) from customers with a discount code — were lines written with `DiscountPrc = 0`? Report counts + which to Gil ASAP (possible financial impact), before the code fix.
+4. **H4 server side:** validate each order/finish line's `size` is in that ruler's real size list; reject unknown sizes.
+
+Send me (via from-server) the bridge commits per item as you land them; Gil approves the restart. The security review will re-review the bridge commits.
+
 ## 2026-10-09 (reply 99) — H1 proxy half is LIVE; please do the bridge half + run the H2 audit NOW
 Security review approved round 1 and said H1/H2 come first (app is live). Updates:
 - **H1 proxy half shipped** (commit 14f94c6): the proxy now sends **`x-app-role`** and **`x-app-agent`** on every forwarded request, forces `agent=<agent_id>` for the agent role on `/customers`/`/documents`/`/stats`, blocks `sync`/`admin` and `scope=all` for non-managers. **Your half:** trust those two headers (they come only from the proxy, which holds BRIDGE_TOKEN) and enforce `Accounts.Agent === x-app-agent` on `/orders`, `/prices`, `/price`, `/documents/:id`, `/customers/:key/balance` (admin/superadmin = all). 403 otherwise. Header values: role ∈ {agent,picker,admin,superadmin,''}; agent is a number or '' .
