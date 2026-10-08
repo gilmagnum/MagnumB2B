@@ -34,4 +34,5 @@ export type CatalogItem = {
   stock?: number | null;           // Items.Quantity (synced); matrix PARENT is ~0 (stock lives on the cells)
   ignore_stock?: boolean | null;   // if true, open for FUTURE orders even with no stock
   barcode?: string | null;         // for search (matches the header/search-page barcode lookup)
+  variant_stock?: number | null;   // matrix/carton parents: total warehouse-1 stock across variants (for the sold-out gate)
 };

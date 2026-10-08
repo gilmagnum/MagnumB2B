@@ -1,4 +1,5 @@
 import { supabase, type CatalogItem } from "../../lib/supabase";
+import { getVariantStock, applyVariantStock } from "../../lib/variantStock";
 import CatalogView from "../components/CatalogView";
 
 // Read fresh from Supabase each request (catalog is synced from Hashavshevet, not build-time).
@@ -26,6 +27,9 @@ export default async function CatalogHome() {
     items.push(...batch);
     if (batch.length < PAGE) break;
   }
+
+  // Aggregate warehouse-1 stock onto matrix/carton parents, so a fully-sold-out parent can be hidden.
+  applyVariantStock(items, await getVariantStock());
 
   // Main categories ordered by product count (for the top bar).
   const counts = new Map<string, number>();

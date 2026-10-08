@@ -1,4 +1,5 @@
 import { supabase, type CatalogItem } from "../../../lib/supabase";
+import { getVariantStock, applyVariantStock } from "../../../lib/variantStock";
 import CatalogView from "../../components/CatalogView";
 import ImageUploader from "../../components/ImageUploader";
 
@@ -29,10 +30,12 @@ export default async function CategoryPage({ params }: { params: Promise<{ main:
   for (const r of catRows ?? []) { const k = (r as { category_main: string }).category_main; counts.set(k, (counts.get(k) ?? 0) + 1); }
   const allCategories = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
 
+  const items = applyVariantStock((data ?? []) as CatalogItem[], await getVariantStock());
+
   return (
     <>
       <ImageUploader kind="category" id={name} compact />
-      <CatalogView categoryMain={name} items={(data ?? []) as CatalogItem[]} allCategories={allCategories} />
+      <CatalogView categoryMain={name} items={items} allCategories={allCategories} />
     </>
   );
 }

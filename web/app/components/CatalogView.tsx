@@ -77,10 +77,15 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
   }, [ctx, items]);
 
   const stockSynced = useMemo(() => items.some((i) => (i.stock ?? 0) > 0), [items]);
-  // Hide single-SKU items with no stock when ordering (matrix/carton-size parents gated per cell).
-  const noStock = (i: CatalogItem) =>
-    !!ctx && stockSynced && !i.matrix_flag && !i.is_carton_size_item && (i.stock ?? 0) <= 0
-    && !(ctx.orderKind === "future" && i.ignore_stock);
+  // Hide sold-out items when ordering (warehouse 1). Single SKUs use their own stock; matrix/carton
+  // parents use the aggregate stock across their variants (variant_stock) — hidden only when it's
+  // known (not null) and 0, so a parent with no variant data is never hidden by mistake.
+  const noStock = (i: CatalogItem) => {
+    if (!ctx || !stockSynced) return false;
+    if (ctx.orderKind === "future" && i.ignore_stock) return false;
+    if (i.matrix_flag || i.is_carton_size_item) return i.variant_stock != null && i.variant_stock <= 0;
+    return (i.stock ?? 0) <= 0;
+  };
 
   const priceOf = (it: CatalogItem) => (ctx && priceMap[it.itemkey] != null ? priceMap[it.itemkey] : it.price);
 
