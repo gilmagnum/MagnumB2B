@@ -128,9 +128,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       });
       hashavshevetOk = true;
       fetch("/api/push/event", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "pick_finished", body: `${doc.customerName} · ${doc.docNumber ? "#" + doc.docNumber : doc.stockId}`, url: "/documents" }) }).catch(() => {});
+        body: JSON.stringify({ key: "pick_finished", context: { customerName: doc.customerName, ref: doc.docNumber ? "#" + doc.docNumber : String(doc.stockId) } }) }).catch(() => {});
       if (doc.agent != null) fetch("/api/push/event", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: "agent_order_picked", agentId: doc.agent, body: `הזמנת ${doc.customerName} לוקטה`, url: "/documents" }) }).catch(() => {});
+        body: JSON.stringify({ key: "agent_order_picked", agentId: doc.agent, context: { customerName: doc.customerName } }) }).catch(() => {});
     } catch (e) {
       const m = (e as Error).message || "";
       note = /NO_PERMISSION|501/.test(m) ? "חסרות הרשאות בשרת (GRANT ל-magnumapp) — יוחל לאחר ההרשאה."

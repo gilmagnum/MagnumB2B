@@ -3,6 +3,7 @@ import { getProfile } from "../../../../lib/auth";
 import { supabaseAdmin } from "../../../../lib/supabase/admin";
 import { sendPush } from "../../../../lib/push";
 import { canManageUsers } from "../../../../lib/roles";
+import { isInternalUrl } from "../../../../lib/pushEvents";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,6 @@ export async function POST(req: NextRequest) {
   } else if (target?.type === "user") {
     profileIds = [String(target.value)];
   }
-  const res = await sendPush(profileIds, { title, body: body || "", url: url || "/" });
+  const res = await sendPush(profileIds, { title, body: body || "", url: isInternalUrl(url) ? url : "/" });
   return Response.json(res);
 }

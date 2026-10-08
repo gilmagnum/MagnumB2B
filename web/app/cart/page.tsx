@@ -141,7 +141,7 @@ export default function CartPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           key: ctx.orderKind === "picking" ? "order_picking" : "order_future",
-          body: `${ctx.customerName} · הזמנה ${res.stockId}`, url: "/picking",
+          context: { customerName: ctx.customerName, ref: String(res.stockId) },
         }),
       }).catch(() => {});
       clear(); setDraft(null); setNote("");

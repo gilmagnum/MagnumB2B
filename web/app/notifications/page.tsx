@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "../../lib/supabase/browser";
+import { isInternalUrl } from "../../lib/pushEvents";
 
 type Notif = { id: string; title: string; body: string | null; url: string | null; created_at: string; read_at: string | null };
 
@@ -27,7 +28,8 @@ export default function NotificationsPage() {
 
   const open = async (n: Notif) => {
     if (!n.read_at) await markRead([n.id]);
-    if (n.url) window.location.href = n.url;
+    // Only ever navigate to a same-origin path (defence in depth — the server already stores internal URLs).
+    if (isInternalUrl(n.url)) window.location.href = n.url;
   };
 
   const unread = rows.filter((r) => !r.read_at).length;
