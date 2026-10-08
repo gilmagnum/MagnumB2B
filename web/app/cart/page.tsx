@@ -81,7 +81,9 @@ export default function CartPage() {
     if (r.ok) setDraft({ lines, updated_at: new Date().toISOString() });
   };
   const loadDraft = () => { if (draft) setAll(draft.lines as CartLine[]); };
-  const removeDraft = async () => { if (!ctx) return; await deleteDraft(ctx.accountKey); setDraft(null); };
+  const removeDraft = async () => { if (!ctx) return; if (!window.confirm("למחוק את הטיוטה השמורה?")) return; await deleteDraft(ctx.accountKey); setDraft(null); };
+  // Emptying the whole cart is destructive — confirm first.
+  const clearCart = () => { if (!lines.length) return; if (!window.confirm(`הסל יתרוקן (${lines.length} פריטים). האם בטוח?`)) return; clear(); };
 
   if (!ctx) return <p>יש לבחור לקוח לפני הזמנה. <a href="/customer">← בחירת לקוח</a></p>;
   if (!ctx.orderKind) return <p>יש לבחור סוג הזמנה. <a href="/start">← התחלת הזמנה</a></p>;
@@ -223,7 +225,7 @@ export default function CartPage() {
       <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <button onClick={submit} disabled={busy} style={{ background: "#1e2a78", color: "#fff", border: 0, borderRadius: 8, padding: "10px 18px", cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "שולח…" : "שלח הזמנה"}</button>
         <button onClick={saveDraftNow} className="btn">שמירת טיוטה</button>
-        <button onClick={clear} style={{ border: "1px solid #ccc", borderRadius: 8, padding: "10px 18px", cursor: "pointer", background: "#fff" }}>רוקן סל</button>
+        <button onClick={clearCart} style={{ border: "1px solid #ccc", borderRadius: 8, padding: "10px 18px", cursor: "pointer", background: "#fff" }}>רוקן סל</button>
         {draftMsg && <span className="chip chip-ok">{draftMsg}</span>}
       </div>
       {msg && <p style={{ marginTop: 16, padding: 12, borderRadius: 8, background: msg.includes("✓") ? "#e8f7ee" : "#fdecea" }}>{msg}</p>}
