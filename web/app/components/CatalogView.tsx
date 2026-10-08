@@ -9,26 +9,39 @@ import AddToCart from "./AddToCart";
 import StockLine from "./StockLine";
 
 const uniq = (xs: (string | null)[]) => [...new Set(xs.filter(Boolean) as string[])].sort();
+type Sort = "default" | "price-asc" | "price-desc" | "name";
 
-export default function CatalogView({ categoryMain, items, allCategories = [] }: {
-  categoryMain: string; items: CatalogItem[]; allCategories?: string[];
+// Catalog browser. Used by a single category (/catalog/[main]), by the whole catalog
+// (/catalog) and by search results (/search) — all get the same category/sub bars, search,
+// filters and sort. `categoryMain` seeds the main-category filter (switchable in-page);
+// `searchMode` shows all results across categories.
+export default function CatalogView({ categoryMain, items, allCategories = [], initialQ = "", searchMode = false, heading, hideSearch = false }: {
+  categoryMain?: string; items: CatalogItem[]; allCategories?: string[]; initialQ?: string; searchMode?: boolean; heading?: string; hideSearch?: boolean;
 }) {
   const { ctx } = useOrderContext();
   const showStock = canSeeStock(useRole());
+  // Initial main: the given category, else the largest one (so /catalog lands populated), else all.
+  const [mainFilter, setMainFilter] = useState<string>(categoryMain ?? (searchMode ? "" : (allCategories[0] ?? "")));
   const [sub, setSub] = useState<string>("");
   const [brand, setBrand] = useState<string>("");
   const [season, setSeason] = useState<string>("");
   const [group, setGroup] = useState<string>("");
-  const [q, setQ] = useState<string>("");
+  const [q, setQ] = useState<string>(initialQ);
+  const [sortBy, setSortBy] = useState<Sort>("default");
   const [priceMap, setPriceMap] = useState<Record<string, number>>({});
   const [discMap, setDiscMap] = useState<Record<string, number>>({}); // customer discount % per item
 
-  const subs = useMemo(() => uniq(items.map((i) => i.category_sub)), [items]);
-  const brands = useMemo(() => uniq(items.map((i) => i.brand)), [items]);
-  const seasons = useMemo(() => uniq(items.map((i) => i.season)), [items]);
-  const groups = useMemo(() => uniq(items.map((i) => i.group_name)), [items]);
+  // Items in the selected main category (drives the sub-category and filter options).
+  const mainItems = useMemo(() => (mainFilter ? items.filter((i) => i.category_main === mainFilter) : items), [items, mainFilter]);
+  const subs = useMemo(() => uniq(mainItems.map((i) => i.category_sub)), [mainItems]);
+  const brands = useMemo(() => uniq(mainItems.map((i) => i.brand)), [mainItems]);
+  const seasons = useMemo(() => uniq(mainItems.map((i) => i.season)), [mainItems]);
+  const groups = useMemo(() => uniq(mainItems.map((i) => i.group_name)), [mainItems]);
 
-  // Customer pricing: when a customer is entered, fetch this category's prices in bulk.
+  // Switching the main category clears the narrower filters (they may not exist under it).
+  useEffect(() => { setSub(""); setBrand(""); setSeason(""); setGroup(""); }, [mainFilter]);
+
+  // Customer pricing: when a customer is entered, fetch prices for the loaded items in bulk.
   useEffect(() => {
     if (!ctx) { setPriceMap({}); setDiscMap({}); return; }
     let cancelled = false;
@@ -47,52 +60,51 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
     return () => { cancelled = true; };
   }, [ctx, items]);
 
-  // Hide no-stock products for ordering (single-SKU items only; matrix stock lives on cells so
-  // the parent is ~0 and is gated on the product page). Guarded: only when stock looks synced.
   const stockSynced = useMemo(() => items.some((i) => (i.stock ?? 0) > 0), [items]);
-  // Hide items with no stock when ordering. Matrix / carton-size parents are excluded —
-  // their parent-SKU balance isn't the real stock (it lives on the cells), so gating is
-  // per-cell on the product page. Rulers ARE single SKUs with a real balance, so they're gated.
+  // Hide single-SKU items with no stock when ordering (matrix/carton-size parents gated per cell).
   const noStock = (i: CatalogItem) =>
     !!ctx && stockSynced && !i.matrix_flag && !i.is_carton_size_item && (i.stock ?? 0) <= 0
     && !(ctx.orderKind === "future" && i.ignore_stock);
 
-  const shown = useMemo(() => items.filter((i) =>
-    (!sub || i.category_sub === sub) &&
-    (!brand || i.brand === brand) &&
-    (!season || i.season === season) &&
-    (!group || i.group_name === group) &&
-    (!q || i.item_name?.includes(q) || i.itemkey?.toLowerCase().includes(q.toLowerCase())) &&
-    !noStock(i)
-  ), [items, sub, brand, season, group, q, ctx, stockSynced]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const priceOf = (it: CatalogItem) => (ctx && priceMap[it.itemkey] != null ? priceMap[it.itemkey] : it.price);
+
+  const shown = useMemo(() => {
+    const list = mainItems.filter((i) =>
+      (!sub || i.category_sub === sub) &&
+      (!brand || i.brand === brand) &&
+      (!season || i.season === season) &&
+      (!group || i.group_name === group) &&
+      (!q || i.item_name?.includes(q) || i.itemkey?.toLowerCase().includes(q.toLowerCase())) &&
+      !noStock(i));
+    const pr = (it: CatalogItem) => { const p = priceOf(it); return p == null ? Infinity : Number(p); };
+    if (sortBy === "price-asc") return [...list].sort((a, b) => pr(a) - pr(b));
+    if (sortBy === "price-desc") return [...list].sort((a, b) => pr(b) - pr(a));
+    if (sortBy === "name") return [...list].sort((a, b) => (a.item_name ?? "").localeCompare(b.item_name ?? "", "he"));
+    return list; // "default" = as loaded (newest first by item_seq from the query)
+  }, [mainItems, sub, brand, season, group, q, sortBy, ctx, stockSynced, priceMap]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const chip = (active: boolean) => (active ? "btn btn-primary btn-sm" : "btn btn-sm");
 
   return (
     <>
-      {/* top category bar — small fixed squares */}
+      {/* Main-category bar — filters in place (no page reload). */}
       {allCategories.length > 0 && (
         <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 14 }}>
+          <button onClick={() => setMainFilter("")} className={chip(!mainFilter)} style={{ flex: "0 0 auto" }}>הכל</button>
           {allCategories.map((c) => (
-            <a key={c} href={`/catalog/${encodeURIComponent(c)}`}
-              style={{
-                flex: "0 0 auto", padding: "8px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, textDecoration: "none",
-                border: "1px solid var(--border)", whiteSpace: "nowrap",
-                background: c === categoryMain ? "var(--brand)" : "var(--surface)",
-                color: c === categoryMain ? "var(--on-brand)" : "var(--ink)",
-              }}>{c}</a>
+            <button key={c} onClick={() => setMainFilter(c)} className={chip(c === mainFilter)} style={{ flex: "0 0 auto", whiteSpace: "nowrap" }}>{c}</button>
           ))}
         </div>
       )}
 
-      <h1 style={{ marginBottom: 10 }}>{categoryMain}</h1>
+      {heading !== "" && <h1 style={{ marginBottom: 10 }}>{heading ?? mainFilter ?? "קטלוג"}</h1>}
 
-      {/* sub-categories as a chip row (opens below the category bar) */}
+      {/* Sub-category chips for the selected main */}
       {subs.length > 0 && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-          <button onClick={() => setSub("")} className={!sub ? "btn btn-primary btn-sm" : "btn btn-sm"}>הכל</button>
+          <button onClick={() => setSub("")} className={chip(!sub)}>הכל</button>
           {subs.map((s) => (
-            <button key={s} onClick={() => setSub(s)} className={sub === s ? "btn btn-primary btn-sm" : "btn btn-sm"}>{s}</button>
+            <button key={s} onClick={() => setSub(s)} className={chip(sub === s)}>{s}</button>
           ))}
         </div>
       )}
@@ -102,12 +114,18 @@ export default function CatalogView({ categoryMain, items, allCategories = [] }:
              : <>מוצג <b>מחירון כללי</b>. לכניסה למחיר לקוח — <a href="/customer">בחר לקוח</a>.</>}
       </div>
 
-      {/* dynamic search + filters */}
+      {/* search + filters + sort */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        <input placeholder="חיפוש דינמי…" value={q} onChange={(e) => setQ(e.target.value)} className="input" style={{ maxWidth: 240 }} />
+        {!hideSearch && <input placeholder="חיפוש חופשי…" value={q} onChange={(e) => setQ(e.target.value)} className="input" style={{ maxWidth: 240 }} />}
         <select value={group} onChange={(e) => setGroup(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">קבוצה</option>{groups.map((x) => <option key={x}>{x}</option>)}</select>
         <select value={brand} onChange={(e) => setBrand(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">מותג</option>{brands.map((x) => <option key={x}>{x}</option>)}</select>
         <select value={season} onChange={(e) => setSeason(e.target.value)} className="select" style={{ maxWidth: 160 }}><option value="">עונה</option>{seasons.map((x) => <option key={x}>{x}</option>)}</select>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as Sort)} className="select" style={{ maxWidth: 170 }}>
+          <option value="default">מיון: חדש קודם</option>
+          <option value="price-asc">מחיר: נמוך לגבוה</option>
+          <option value="price-desc">מחיר: גבוה לנמוך</option>
+          <option value="name">שם: א׳–ת׳</option>
+        </select>
       </div>
 
       <div style={{ color: "var(--ink-muted)", fontSize: 13, marginBottom: 10 }}>{shown.length} מוצרים</div>

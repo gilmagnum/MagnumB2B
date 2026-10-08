@@ -3,7 +3,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import type { CatalogItem } from "../../lib/supabase";
-import ProductGrid from "../components/ProductGrid";
+import CatalogView from "../components/CatalogView";
 
 function SearchView() {
   const initial = useSearchParams().get("q") ?? "";
@@ -38,6 +38,12 @@ function SearchView() {
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [q, run]);
 
+  const cats = (() => {
+    const m = new Map<string, number>();
+    for (const i of items) if (i.category_main) m.set(i.category_main, (m.get(i.category_main) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  })();
+
   return (
     <>
       <h1>חיפוש מוצרים</h1>
@@ -53,7 +59,7 @@ function SearchView() {
         ? <p style={{ color: "var(--ink-muted)" }}>הקלד לפחות 2 תווים.</p>
         : searched && items.length === 0 && !loading
           ? <p style={{ color: "var(--ink-muted)" }}>לא נמצאו מוצרים.</p>
-          : <ProductGrid items={items} />}
+          : <CatalogView items={items} allCategories={cats} searchMode hideSearch heading="" />}
     </>
   );
 }

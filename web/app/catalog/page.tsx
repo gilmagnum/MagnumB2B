@@ -1,63 +1,30 @@
-import { supabase } from "../../lib/supabase";
+import { supabase, type CatalogItem } from "../../lib/supabase";
+import CatalogView from "../components/CatalogView";
 
 // Read fresh from Supabase each request (catalog is synced from Hashavshevet, not build-time).
 export const dynamic = "force-dynamic";
 
-// Catalog landing = grid of MAIN categories (like the current site's home).
+// Catalog landing: the same browse layout as a category (main+sub bars, search, filters, sort)
+// over the whole catalog, newest first. The main-category bar filters in-page.
 export default async function CatalogHome() {
   const { data, error } = await supabase
     .from("items")
-    .select("category_main,image_url")
+    .select("itemkey,item_name,category_main,category_sub,brand,season,group_name,price,per_carton,per_bundle,image_url,shown_on_site,matrix_flag,is_carton_size_item,ruler_code,stock,ignore_stock")
     .eq("shown_on_site", true)
-    .not("category_main", "is", null)
+    .order("item_seq", { ascending: false, nullsFirst: false })
+    .order("image_url", { ascending: false, nullsFirst: false })
+    .order("itemkey", { ascending: false })
     .limit(5000);
 
   if (error) return <p>שגיאה בטעינת הקטלוג: {error.message}</p>;
+  const items = (data ?? []) as CatalogItem[];
 
-  const map = new Map<string, { count: number; image: string | null }>();
-  for (const r of data ?? []) {
-    const k = (r as { category_main: string | null }).category_main;
-    if (!k) continue;
-    const e = map.get(k) ?? { count: 0, image: null };
-    e.count++;
-    if (!e.image && (r as { image_url: string | null }).image_url) e.image = (r as { image_url: string | null }).image_url;
-    map.set(k, e);
-  }
-  // Manager-set category image overrides (app_settings key "category_image:<name>").
-  const { data: ov } = await supabase.from("app_settings").select("key, value").like("key", "category_image:%");
-  const overrides = new Map<string, string>();
-  for (const row of ov ?? []) {
-    const k = (row as { key: string }).key.slice("category_image:".length);
-    const url = ((row as { value: { url?: string } }).value)?.url;
-    if (url) overrides.set(k, url);
-  }
-  for (const [name, info] of map) { const o = overrides.get(name); if (o) info.image = o; }
+  // Main categories ordered by product count (for the top bar).
+  const counts = new Map<string, number>();
+  for (const i of items) { const k = i.category_main; if (k) counts.set(k, (counts.get(k) ?? 0) + 1); }
+  const allCategories = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
 
-  const cats = [...map.entries()].sort((a, b) => b[1].count - a[1].count);
-  if (!cats.length) return <p>אין קטגוריות להצגה (סנכרן את הקטלוג).</p>;
+  if (!items.length) return <p>אין מוצרים להצגה (סנכרן את הקטלוג).</p>;
 
-  return (
-    <>
-      <h1>קטלוג מוצרים</h1>
-      <form action="/search" style={{ margin: "8px 0 24px" }}>
-        <input name="q" placeholder="חיפוש מוצר בכל הקטלוג…" aria-label="חיפוש מוצר"
-          className="input" style={{ maxWidth: 440 }} />
-      </form>
-      <div className="cat-grid">
-        {cats.map(([name, info]) => (
-          <a key={name} href={`/catalog/${encodeURIComponent(name)}`} style={{ textDecoration: "none", color: "inherit" }}>
-            <div className="product-card" style={{ padding: 0, overflow: "hidden" }}>
-              {info.image
-                ? // eslint-disable-next-line @next/next/no-img-element
-                  <img src={info.image} alt={name} className="img-square" style={{ borderRadius: 0 }} />
-                : <div style={{ aspectRatio: "1 / 1", background: "var(--surface-muted)" }} />}
-              <div style={{ textAlign: "center", padding: 14, color: "var(--brand-strong)", fontWeight: 700 }}>
-                {name} <span style={{ color: "var(--ink-muted)", fontWeight: 400, fontSize: 13 }}>({info.count})</span>
-              </div>
-            </div>
-          </a>
-        ))}
-      </div>
-    </>
-  );
+  return <CatalogView items={items} allCategories={allCategories} heading="קטלוג מוצרים" />;
 }
