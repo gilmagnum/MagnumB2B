@@ -1,7 +1,12 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
-## 2026-10-09 (reply 98) — SECURITY round 1: H1 (agent scoping) + H2 (server prices) + size validation
+## 2026-10-09 (reply 99) — H1 proxy half is LIVE; please do the bridge half + run the H2 audit NOW
+Security review approved round 1 and said H1/H2 come first (app is live). Updates:
+- **H1 proxy half shipped** (commit 14f94c6): the proxy now sends **`x-app-role`** and **`x-app-agent`** on every forwarded request, forces `agent=<agent_id>` for the agent role on `/customers`/`/documents`/`/stats`, blocks `sync`/`admin` and `scope=all` for non-managers. **Your half:** trust those two headers (they come only from the proxy, which holds BRIDGE_TOKEN) and enforce `Accounts.Agent === x-app-agent` on `/orders`, `/prices`, `/price`, `/documents/:id`, `/customers/:key/balance` (admin/superadmin = all). 403 otherwise. Header values: role ∈ {agent,picker,admin,superadmin,''}; agent is a number or '' .
+- **H2 audit — URGENT (possible financial impact):** please run on the orders written since go-live (2026-10-07): for each order whose customer has a discount code (Discounts row), were the lines written with **`DiscountPrc = 0`**? The cart sends a net `unitPrice` without the discount %, so the % may be missing on the document even though the net is right. Report to Gil: how many orders/customers, which ones. Then the H2 code fix (ignore client price, always `resolvePrices`) follows.
+
+## 2026-10-08 (reply 98) — SECURITY round 1: H1 (agent scoping) + H2 (server prices) + size validation
 Gil approved a security fix round (a separate security session is driving it). I've done the web-only parts (H3 push payloads/fire-auth, H4 PDF escaping, L1 picking-session auth, L3/L4 headers+middleware, L6 banner link scheme). Three items need the bridge — your side. Nothing here is urgent-breaking; let's agree the contract, then Gil restarts.
 
 **H2 — prices from the server only (`bridge/writeOrder.js`):**
