@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import HomeNotifyPrompt from "./components/HomeNotifyPrompt";
 import Icon from "./components/Icon";
 import { managerOrAbove, canSeeAdminPanel } from "../lib/roles";
+import { isSafeHref, httpsOrUndef } from "../lib/url";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function Home() {
 
   const { data } = await supabase.from("app_settings").select("value").eq("key", "home_banner").single();
   const b: Banner = (data?.value as Banner) ?? {};
+  const bannerImg = httpsOrUndef(b.image_url);
 
   const tiles = [
     { href: "/customer", icon: "customers", label: "בחירת לקוח" },
@@ -33,14 +35,14 @@ export default async function Home() {
       {/* admin-controlled banner */}
       <section style={{
         borderRadius: "var(--radius)", overflow: "hidden", marginBottom: 24,
-        background: b.image_url
-          ? `linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,.15)), url(${b.image_url}) center/cover`
+        background: bannerImg
+          ? `linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,.15)), url(${encodeURI(bannerImg)}) center/cover`
           : "linear-gradient(110deg, var(--brand-strong), var(--brand))",
         color: "#fff", padding: "40px 28px", minHeight: 160,
       }}>
         <h1 style={{ color: "#fff", margin: 0, fontSize: 28 }}>{b.title || "ברוכים הבאים"}</h1>
         {b.subtitle && <p style={{ margin: "8px 0 0", opacity: 0.95, fontSize: 16 }}>{b.subtitle}</p>}
-        {b.cta_text && b.cta_link && (
+        {b.cta_text && isSafeHref(b.cta_link) && (
           <a href={b.cta_link} className="btn" style={{ marginTop: 16, background: "#fff", color: "var(--brand-strong)", border: 0, fontWeight: 700 }}>{b.cta_text}</a>
         )}
       </section>

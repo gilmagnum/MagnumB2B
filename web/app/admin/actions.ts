@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getProfile } from "../../lib/auth";
 import { supabaseAdmin } from "../../lib/supabase/admin";
 import { canManageUsers, canEditRulers, roleLabel } from "../../lib/roles";
+import { isSafeHref, httpsOrUndef } from "../../lib/url";
 
 export type AdminState = { error?: string; ok?: string };
 
@@ -54,12 +55,16 @@ export async function createUserAction(_prev: AdminState, formData: FormData): P
 // Save the home-page banner (superadmin-controlled; lives in the ניהול panel).
 export async function saveBannerAction(_prev: AdminState, formData: FormData): Promise<AdminState> {
   try { await requireSuperadmin(); } catch { return { error: "אין הרשאה" }; }
+  const ctaLink = String(formData.get("cta_link") ?? "").trim();
+  const imageUrl = String(formData.get("image_url") ?? "").trim();
+  if (ctaLink && !isSafeHref(ctaLink)) return { error: "קישור הכפתור חייב להיות נתיב פנימי (/…) או https" };
+  if (imageUrl && !httpsOrUndef(imageUrl)) return { error: "קישור התמונה חייב להיות https" };
   const value = {
     title: String(formData.get("title") ?? "").trim(),
     subtitle: String(formData.get("subtitle") ?? "").trim(),
-    image_url: String(formData.get("image_url") ?? "").trim(),
+    image_url: imageUrl,
     cta_text: String(formData.get("cta_text") ?? "").trim(),
-    cta_link: String(formData.get("cta_link") ?? "").trim(),
+    cta_link: ctaLink,
   };
   const { error } = await supabaseAdmin().from("app_settings")
     .upsert({ key: "home_banner", value, updated_at: new Date().toISOString() }, { onConflict: "key" });
