@@ -92,21 +92,31 @@ export default function PickingPage() {
                 </div>
                 <div style={{ fontWeight: 600 }}>{d.customerName} <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}>({d.accountKey})</span></div>
                 <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>{d.docTypeName}{d.total != null ? ` · ${d.total.toFixed(2)} ₪` : ""}</div>
-                {d.produced && <span className="chip chip-ok" style={{ width: "fit-content" }}>הופק{d.producedDate ? ` · ${new Date(d.producedDate).toLocaleDateString("he-IL")}` : ""}</span>}
-                {state === "picked" && logs[d.stockId] && (
+                {d.produced && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <span className="chip chip-ok" style={{ width: "fit-content" }}>הופק{d.producedDate ? ` · ${new Date(d.producedDate).toLocaleDateString("he-IL")}` : ""}</span>
+                    {/* The permanent reference numbers produced from the order (ת.משלוח / חשבונית). */}
+                    {d.producedDocs?.filter((p) => p.docNumber).map((p) => (
+                      <span key={p.documentId} className="chip" style={{ width: "fit-content" }}>אסמכתא: {p.docTypeName} #{p.docNumber}</span>
+                    ))}
+                  </div>
+                )}
+                {state === "picked" && (logs[d.stockId] || d.produced) && (
                   <div>
                     <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenLog(openLog === d.stockId ? null : d.stockId); }}
                       className="btn btn-sm" style={{ padding: "2px 10px" }}>{openLog === d.stockId ? "− הערות וחוסרים" : "+ הערות וחוסרים"}</button>
                     {openLog === d.stockId && (() => { const lg = logs[d.stockId]; return (
                       <div style={{ marginTop: 6, fontSize: 13, background: "var(--surface-muted)", borderRadius: 8, padding: 8 }}>
-                        {lg.picker && <div>מלקט: <b>{lg.picker}</b></div>}
-                        {lg.notes && <div>הערת מלקט: {lg.notes}</div>}
-                        {lg.shortages?.length
-                          ? <div style={{ marginTop: 4 }}><b>חוסרים ({lg.shortages.length}):</b>
-                              <ul style={{ margin: "2px 0 0", paddingInlineStart: 16 }}>
-                                {lg.shortages.map((s, i) => <li key={i}>{s.itemkey}{s.size ? ` (${s.size})` : ""} — לוקט {s.picked}/{s.ordered}</li>)}
-                              </ul></div>
-                          : <div style={{ color: "var(--ok)" }}>אין חוסרים</div>}
+                        {lg?.picker && <div>מלקט: <b>{lg.picker}</b></div>}
+                        {lg?.notes && <div>הערת מלקט: {lg.notes}</div>}
+                        {lg
+                          ? (lg.shortages?.length
+                            ? <div style={{ marginTop: 4 }}><b>חוסרים ({lg.shortages.length}):</b>
+                                <ul style={{ margin: "2px 0 0", paddingInlineStart: 16 }}>
+                                  {lg.shortages.map((s, i) => <li key={i}>{s.itemkey}{s.size ? ` (${s.size})` : ""} — לוקט {s.picked}/{s.ordered}</li>)}
+                                </ul></div>
+                            : <div style={{ color: "var(--ok)" }}>אין חוסרים</div>)
+                          : <div style={{ color: "var(--ink-muted)" }}>אין תיעוד ליקוט באפליקציה למסמך זה.</div>}
                       </div>
                     ); })()}
                   </div>
