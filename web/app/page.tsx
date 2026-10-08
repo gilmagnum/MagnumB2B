@@ -36,7 +36,7 @@ export default async function Home() {
       <section style={{
         borderRadius: "var(--radius)", overflow: "hidden", marginBottom: 24,
         background: bannerImg
-          ? `linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,.15)), url(${encodeURI(bannerImg)}) center/cover`
+          ? `linear-gradient(90deg, rgba(0,0,0,.55), rgba(0,0,0,.15)), url("${bannerImg.replace(/"/g, "%22")}") center/cover`
           : "linear-gradient(110deg, var(--brand-strong), var(--brand))",
         color: "#fff", padding: "40px 28px", minHeight: 160,
       }}>

@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // Only genuinely session-less routes are public. The one public API route is the push-event
 // endpoint (the bridge posts to it with x-push-secret); every other /api route carries its own
 // auth and is reached by signed-in users (who skip the redirect because a session is present).
-const PUBLIC_PREFIXES = ["/login", "/_next", "/icons",
+const PUBLIC_PREFIXES = ["/login", "/_next", "/icons", "/favicon.ico",
   "/manifest.webmanifest", "/sw.js", "/api/push/event"];
 
 export async function middleware(request: NextRequest) {
