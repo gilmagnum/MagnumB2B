@@ -2,6 +2,14 @@ import type { DocumentDetail } from "./bridge";
 
 const money = (n?: number) => (n != null ? n.toFixed(2) : "");
 
+// Escape every value interpolated into the exported HTML — names, item keys, customer/address, etc.
+// come from Hashavshevet and must never be able to inject markup/script into the print window.
+const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ESC[c]);
+// Only embed an image from an https URL (and escape it); anything else is dropped.
+const httpsImg = (url: string | undefined, style: string) =>
+  url && /^https:\/\//i.test(url) ? `<img src="${esc(url)}" style="${style}" />` : "";
+
 type Images = Record<string, string>;
 
 // Real .xlsx with the product image embedded IN the cell (not a link). exceljs is
@@ -26,7 +34,7 @@ export async function exportExcel(d: DocumentDetail, images: Images = {}) {
     const row = ws.addRow(["", l.itemkey, l.name ?? "", l.qty, l.unit ?? "", Number(money(l.unitPrice)) || "", Number(money(l.lineTotal)) || ""]);
     row.height = 40;
     const url = images[l.itemkey];
-    if (url) {
+    if (url && /^https:\/\//i.test(url)) {
       try {
         const buf = await (await fetch(url)).arrayBuffer();
         const ext = /\.png($|\?)/i.test(url) ? "png" : "jpeg";
@@ -46,19 +54,19 @@ export async function exportExcel(d: DocumentDetail, images: Images = {}) {
 // Printable HTML -> the browser's "Save as PDF". Shows a product-image thumbnail per line.
 export function exportPdf(d: DocumentDetail, images: Images = {}) {
   const rows = (d.lines ?? []).map((l) => {
-    const img = images[l.itemkey]
-      ? `<img src="${images[l.itemkey]}" style="width:44px;height:44px;object-fit:contain" />`
-      : "";
-    return `<tr><td style="text-align:center">${img}</td><td>${l.itemkey}</td><td>${l.name ?? ""}</td><td style="text-align:center">${l.qty}</td><td style="text-align:center">${l.unit ?? ""}</td><td style="text-align:left">${money(l.unitPrice)}</td><td style="text-align:left">${money(l.lineTotal)}</td></tr>`;
+    const img = httpsImg(images[l.itemkey], "width:44px;height:44px;object-fit:contain");
+    return `<tr><td style="text-align:center">${img}</td><td>${esc(l.itemkey)}</td><td>${esc(l.name ?? "")}</td><td style="text-align:center">${esc(l.qty)}</td><td style="text-align:center">${esc(l.unit ?? "")}</td><td style="text-align:left">${money(l.unitPrice)}</td><td style="text-align:left">${money(l.lineTotal)}</td></tr>`;
   }).join("");
-  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>${docBase(d)}</title>
+  const title = `${esc(d.docTypeName)} ${d.docNumber ? "#" + esc(d.docNumber) : "(זמני " + esc(d.stockId) + ")"}`;
+  const meta = `${esc(d.customerName)} (${esc(d.accountKey)})${d.customer?.address ? " · " + esc(d.customer.address) : ""}${d.customer?.phone ? " · " + esc(d.customer.phone) : ""}`;
+  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>${esc(docBase(d))}</title>
     <style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{color:#1e2a78;margin:0 0 4px}
     .meta{color:#555;margin-bottom:16px}table{border-collapse:collapse;width:100%}
     th,td{border:1px solid #ccc;padding:6px 8px;font-size:13px;text-align:right;vertical-align:middle}
     thead th{background:#1e2a78;color:#fff}tfoot td{font-weight:700}
     @media print{thead{display:table-header-group}}</style></head>
-    <body><h1>${d.docTypeName} ${d.docNumber ? "#" + d.docNumber : "(זמני " + d.stockId + ")"}</h1>
-    <div class="meta">${d.customerName} (${d.accountKey})${d.customer?.address ? " · " + d.customer.address : ""}${d.customer?.phone ? " · " + d.customer.phone : ""}<br>${d.date ? new Date(d.date).toLocaleDateString("he-IL") : ""}</div>
+    <body><h1>${title}</h1>
+    <div class="meta">${meta}<br>${d.date ? esc(new Date(d.date).toLocaleDateString("he-IL")) : ""}</div>
     <table><thead><tr><th>תמונה</th><th>מק״ט</th><th>תיאור</th><th>כמות</th><th>יחידה</th><th>מחיר יח׳</th><th>סה״כ שורה</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr><td colspan="6" style="text-align:left">סה״כ</td><td style="text-align:left">${money(d.total)}</td></tr></tfoot></table>
