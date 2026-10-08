@@ -117,6 +117,23 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const canIgnoreStock = ctx?.orderKind === "future" && !!item?.ignoreStock;
   const soldOut = (s?: number | null) => s != null && !canIgnoreStock && s <= 0;
   const canOrder = !!ctx?.orderKind; // customer chosen AND order kind picked
+
+  // One matrix cell's body (stock + carton/bundle steppers, or "אזל") — reused by the
+  // desktop table and the mobile per-color layout.
+  const matrixCellBody = (cell: MatrixCell, label: string) => (
+    <>
+      {showStock && <div style={{ fontSize: 11, color: (cell.stock ?? 0) <= 0 ? "var(--danger)" : "var(--ink-muted)" }}>מלאי: {cell.stock ?? "-"}</div>}
+      <div style={{ display: "grid", gap: 4, justifyItems: "center", marginTop: 2 }}>
+        {soldOut(cell.stock)
+          ? <span className="chip chip-danger">אזל</span>
+          : <>
+              {perCarton > 0 && <Stepper itemkey={cell.itemkey} unit="carton" title={`${name} ${label}`.trim()} packSize={perCarton} price={effPrice} disabled={!canOrder} stock={cell.stock} addLabel={`קרטון (${perCarton})`} />}
+              {perBundle > 0 && <Stepper itemkey={cell.itemkey} unit="bundle" title={`${name} ${label}`.trim()} packSize={perBundle} price={effPrice} disabled={!canOrder} stock={cell.stock} addLabel={`חבילה (${perBundle})`} />}
+            </>}
+      </div>
+    </>
+  );
+
   const gallery = (cat.images && cat.images.length ? cat.images : (cat.image_url ? [cat.image_url] : []));
   const mainImg = gallery[activeImg] ?? gallery[0];
 
@@ -187,42 +204,49 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
 
         {isMatrix ? (
           item?.cells?.length && matrix ? (
-            <div className="table-wrap">
-              <table style={{ borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    {matrix.multiColor && <th style={th}>צבע \ מידה</th>}
-                    {matrix.sizes.map((s) => <th key={s.i} style={th}>{s.label}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {matrix.colors.map((color) => (
-                    <tr key={color.i}>
-                      {matrix.multiColor && <td style={{ ...td, fontWeight: 700, textAlign: "start", whiteSpace: "nowrap", background: "var(--surface-muted)" }}>{color.label}</td>}
-                      {matrix.sizes.map((s) => {
-                        const cell = matrix.grid.get(`${color.i}|${s.i}`);
-                        if (!cell) return <td key={s.i} style={{ ...td, color: "var(--ink-muted)" }}>—</td>;
-                        const label = `${color.label} ${s.label}`.trim();
-                        const low = (cell.stock ?? 0) <= 0;
-                        return (
-                          <td key={s.i} style={td}>
-                            {showStock && <div style={{ fontSize: 11, color: low ? "var(--danger)" : "var(--ink-muted)" }}>מלאי: {cell.stock ?? "-"}</div>}
-                            <div style={{ display: "grid", gap: 4, justifyItems: "center", marginTop: 2 }}>
-                              {soldOut(cell.stock)
-                                ? <span className="chip chip-danger">אזל</span>
-                                : <>
-                                    {perCarton > 0 && <Stepper itemkey={cell.itemkey} unit="carton" title={`${name} ${label}`.trim()} packSize={perCarton} price={effPrice} disabled={!canOrder} stock={cell.stock} addLabel={`קרטון (${perCarton})`} />}
-                                    {perBundle > 0 && <Stepper itemkey={cell.itemkey} unit="bundle" title={`${name} ${label}`.trim()} packSize={perBundle} price={effPrice} disabled={!canOrder} stock={cell.stock} addLabel={`חבילה (${perBundle})`} />}
-                                  </>}
-                            </div>
-                          </td>
-                        );
-                      })}
+            <>
+              {/* Desktop: the horizontal grid */}
+              <div className="matrix-desktop table-wrap">
+                <table style={{ borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      {matrix.multiColor && <th style={th}>צבע \ מידה</th>}
+                      {matrix.sizes.map((s) => <th key={s.i} style={th}>{s.label}</th>)}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {matrix.colors.map((color) => (
+                      <tr key={color.i}>
+                        {matrix.multiColor && <td style={{ ...td, fontWeight: 700, textAlign: "start", whiteSpace: "nowrap", background: "var(--surface-muted)" }}>{color.label}</td>}
+                        {matrix.sizes.map((s) => {
+                          const cell = matrix.grid.get(`${color.i}|${s.i}`);
+                          if (!cell) return <td key={s.i} style={{ ...td, color: "var(--ink-muted)" }}>—</td>;
+                          return <td key={s.i} style={td}>{matrixCellBody(cell, `${color.label} ${s.label}`.trim())}</td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Mobile: each color stacked vertically, sizes listed down the page (no sideways scroll) */}
+              <div className="matrix-mobile" style={{ display: "grid", gap: 14 }}>
+                {matrix.colors.map((color) => (
+                  <div key={color.i} className="card card-pad" style={{ display: "grid", gap: 4 }}>
+                    {matrix.multiColor && <div style={{ fontWeight: 700, color: "var(--brand-strong)", marginBottom: 4 }}>{color.label}</div>}
+                    {matrix.sizes.map((s) => {
+                      const cell = matrix.grid.get(`${color.i}|${s.i}`);
+                      if (!cell) return null;
+                      return (
+                        <div key={s.i} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 6 }}>
+                          <span style={{ minWidth: 52, fontWeight: 700 }}>{s.label}</span>
+                          <div style={{ marginInlineStart: "auto", display: "grid", gap: 4, justifyItems: "end" }}>{matrixCellBody(cell, `${color.label} ${s.label}`.trim())}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </>
           ) : bridgeErr
             ? <p className="chip chip-warn">גריד המידות והמלאי ייטענו כשהגשר יחובר.</p>
             : <p>טוען מידות…</p>
