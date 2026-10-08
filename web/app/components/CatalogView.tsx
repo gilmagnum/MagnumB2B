@@ -15,19 +15,20 @@ type Sort = "default" | "price-asc" | "price-desc" | "name";
 // (/catalog) and by search results (/search) — all get the same category/sub bars, search,
 // filters and sort. `categoryMain` seeds the main-category filter (switchable in-page);
 // `searchMode` shows all results across categories.
-export default function CatalogView({ categoryMain, items, allCategories = [], initialQ = "", searchMode = false, heading, hideSearch = false }: {
-  categoryMain?: string; items: CatalogItem[]; allCategories?: string[]; initialQ?: string; searchMode?: boolean; heading?: string; hideSearch?: boolean;
+export default function CatalogView({ categoryMain, items, allCategories = [], initialQ = "", heading, hideSearch = false }: {
+  categoryMain?: string; items: CatalogItem[]; allCategories?: string[]; initialQ?: string; heading?: string; hideSearch?: boolean;
 }) {
   const { ctx } = useOrderContext();
   const showStock = canSeeStock(useRole());
-  // Initial main: the given category, else the largest one (so /catalog lands populated), else all.
-  const [mainFilter, setMainFilter] = useState<string>(categoryMain ?? (searchMode ? "" : (allCategories[0] ?? "")));
+  // Start on "all" (no category) until the user picks one; a deep link to /catalog/[main] seeds it.
+  const [mainFilter, setMainFilter] = useState<string>(categoryMain ?? "");
   const [sub, setSub] = useState<string>("");
   const [brand, setBrand] = useState<string>("");
   const [season, setSeason] = useState<string>("");
   const [group, setGroup] = useState<string>("");
   const [q, setQ] = useState<string>(initialQ);
   const [sortBy, setSortBy] = useState<Sort>("default");
+  const [limit, setLimit] = useState(150); // render in pages to stay snappy on the full catalog
   const [priceMap, setPriceMap] = useState<Record<string, number>>({});
   const [discMap, setDiscMap] = useState<Record<string, number>>({}); // customer discount % per item
 
@@ -40,6 +41,8 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
 
   // Switching the main category clears the narrower filters (they may not exist under it).
   useEffect(() => { setSub(""); setBrand(""); setSeason(""); setGroup(""); }, [mainFilter]);
+  // Any filter/sort change resets the render window back to the first page.
+  useEffect(() => { setLimit(150); }, [mainFilter, sub, brand, season, group, q, sortBy]);
 
   // Customer pricing: when a customer is entered, fetch prices for the loaded items in bulk.
   useEffect(() => {
@@ -128,9 +131,9 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
         </select>
       </div>
 
-      <div style={{ color: "var(--ink-muted)", fontSize: 13, marginBottom: 10 }}>{shown.length} מוצרים</div>
+      <div style={{ color: "var(--ink-muted)", fontSize: 13, marginBottom: 10 }}>{shown.length} מוצרים{shown.length > limit ? ` · מוצגים ${limit}` : ""}</div>
       <div className="card-grid">
-        {shown.map((it) => {
+        {shown.slice(0, limit).map((it) => {
           const p = priceOf(it);
           return (
             <article key={it.itemkey} className="product-card">
@@ -160,6 +163,11 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
           );
         })}
       </div>
+      {shown.length > limit && (
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button onClick={() => setLimit((l) => l + 150)} className="btn btn-primary">הצג עוד ({shown.length - limit})</button>
+        </div>
+      )}
     </>
   );
 }

@@ -59,7 +59,7 @@ function SearchView() {
         ? <p style={{ color: "var(--ink-muted)" }}>הקלד לפחות 2 תווים.</p>
         : searched && items.length === 0 && !loading
           ? <p style={{ color: "var(--ink-muted)" }}>לא נמצאו מוצרים.</p>
-          : <CatalogView items={items} allCategories={cats} searchMode hideSearch heading="" />}
+          : <CatalogView items={items} allCategories={cats} hideSearch heading="" />}
     </>
   );
 }
