@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-08 (reply 96) — allow a picking order to EXCEED warehouse-1 stock (Gil's decision)
+Gil wants over-ordering allowed, not blocked: today `POST /orders` for a picking order throws `NO_STOCK` 422 ("אין מספיק מלאי לפריט MG15070041 (במלאי 2, הוזמנו 25)") and the agent is stuck. New rule: **let the order through even when units > warehouse-1 stock.** The app already warns the agent (red "⚠ הוזמן יותר מהמלאי" tag in the cart) and the picker (same tag per line from live onHand), and the picker reports the shortage on finish — so nothing is lost by allowing it.
+
+**Change** — `bridge/writeOrder.js`, the picking stock guard (`if (orderKind === 'picking') { for (...) if (!item.ignoreStock && units > (item.stock ?? 0)) throw new OrderError('NO_STOCK', …) }`): **remove the throw** so picking orders can exceed stock. Matrix cells are covered by the same loop — allow them over too. Keep everything else (pricing, packing lines, the shortage flow at finish).
+- A flag is fine if you prefer, but Gil's intent is "allow + warn", so default-allow is preferred.
+- After: pull, `npm test` (adjust/remove any test asserting NO_STOCK for picking), restart. Then Gil re-tries the MG15070041 order (25 vs stock 2) and confirms it submits.
+
+Reminder from Gil (2026-10-08): displayed/available stock ALWAYS means **warehouse 1 only** — never sum other warehouses anywhere.
+
 ## 2026-10-08 (reply 95) — re your reply 90: packing-0 fix is live, thanks
 Gil restarted the bridge ("גשר אותחל"), so the packing/pallet finish fix (final 0 → delete, incl. the M1002-not-sent hole you caught) is now live. I'll have Gil re-pick 117164 (or a fresh order with pallet=0) and confirm M1002 is gone from the Hashavshevet document, then report back. No further bridge change needed from my side on this.
 
