@@ -32,15 +32,21 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
   const [priceMap, setPriceMap] = useState<Record<string, number>>({});
   const [discMap, setDiscMap] = useState<Record<string, number>>({}); // customer discount % per item
 
-  // Items in the selected main category (drives the sub-category and filter options).
-  const mainItems = useMemo(() => (mainFilter ? items.filter((i) => i.category_main === mainFilter) : items), [items, mainFilter]);
+  // What we browse: the top search spans the WHOLE catalog (ignores the category);
+  // otherwise the selected category; on /search (hideSearch) the given results.
+  const searching = !hideSearch && !!q.trim();
+  const mainItems = useMemo(() => {
+    if (searching) return items.filter((i) => i.item_name?.includes(q) || i.itemkey?.toLowerCase().includes(q.toLowerCase()));
+    if (hideSearch) return mainFilter ? items.filter((i) => i.category_main === mainFilter) : items;
+    return mainFilter ? items.filter((i) => i.category_main === mainFilter) : [];
+  }, [items, mainFilter, searching, q, hideSearch]);
   const subs = useMemo(() => uniq(mainItems.map((i) => i.category_sub)), [mainItems]);
   const brands = useMemo(() => uniq(mainItems.map((i) => i.brand)), [mainItems]);
   const seasons = useMemo(() => uniq(mainItems.map((i) => i.season)), [mainItems]);
   const groups = useMemo(() => uniq(mainItems.map((i) => i.group_name)), [mainItems]);
 
-  // Switching the main category clears the narrower filters (they may not exist under it).
-  useEffect(() => { setSub(""); setBrand(""); setSeason(""); setGroup(""); }, [mainFilter]);
+  // Switching the main category or the search clears the narrower filters (they may not apply).
+  useEffect(() => { setSub(""); setBrand(""); setSeason(""); setGroup(""); }, [mainFilter, searching]);
   // Any filter/sort change resets the render window back to the first page.
   useEffect(() => { setLimit(150); }, [mainFilter, sub, brand, season, group, q, sortBy]);
 
@@ -72,43 +78,43 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
   const priceOf = (it: CatalogItem) => (ctx && priceMap[it.itemkey] != null ? priceMap[it.itemkey] : it.price);
 
   const shown = useMemo(() => {
+    // q is already applied in mainItems when searching; here just the filters + stock.
     const list = mainItems.filter((i) =>
       (!sub || i.category_sub === sub) &&
       (!brand || i.brand === brand) &&
       (!season || i.season === season) &&
       (!group || i.group_name === group) &&
-      (!q || i.item_name?.includes(q) || i.itemkey?.toLowerCase().includes(q.toLowerCase())) &&
       !noStock(i));
     const pr = (it: CatalogItem) => { const p = priceOf(it); return p == null ? Infinity : Number(p); };
     if (sortBy === "price-asc") return [...list].sort((a, b) => pr(a) - pr(b));
     if (sortBy === "price-desc") return [...list].sort((a, b) => pr(b) - pr(a));
     if (sortBy === "name") return [...list].sort((a, b) => (a.item_name ?? "").localeCompare(b.item_name ?? "", "he"));
     return list; // "default" = as loaded (newest first by item_seq from the query)
-  }, [mainItems, sub, brand, season, group, q, sortBy, ctx, stockSynced, priceMap]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mainItems, sub, brand, season, group, sortBy, ctx, stockSynced, priceMap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chip = (active: boolean) => (active ? "btn btn-primary btn-sm" : "btn btn-sm");
-  // Start with just search + the category bar; show products only once the user searches,
-  // picks a category, or applies a filter. On /search the page already has results → always show.
-  const active = !!mainFilter || !!q.trim() || !!sub || !!brand || !!season || !!group;
-  const showGrid = hideSearch || active;
+  // Show products only when searching (whole catalog), when a category is picked, or on /search.
+  const showGrid = hideSearch || searching || !!mainFilter;
 
   return (
     <>
-      {/* Main-category bar — filters in place (no page reload). */}
-      {allCategories.length > 0 && (
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 14 }}>
-          <button onClick={() => setMainFilter("")} className={chip(!mainFilter)} style={{ flex: "0 0 auto" }}>הכל</button>
-          {allCategories.map((c) => (
-            <button key={c} onClick={() => setMainFilter(c)} className={chip(c === mainFilter)} style={{ flex: "0 0 auto", whiteSpace: "nowrap" }}>{c}</button>
-          ))}
-        </div>
+      {heading !== "" && <h1 style={{ marginBottom: 10 }}>{heading ?? "קטלוג"}</h1>}
+
+      {/* Main catalog search — full-width first row, spans the whole catalog (like the header bar). */}
+      {!hideSearch && (
+        <input placeholder="חיפוש בכל הקטלוג (שם / מק״ט / מותג)…" value={q}
+          onChange={(e) => { setQ(e.target.value); if (e.target.value.trim()) setMainFilter(""); }}
+          className="input" style={{ width: "100%", marginBottom: 14, fontSize: 16 }} />
       )}
 
-      {heading !== "" && <h1 style={{ marginBottom: 10 }}>{heading ?? mainFilter ?? "קטלוג"}</h1>}
-
-      {/* Prominent search — always available */}
-      {!hideSearch && (
-        <input placeholder="חיפוש מוצר (שם / מק״ט / מותג)…" value={q} onChange={(e) => setQ(e.target.value)} className="input" style={{ maxWidth: 440, marginBottom: 14 }} />
+      {/* Main-category bar — pick a category to browse it (clears search); click again to clear. */}
+      {allCategories.length > 0 && (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 14 }}>
+          {allCategories.map((c) => (
+            <button key={c} onClick={() => { setMainFilter(c === mainFilter ? "" : c); setQ(""); }}
+              className={chip(c === mainFilter && !searching)} style={{ flex: "0 0 auto", whiteSpace: "nowrap" }}>{c}</button>
+          ))}
+        </div>
       )}
 
       <div className="card" style={{ marginBottom: 14, padding: "10px 14px", fontSize: 13, background: ctx ? "var(--brand-soft)" : "var(--surface-muted)", borderColor: ctx ? "var(--brand-soft)" : "var(--border)" }}>
