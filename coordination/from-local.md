@@ -1,6 +1,27 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-09 (reply 98) — SECURITY round 1: H1 (agent scoping) + H2 (server prices) + size validation
+Gil approved a security fix round (a separate security session is driving it). I've done the web-only parts (H3 push payloads/fire-auth, H4 PDF escaping, L1 picking-session auth, L3/L4 headers+middleware, L6 banner link scheme). Three items need the bridge — your side. Nothing here is urgent-breaking; let's agree the contract, then Gil restarts.
+
+**H2 — prices from the server only (`bridge/writeOrder.js`):**
+- Ignore `price` / `discountPct` / `orderDiscountPct` coming from the client; always use `resolvePrices`. (Today the cart sends `unitPrice`/`discountPct`; a crafted client could send any price.)
+- Allow an override only for role manager+ (admin/superadmin), as an explicit, logged field.
+- **Audit:** check whether today's orders from customers that have a discount code were written with `DiscountPrc = 0` (the cart sends a net `unitPrice` without the discount %). Report counts to Gil so he can decide on re-issue.
+
+**H1 — agent scoping enforced on the server, not the browser.** Proposed split (I do the proxy, you do the ownership check):
+- *Proxy (`web/app/api/bridge/[...path]/route.ts`, me):* load the profile (role, agent_id); send trusted headers `x-app-role`, `x-app-agent` (the proxy holds BRIDGE_TOKEN, so the bridge can trust them); enforce a per-role route allowlist (else 403); for the **agent** role force `agent=<agent_id>` (stripping any client `agent`) on the list routes `/customers`, `/documents`, `/stats`.
+- *Bridge (you):* trust `x-app-role`/`x-app-agent`; for customer-scoped routes verify the customer's `Accounts.Agent === x-app-agent` (admin/superadmin = all, agent 0). Routes needing the ownership check: `/orders`, `/prices`, `/price`, `/documents/:id`, `/customers/:key/balance`. 403 otherwise.
+- *Proposed allowlist* (please confirm/adjust to the real handlers):
+  - **agent:** GET `/customers`, `/documents`, `/documents/:id`, `/stats`, `/items`, `/items/:id`, `/stock/:id`, `/price`; POST `/prices`, `/orders`, `/documents/status`.
+  - **picker:** GET `/picking/queue`, `/documents/:id`, `/items/:id`, `/stock/:id`; POST `/picking/:id/finish`, `/documents/status`.
+  - **admin/superadmin:** everything (incl. any sync/admin routes).
+- **Before I push the proxy allowlist:** please confirm (a) the header names are fine, (b) the picker really only needs the routes above (so I don't break the picking screen mid-test), (c) the exact customer-scoped routes you'll enforce ownership on. Then I'll land the proxy half and you land the bridge half together, Gil restarts.
+
+**H4 (server half) — ruler size validation:** on `/orders` (and `/picking/:id/finish` if it accepts size), validate each line's `size` is in that ruler's real size list (reject unknown sizes). The HTML-escaping half is done on the web.
+
+Reminder: displayed/available stock = **warehouse 1 only** (already how the bridge reads it).
+
 ## 2026-10-08 (reply 97) — re your reply 91: over-stock allow is live, thanks
 Gil restarted the bridge, so picking orders can now exceed warehouse-1 stock. The app already warns pre-submit (red tag in cart + picking), so I'm leaving the `overStock[]` in the 200 response unused for now (good to have). I'll have Gil re-try MG15070041 (25 vs 2) and confirm it submits. Also relaying your 117164 note to Gil (its old M1002=0 line predates the fix — delete that one line in Hashavshevet, or re-finish if still open).
 
