@@ -1,17 +1,28 @@
 "use server";
 import { supabaseServer } from "../lib/supabase/server";
 import { supabaseAdmin } from "../lib/supabase/admin";
+import { managerOrAbove } from "../lib/roles";
 
 const LOCK_MIN = 10; // a session is "held" while touched within this window
 const isActive = (updatedAt: string) => Date.now() - new Date(updatedAt).getTime() < LOCK_MIN * 60000;
+
+// Picking is a warehouse screen: only a picker or a manager/admin may touch a picking session.
+async function pickingUser(): Promise<{ id: string; role: string } | null> {
+  const { data: { user } } = await (await supabaseServer()).auth.getUser();
+  if (!user) return null;
+  const { data: prof } = await supabaseAdmin().from("profiles").select("role").eq("id", user.id).single();
+  const role = (prof?.role as string) ?? "";
+  return role === "picker" || managerOrAbove(role) ? { id: user.id, role } : null;
+}
 
 type Progress = Record<string, number>;
 type OpenResult = { progress?: Progress; notes?: string; takenOver?: boolean; lockedBy?: string };
 
 // Acquire/resume the picking session for an order. Blocks if another picker holds it (active).
 export async function openPickingSession(stockId: number, pickerName: string): Promise<OpenResult> {
-  const { data: { user } } = await (await supabaseServer()).auth.getUser();
-  if (!user) return { lockedBy: "לא מחובר" };
+  const u = await pickingUser();
+  if (!u) return { lockedBy: "אין הרשאה" };
+  const user = { id: u.id };
   const admin = supabaseAdmin();
   const { data: s } = await admin.from("picking_sessions").select("*").eq("stock_id", stockId).maybeSingle();
   if (!s) {
@@ -30,7 +41,7 @@ export async function openPickingSession(stockId: number, pickerName: string): P
 
 // Save progress + heartbeat (keeps the lock). Only the holder may save.
 export async function savePickingSession(stockId: number, progress: Progress, notes: string): Promise<{ ok?: boolean; error?: string }> {
-  const { data: { user } } = await (await supabaseServer()).auth.getUser();
+  const user = await pickingUser();
   if (!user) return { error: "unauthorized" };
   const admin = supabaseAdmin();
   const { data: s } = await admin.from("picking_sessions").select("picker_id, updated_at").eq("stock_id", stockId).maybeSingle();
@@ -42,7 +53,7 @@ export async function savePickingSession(stockId: number, progress: Progress, no
 // Save current progress AND free the lock, keeping the saved state, so another picker can
 // immediately take over and continue ("שמור וחזור"). The holder stales their own heartbeat.
 export async function saveAndReleasePickingSession(stockId: number, progress: Progress, notes: string): Promise<{ ok?: boolean; error?: string }> {
-  const { data: { user } } = await (await supabaseServer()).auth.getUser();
+  const user = await pickingUser();
   if (!user) return { error: "unauthorized" };
   const admin = supabaseAdmin();
   const { data: s } = await admin.from("picking_sessions").select("picker_id, updated_at").eq("stock_id", stockId).maybeSingle();
@@ -55,9 +66,15 @@ export async function saveAndReleasePickingSession(stockId: number, progress: Pr
   return { ok: true };
 }
 
-// Reset + release the session (delete).
+// Reset + release the session (delete). Only the holder or a manager may reset; an active lock held
+// by another picker is left alone (so one picker can't wipe another's in-progress pick).
 export async function releasePickingSession(stockId: number): Promise<{ ok: boolean }> {
-  await supabaseAdmin().from("picking_sessions").delete().eq("stock_id", stockId);
+  const u = await pickingUser();
+  if (!u) return { ok: false };
+  const admin = supabaseAdmin();
+  const { data: s } = await admin.from("picking_sessions").select("picker_id, updated_at").eq("stock_id", stockId).maybeSingle();
+  if (s && s.picker_id !== u.id && isActive(s.updated_at as string) && !managerOrAbove(u.role)) return { ok: false };
+  await admin.from("picking_sessions").delete().eq("stock_id", stockId);
   return { ok: true };
 }
 
@@ -69,8 +86,7 @@ export async function handoffPickingSession(stockId: number): Promise<{ ok?: boo
   if (!user) return { error: "unauthorized" };
   const admin = supabaseAdmin();
   const { data: prof } = await admin.from("profiles").select("role").eq("id", user.id).single();
-  const role = (prof?.role as string) ?? "";
-  if (!(role === "admin" || role === "superadmin" || role === "manager")) return { error: "למנהל בלבד" };
+  if (!managerOrAbove((prof?.role as string) ?? "")) return { error: "למנהל בלבד" };
   const { data: s } = await admin.from("picking_sessions").select("picker_name").eq("stock_id", stockId).maybeSingle();
   if (!s) return { error: "אין ליקוט פעיל להזמנה זו" };
   // Stale the lock (keep picker_id/progress/notes) → the next picker takes over the saved state.
@@ -81,6 +97,7 @@ export async function handoffPickingSession(stockId: number): Promise<{ ok?: boo
 // For the queue: which of these orders are actively held, and by whom.
 export async function getActiveLocks(stockIds: number[]): Promise<Record<number, string>> {
   if (!stockIds.length) return {};
+  if (!(await pickingUser())) return {};
   const { data } = await supabaseAdmin().from("picking_sessions").select("stock_id, picker_name, updated_at").in("stock_id", stockIds);
   const out: Record<number, string> = {};
   for (const r of data ?? []) if (isActive(r.updated_at as string)) out[r.stock_id as number] = (r.picker_name as string) || "מלקט";
