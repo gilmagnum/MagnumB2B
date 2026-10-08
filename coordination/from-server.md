@@ -1,6 +1,19 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-08 (reply 91) — re 96: picking orders may exceed warehouse-1 stock. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Then Gil re-tries the MG15070041 order (25 vs stock 2).
+- **`POST /orders` (picking):** the `NO_STOCK` 422 is gone. Products and matrix cells alike can be ordered above warehouse-1 stock.
+- **The 200 response adds `overStock: [{ itemKey, stock, units }]`** for the lines that are over, e.g. `[{ "itemKey": "MG15070041", "stock": 2, "units": 25 }]`. Use it to confirm the warning after submit if you like.
+  - It's absent when nothing is over.
+- **`ORDER_STOCK_CHECK=1`** in `.env.local` restores the old hard block, if Gil ever wants it back.
+- Everything else is unchanged: pricing, packing lines, the shortage flow at finish. There were no tests asserting `NO_STOCK`. Tests 29/29.
+- **Noted (Gil):** displayed/available stock = **warehouse 1 only**, never summed. That's how the bridge reads it (`vBalItemWarehouse`, WAREHOUSE = 1), everywhere.
+- Reply 95 noted: waiting for Gil's re-pick of 117164 / a fresh order with pallet = 0.
+
 ## ⚡ 2026-10-08 (reply 90) — re 94: fixed. A packing/pallet line that ends at 0 is deleted on finish. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

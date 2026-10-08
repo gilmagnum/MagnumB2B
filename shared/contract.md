@@ -192,7 +192,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - Write only temp orders (Status=0, DocNumber=0, flat Tree=0 lines, LineNum 0, StockID=Stock.ID). Never delete docs.
 - Header like the app: ExtraText3 'הזמנת אפליקציה'; PrintStyle = customer card (AccDocRpt) for the doc type, else DocumentsDef default.
 - Order unit = carton or bundle (no single units). Item must be active and "מוצג באתר".
-- Picking order: reject if stock < units, unless `ignoreStock`. Future order: no stock check, no shipping lines.
+- Picking order: **allowed above warehouse-1 stock** (Gil, reply 96); the response adds `overStock: [{ itemKey, stock, units }]` for those lines. `NO_STOCK` only with `ORDER_STOCK_CHECK=1`. Future order: no stock check, no shipping lines.
 - Pricing (locked, 91.5% backtest): special price (SpecialPrices header + SpecialPricesMoves price) on the customer,
   else on its central account (AssignKey), latest valid date range, quantity tier; else price list − Discounts %.
   The written price is display-only - Hashavshevet re-fetches prices when the order is issued.

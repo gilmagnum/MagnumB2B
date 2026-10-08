@@ -395,6 +395,7 @@ const routes = [
       documentId: result.documentId,
       totals: result.totals,
       lines: result.lines,
+      ...(result.overStock && { overStock: result.overStock }), // lines over warehouse-1 stock (allowed, reply 96)
     };
   }],
 ];

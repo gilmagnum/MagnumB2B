@@ -232,13 +232,18 @@ export async function writeOrder(order, { commit = false } = {}) {
     return out;
   });
 
-  // Picking orders only for what is in stock, unless the item ignores stock.
+  // Picking orders MAY exceed warehouse-1 stock (Gil, reply 96: allow + warn - the app tags it for the
+  // agent and the picker, and the shortage is reported on finish). Lines over stock are returned in
+  // `overStock`. ORDER_STOCK_CHECK=1 restores the old hard block (NO_STOCK).
+  const overStock = [];
   if (orderKind === 'picking') {
     for (const [itemKey, units] of unitsByItem) {
       const item = itemByKey.get(itemKey);
-      if (!item.ignoreStock && units > (item.stock ?? 0)) {
+      if (item.ignoreStock || units <= (item.stock ?? 0)) continue;
+      if (process.env.ORDER_STOCK_CHECK === '1') {
         throw new OrderError('NO_STOCK', `אין מספיק מלאי לפריט ${itemKey} (במלאי ${item.stock ?? 0}, הוזמנו ${units})`);
       }
+      overStock.push({ itemKey, stock: item.stock ?? 0, units });
     }
   }
 
@@ -387,6 +392,7 @@ export async function writeOrder(order, { commit = false } = {}) {
       lines: allLines.map(({ itemKey, quantity, price, discountPrc, size, priceSource, webNet }) => ({
         itemKey, quantity, price, discountPrc, ...(size && { size }), priceSource, ...(webNet != null && { webNet }),
       })),
+      ...(overStock.length && { overStock }),
       ...(written && { written }),
     };
   } catch (err) {
