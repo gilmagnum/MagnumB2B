@@ -36,7 +36,14 @@ export default function CatalogView({ categoryMain, items, allCategories = [], i
   // otherwise the selected category; on /search (hideSearch) the given results.
   const searching = !hideSearch && !!q.trim();
   const mainItems = useMemo(() => {
-    if (searching) return items.filter((i) => i.item_name?.includes(q) || i.itemkey?.toLowerCase().includes(q.toLowerCase()));
+    if (searching) {
+      const ql = q.trim().toLowerCase();
+      return items.filter((i) =>
+        i.item_name?.toLowerCase().includes(ql) ||
+        i.itemkey?.toLowerCase().includes(ql) ||
+        i.brand?.toLowerCase().includes(ql) ||
+        i.barcode?.toLowerCase().includes(ql));
+    }
     if (hideSearch) return mainFilter ? items.filter((i) => i.category_main === mainFilter) : items;
     return mainFilter ? items.filter((i) => i.category_main === mainFilter) : [];
   }, [items, mainFilter, searching, q, hideSearch]);

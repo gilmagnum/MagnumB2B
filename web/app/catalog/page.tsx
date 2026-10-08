@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function CatalogHome() {
   const { data, error } = await supabase
     .from("items")
-    .select("itemkey,item_name,category_main,category_sub,brand,season,group_name,price,per_carton,per_bundle,image_url,shown_on_site,matrix_flag,is_carton_size_item,ruler_code,stock,ignore_stock")
+    .select("itemkey,item_name,category_main,category_sub,brand,season,group_name,price,per_carton,per_bundle,image_url,shown_on_site,matrix_flag,is_carton_size_item,ruler_code,stock,ignore_stock,barcode")
     .eq("shown_on_site", true)
     .order("item_seq", { ascending: false, nullsFirst: false })
     .order("image_url", { ascending: false, nullsFirst: false })

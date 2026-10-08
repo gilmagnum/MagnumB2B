@@ -33,4 +33,5 @@ export type CatalogItem = {
   ruler_code?: string | null;      // size ruler — a single-SKU "ruler product" ordered per size inside the product
   stock?: number | null;           // Items.Quantity (synced); matrix PARENT is ~0 (stock lives on the cells)
   ignore_stock?: boolean | null;   // if true, open for FUTURE orders even with no stock
+  barcode?: string | null;         // for search (matches the header/search-page barcode lookup)
 };
