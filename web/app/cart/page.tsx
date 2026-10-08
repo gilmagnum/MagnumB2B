@@ -176,7 +176,9 @@ export default function CartPage() {
                     ) : (
                       <div style={{ width: 40, height: 40, borderRadius: 6, background: "var(--surface-muted)" }} />
                     )}
-                    <div><span style={{ color: "var(--brand)", fontWeight: 600 }}>{l.title}</span>{l.sizeLabel ? <span className="chip" style={{ marginInlineStart: 6, background: "var(--brand-soft)" }}>מידה {l.sizeLabel}</span> : null}<div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.itemkey}</div></div>
+                    <div><span style={{ color: "var(--brand)", fontWeight: 600 }}>{l.title}</span>{l.sizeLabel ? <span className="chip" style={{ marginInlineStart: 6, background: "var(--brand-soft)" }}>מידה {l.sizeLabel}</span> : null}
+                      {l.stock != null && unitsOf(l) > l.stock && <span className="chip chip-danger" style={{ marginInlineStart: 6, fontWeight: 700 }}>⚠ הוזמן יותר מהמלאי</span>}
+                      <div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.itemkey}</div></div>
                   </a>
                 </td>
                 <td>{l.unit === "carton" ? "קרטון" : "חבילה"}{l.packSize ? <div style={{ fontSize: 11, color: "var(--ink-muted)" }}>{l.packSize} יח׳</div> : null}</td>

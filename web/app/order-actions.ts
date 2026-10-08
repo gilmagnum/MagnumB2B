@@ -3,6 +3,16 @@ import { supabaseServer } from "../lib/supabase/server";
 import { supabaseAdmin } from "../lib/supabase/admin";
 import { getProfile } from "../lib/auth";
 import { managerOrAbove } from "../lib/roles";
+import { getVariantStock } from "../lib/variantStock";
+
+// Matrix/carton parents whose variants are all sold out (warehouse 1) — for the live search to hide
+// them in the ordering catalog, the same way the server-rendered catalog pages do.
+export async function soldOutMatrixParents(): Promise<string[]> {
+  const map = await getVariantStock();
+  const out: string[] = [];
+  for (const [k, v] of map) if (v <= 0) out.push(k);
+  return out;
+}
 
 type Line = { itemkey: string; title?: string; qty: number; unit: string; sizeLabel?: string; packSize?: number; unitPrice?: number };
 type OrderPayload = { accountKey: string; customerName?: string; orderKind?: string; stockId?: number; lines: Line[]; totals?: Record<string, number> };

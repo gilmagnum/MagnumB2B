@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import type { CatalogItem } from "../../lib/supabase";
 import CatalogView from "../components/CatalogView";
+import { soldOutMatrixParents } from "../order-actions";
 
 function SearchView() {
   const initial = useSearchParams().get("q") ?? "";
@@ -11,7 +12,11 @@ function SearchView() {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [soldOut, setSoldOut] = useState<Set<string>>(new Set());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fully sold-out matrix/carton parents, so the gate hides them here too (like the catalog pages).
+  useEffect(() => { soldOutMatrixParents().then((ks) => setSoldOut(new Set(ks))).catch(() => {}); }, []);
 
   const run = useCallback(async (raw: string) => {
     const term = raw.replace(/[,()*%]/g, " ").trim();
@@ -44,6 +49,10 @@ function SearchView() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
   })();
 
+  // Tag matrix/carton parents with an aggregate stock (0 = sold out) so the ordering gate can hide them.
+  const shownItems = items.map((i) =>
+    (i.matrix_flag || i.is_carton_size_item) ? { ...i, variant_stock: soldOut.has(i.itemkey) ? 0 : 1 } : i);
+
   return (
     <>
       <h1>חיפוש מוצרים</h1>
@@ -59,7 +68,7 @@ function SearchView() {
         ? <p style={{ color: "var(--ink-muted)" }}>הקלד לפחות 2 תווים.</p>
         : searched && items.length === 0 && !loading
           ? <p style={{ color: "var(--ink-muted)" }}>לא נמצאו מוצרים.</p>
-          : <CatalogView items={items} allCategories={cats} hideSearch heading="" />}
+          : <CatalogView items={shownItems} allCategories={cats} hideSearch heading="" />}
     </>
   );
 }

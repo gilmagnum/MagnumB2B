@@ -265,7 +265,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                   {sh === "none" && <span className="chip chip-ok">✓ לוקט במלואו</span>}
                   {sh === "partial" && <span className="chip chip-warn">חוסר: {l.qty - q}</span>}
                   {sh === "full" && <span className="chip chip-danger">טרם לוקט</span>}
-                  {overStock && <span className="chip chip-danger">⚠ הוזמן יותר מהמלאי</span>}
+                  {overStock && <span className="chip chip-danger" style={{ fontWeight: 700 }}>⚠ הוזמן יותר מהמלאי{l.onHand != null ? ` (מלאי ${l.onHand})` : ""}</span>}
                 </div>
               )}
             </div>
