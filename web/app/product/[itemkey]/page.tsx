@@ -204,49 +204,24 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
 
         {isMatrix ? (
           item?.cells?.length && matrix ? (
-            <>
-              {/* Desktop: the horizontal grid */}
-              <div className="matrix-desktop table-wrap">
-                <table style={{ borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr>
-                      {matrix.multiColor && <th style={th}>צבע \ מידה</th>}
-                      {matrix.sizes.map((s) => <th key={s.i} style={th}>{s.label}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {matrix.colors.map((color) => (
-                      <tr key={color.i}>
-                        {matrix.multiColor && <td style={{ ...td, fontWeight: 700, textAlign: "start", whiteSpace: "nowrap", background: "var(--surface-muted)" }}>{color.label}</td>}
-                        {matrix.sizes.map((s) => {
-                          const cell = matrix.grid.get(`${color.i}|${s.i}`);
-                          if (!cell) return <td key={s.i} style={{ ...td, color: "var(--ink-muted)" }}>—</td>;
-                          return <td key={s.i} style={td}>{matrixCellBody(cell, `${color.label} ${s.label}`.trim())}</td>;
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {/* Mobile: each color stacked vertically, sizes listed down the page (no sideways scroll) */}
-              <div className="matrix-mobile" style={{ display: "grid", gap: 14 }}>
-                {matrix.colors.map((color) => (
-                  <div key={color.i} className="card card-pad" style={{ display: "grid", gap: 4 }}>
-                    {matrix.multiColor && <div style={{ fontWeight: 700, color: "var(--brand-strong)", marginBottom: 4 }}>{color.label}</div>}
-                    {matrix.sizes.map((s) => {
-                      const cell = matrix.grid.get(`${color.i}|${s.i}`);
-                      if (!cell) return null;
-                      return (
-                        <div key={s.i} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 6 }}>
-                          <span style={{ minWidth: 52, fontWeight: 700 }}>{s.label}</span>
-                          <div style={{ marginInlineStart: "auto", display: "grid", gap: 4, justifyItems: "end" }}>{matrixCellBody(cell, `${color.label} ${s.label}`.trim())}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </>
+            // One vertical layout on all widths: each color stacked, sizes listed down the page (no sideways scroll).
+            <div style={{ display: "grid", gap: 14 }}>
+              {matrix.colors.map((color) => (
+                <div key={color.i} className="card card-pad" style={{ display: "grid", gap: 4 }}>
+                  {matrix.multiColor && <div style={{ fontWeight: 700, color: "var(--brand-strong)", marginBottom: 4 }}>{color.label}</div>}
+                  {matrix.sizes.map((s) => {
+                    const cell = matrix.grid.get(`${color.i}|${s.i}`);
+                    if (!cell) return null;
+                    return (
+                      <div key={s.i} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 6 }}>
+                        <span style={{ minWidth: 52, fontWeight: 700 }}>{s.label}</span>
+                        <div style={{ marginInlineStart: "auto", display: "grid", gap: 4, justifyItems: "end" }}>{matrixCellBody(cell, `${color.label} ${s.label}`.trim())}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           ) : bridgeErr
             ? <p className="chip chip-warn">גריד המידות והמלאי ייטענו כשהגשר יחובר.</p>
             : <p>טוען מידות…</p>
@@ -315,5 +290,3 @@ function Stepper({ itemkey, unit, title, packSize, price, sizeLabel, disabled, a
   return <button onClick={inc} disabled={disabled} className="btn btn-primary btn-sm">+ {addLabel ?? "הוספה"}</button>;
 }
 
-const th = { border: "1px solid var(--border)", padding: "4px 8px", background: "var(--surface-muted)", fontSize: 13, fontWeight: 700 as const };
-const td = { border: "1px solid var(--border)", padding: "4px 8px", textAlign: "center" as const, fontSize: 13 };
