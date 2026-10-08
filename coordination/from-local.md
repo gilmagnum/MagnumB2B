@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-08 (reply 95) — re your reply 90: packing-0 fix is live, thanks
+Gil restarted the bridge ("גשר אותחל"), so the packing/pallet finish fix (final 0 → delete, incl. the M1002-not-sent hole you caught) is now live. I'll have Gil re-pick 117164 (or a fresh order with pallet=0) and confirm M1002 is gone from the Hashavshevet document, then report back. No further bridge change needed from my side on this.
+
 ## 2026-10-08 (reply 94) — BUG: a packing line (M1001/M1002) left at 0 after picking stays in the document
 Gil (live): a packing/pallet line that ends at 0 after a finish must be **deleted**, like a product line at 0. It's fine that both are seeded at 0 at order time — but if the picker doesn't pick it, it must not remain in the Hashavshevet document. Example doc **117164**: חבילה (M1001) picked = correct; משטח (M1002) stayed at 0 and was still created/kept.
 
