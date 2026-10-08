@@ -86,22 +86,28 @@ export function planShortages(lines, picked, shipping = new Set()) {
   return { changes, shortages };
 }
 
-// Pure plan for the packing/pallet lines: set to the picker's quantity (0 -> delete).
+// Pure plan for the packing/pallet lines: set to the picker's quantity. A line whose FINAL quantity
+// is 0 is deleted - also when it was seeded 0 and left at 0, or not sent at all (reply 94: 117164's
+// M1002 stayed in the document at 0).
 export function planPacking(lines, picked, shipping) {
   const changes = [];
   const result = [];
   for (const line of lines) {
     const itemKey = trim(line.ItemKey);
-    if (!shipping.has(itemKey) || !picked.has(itemKey)) continue;
-    const qty = picked.get(itemKey);
+    if (!shipping.has(itemKey)) continue;
+    const sent = picked.has(itemKey);
+    const qty = sent ? Math.max(picked.get(itemKey), 0) : (line.Quantity ?? 0);
     picked.delete(itemKey); // only the first line of that item takes it
-    if (qty === line.Quantity) {
+    const base = { lineId: line.ID, price: line.Price, discountPrc: line.DiscountPrc ?? 0 };
+    if (qty <= 0) {
+      changes.push({ ...base, action: 'deleted', qty: 0 });
+      result.push({ itemkey: itemKey, qty: 0, action: 'deleted' });
+    } else if (qty === line.Quantity) {
       result.push({ itemkey: itemKey, qty, action: 'unchanged' });
-      continue;
+    } else {
+      changes.push({ ...base, action: 'reduced', qty });
+      result.push({ itemkey: itemKey, qty, action: 'set' });
     }
-    const action = qty <= 0 ? 'deleted' : 'set';
-    changes.push({ lineId: line.ID, action: action === 'set' ? 'reduced' : 'deleted', qty: Math.max(qty, 0), price: line.Price, discountPrc: line.DiscountPrc ?? 0 });
-    result.push({ itemkey: itemKey, qty: Math.max(qty, 0), action });
   }
   return { changes, result };
 }

@@ -76,5 +76,9 @@ test('planPacking: picker quantity on M1001/M1002 (increase, 0 deletes, untouche
     { lineId: 3, action: 'deleted', qty: 0, price: 90, discountPrc: 10 },
   ]);
   assert.deepEqual(r.result, [{ itemkey: 'M1001', qty: 3, action: 'set' }, { itemkey: 'M1002', qty: 0, action: 'deleted' }]);
-  assert.deepEqual(planPacking(lines, new Map([['A', 10]]), shipping).changes, []);
+  // reply 94: seeded 0 and left at 0 -> deleted; not sent at all -> a 0 line is deleted, a non-zero one kept
+  const zero = planPacking(lines, new Map([['M1001', 0]]), shipping);
+  assert.deepEqual(zero.changes.map((c) => [c.lineId, c.action]), [[2, 'deleted']]);
+  assert.deepEqual(zero.result, [{ itemkey: 'M1001', qty: 0, action: 'deleted' }, { itemkey: 'M1002', qty: 1, action: 'unchanged' }]);
+  assert.deepEqual(planPacking(lines, new Map([['A', 10]]), shipping).changes.map((c) => [c.lineId, c.action]), [[2, 'deleted']]);
 });

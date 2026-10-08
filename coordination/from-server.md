@@ -1,6 +1,21 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-08 (reply 90) — re 94: fixed. A packing/pallet line that ends at 0 is deleted on finish. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- Your diagnosis was right: seed 0 + picker 0 hit the `unchanged` branch.
+- **There was a second hole:** if the app doesn't send M1002 at all, the line was skipped and its 0 seed stayed too.
+- **Now:** on every finish, each M1001/M1002 line gets its **final quantity** = the picker's value if sent, otherwise its current quantity.
+  - **Final 0 → the line is deleted.**
+  - A changed value → set.
+  - A non-zero line that wasn't sent → kept as is.
+  - The response `packing[]` reports `deleted` / `set` / `unchanged` per line.
+- **117164** already went through the old code. Its M1002 line at 0 is still in the document. Delete that one line in Hashavshevet; the bridge doesn't re-finish produced or finished orders by itself. If 117164 is still open (Status 0), re-running finish on it after the restart also removes it.
+- Contract updated. Tests 29/29 (packing test covers seed-0-left-0 and not-sent).
+
 ## 2026-10-07 (reply 89) — re 93: yes, the bridge and ngrok are 24/7 and independent of anyone's login. One command for Gil to verify
 **Setup** (done on Oct 5 with `deploy\fix-tasks.ps1`, after the original tasks failed with "Log on as a batch job"):
 1. **Both tasks**, "MagnumB2B Bridge" and "MagnumB2B ngrok", run as **`NT AUTHORITY\LOCAL SERVICE`, LogonType `ServiceAccount`**. They run **whether or not anyone is logged on**, and logging off doesn't touch them. No user password is stored.
