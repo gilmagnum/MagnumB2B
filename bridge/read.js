@@ -764,3 +764,27 @@ export function getAccountFlags(accountKey) {
     { k: key(accountKey) },
   );
 }
+
+// H1 (reply 100): the agent that owns an account (Accounts.Agent), cached 10 min - one indexed row.
+const accountAgentCache = new Map();
+export async function getAccountAgent(accountKey) {
+  const k = String(accountKey ?? '').trim();
+  if (!k) return null;
+  const hit = accountAgentCache.get(k);
+  if (hit && Date.now() - hit.at < 10 * 60_000) return hit.agent;
+  const [r] = await query('SELECT Agent FROM Accounts WHERE AccountKey = @k', { k: key(k) });
+  const agent = r ? Number(r.Agent) || 0 : null;
+  accountAgentCache.set(k, { at: Date.now(), agent });
+  if (accountAgentCache.size > 5000) accountAgentCache.delete(accountAgentCache.keys().next().value);
+  return agent;
+}
+
+// H1: the owning agent of each document's customer: Map<stockId, agent|null>. One indexed read.
+export async function getDocumentAgents(stockIds) {
+  const ids = [...new Set(stockIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return new Map();
+  const rows = await query(
+    `SELECT s.ID, a.Agent FROM Stock s LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey WHERE s.ID IN (${ids.join(',')})`,
+  );
+  return new Map(rows.map((r) => [r.ID, r.Agent == null ? null : Number(r.Agent) || 0]));
+}

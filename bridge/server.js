@@ -230,11 +230,12 @@ const routes = [
     };
   }],
 
-  ['GET', /^\/price$/, async ({ query }) => {
+  ['GET', /^\/price$/, async ({ query, caller }) => {
     const accountKey = query.get('account')?.trim();
     const itemKey = query.get('item')?.trim();
     const qty = Number(query.get('qty') ?? 0);
     if (!accountKey || !itemKey) throw new HttpError(400, 'BAD_REQUEST', 'חסרים לקוח או פריט');
+    await assertOwns(caller, accountKey);
     const p = (await resolvePrices(accountKey, [itemKey], { quantities: { [itemKey]: qty } })).get(itemKey);
     if (!p) throw new HttpError(404, 'ITEM_NOT_FOUND', `הפריט ${itemKey} לא נמצא`);
     return toPriceResult(itemKey, accountKey, qty, p);
@@ -277,10 +278,15 @@ const routes = [
   }],
 
   // Status of many documents in one query: { stockIds: number[] (<= 500) } -> { [id]: open|produced|gone }
-  ['POST', /^\/documents\/status$/, async ({ body }) => {
+  ['POST', /^\/documents\/status$/, async ({ body, caller }) => {
     const ids = Array.isArray(body?.stockIds) ? body.stockIds : [];
     if (!ids.length) throw new HttpError(400, 'BAD_REQUEST', 'חסרים מספרי מסמכים');
     if (ids.length > 500) throw new HttpError(400, 'BAD_REQUEST', 'עד 500 מסמכים בבקשה');
+    // H1: an agent may only ask about their own customers' documents (unknown ids are fine: 'gone').
+    if (caller.role === 'agent') {
+      const owners = await read.getDocumentAgents(ids);
+      if (!caller.agent || [...owners.values()].some((a) => a !== caller.agent)) throw FORBIDDEN_ACCOUNT();
+    }
     return read.getDocumentStatuses(ids);
   }],
 
@@ -305,7 +311,8 @@ const routes = [
   }],
 
   // Customer balance (open A/R). ?agent=:id -> 403 unless it's that agent's customer.
-  ['GET', /^\/customers\/([^/]+)\/balance$/, async ({ params: [accountKey], query }) => {
+  ['GET', /^\/customers\/([^/]+)\/balance$/, async ({ params: [accountKey], query, caller }) => {
+    await assertOwns(caller, accountKey);
     const b = await getBalance(accountKey);
     if (!b) throw new HttpError(404, 'ACCOUNT_NOT_FOUND', `הלקוח ${accountKey} לא נמצא`);
     const agent = Number(query.get('agent') || 0);
@@ -340,19 +347,24 @@ const routes = [
   ['GET', /^\/rulers\/usage$/, async () => read.getRulerUsage()],
 
   // One document + lines for export. ?agent=:id = only if the customer is that agent's (else 404).
-  ['GET', /^\/documents\/(\d+)$/, async ({ params: [stockId], query }) => {
+  ['GET', /^\/documents\/(\d+)$/, async ({ params: [stockId], query, caller }) => {
     // 15 s cache + the same stale fallback as the queue (the picking screen opens it repeatedly).
     const doc = await docCache.get(String(Number(stockId)), () => read.getDocument(stockId));
     const agent = Number(query.get('agent') || 0);
-    if (!doc || (agent && doc.agent !== agent)) throw new HttpError(404, 'DOC_NOT_FOUND', `מסמך ${stockId} לא נמצא`);
+    const notFound = () => new HttpError(404, 'DOC_NOT_FOUND', `מסמך ${stockId} לא נמצא`);
+    if (!doc || (agent && doc.agent !== agent)) throw notFound();
+    // H1: an agent only their customers' documents; a picker only open picking orders/transfers.
+    if (caller.role === 'agent' && (!caller.agent || doc.agent !== caller.agent)) throw notFound();
+    if (caller.role === 'picker' && !(doc.status === 'open' && [11, 19].includes(doc.documentId))) throw notFound();
     return doc;
   }],
 
   // Bulk customer prices for the catalog grid: { account, items: [{ itemkey, qty? }] } -> PriceResult[]
-  ['POST', /^\/prices$/, async ({ body }) => {
+  ['POST', /^\/prices$/, async ({ body, caller }) => {
     const accountKey = body?.account?.trim?.();
     const items = Array.isArray(body?.items) ? body.items.filter((i) => i?.itemkey) : [];
     if (!accountKey || !items.length) throw new HttpError(400, 'BAD_REQUEST', 'חסרים לקוח או פריטים');
+    await assertOwns(caller, accountKey);
     if (items.length > 500) throw new HttpError(400, 'BAD_REQUEST', 'עד 500 פריטים בבקשה');
     const quantities = Object.fromEntries(items.map((i) => [String(i.itemkey).trim(), Number(i.qty ?? 0)]));
     const prices = await resolvePrices(accountKey, Object.keys(quantities), { quantities });
@@ -370,8 +382,9 @@ const routes = [
   ['GET', /^\/sync$/, async () => ({ running: Boolean(syncRun), last: lastSync ?? null })],
 
   // ?dryRun=1 validates and writes inside a rolled-back transaction (nothing saved).
-  ['POST', /^\/orders$/, async ({ query, body }) => {
+  ['POST', /^\/orders$/, async ({ query, body, caller }) => {
     if (!body || typeof body !== 'object') throw new HttpError(400, 'BAD_REQUEST', 'גוף הבקשה חסר');
+    if (body.accountKey) await assertOwns(caller, body.accountKey);
     const dryRun = query.get('dryRun') === '1';
     const result = await writeOrder(
       {
@@ -399,6 +412,23 @@ const routes = [
     };
   }],
 ];
+
+// --- H1: who is calling (reply 100) -------------------------------------------------
+// The web proxy (the only holder of BRIDGE_TOKEN) sends x-app-role (agent | picker | admin |
+// superadmin | '') and x-app-agent (a number or ''). Direct token holders without the headers
+// (scripts, the operator) count as unrestricted - same as admin.
+function callerOf(req) {
+  const role = String(req.headers['x-app-role'] ?? '').trim().toLowerCase();
+  return { role, agent: Number(req.headers['x-app-agent']) || 0 };
+}
+const FORBIDDEN_ACCOUNT = () => new HttpError(403, 'FORBIDDEN', 'הלקוח אינו משויך לסוכן');
+// Customer-scoped routes: an agent only for their own customers (Accounts.Agent); a picker never.
+async function assertOwns(caller, accountKey) {
+  if (caller.role === 'picker') throw new HttpError(403, 'FORBIDDEN', 'אין הרשאה למלקט');
+  if (caller.role !== 'agent') return;
+  const owner = await read.getAccountAgent(accountKey);
+  if (!caller.agent || owner !== caller.agent) throw FORBIDDEN_ACCOUNT();
+}
 
 // --- plumbing ----------------------------------------------------------------------
 function authorized(req) {
@@ -442,7 +472,7 @@ const server = http.createServer(async (req, res) => {
     if (!match.opts?.public && !authorized(req)) throw new HttpError(401, 'UNAUTHORIZED', 'אין הרשאה');
     const body = req.method === 'POST' ? await readBody(req) : undefined;
     const params = match.m.slice(1).map(decodeURIComponent);
-    const result = await match.handler({ query: url.searchParams, params, body });
+    const result = await match.handler({ query: url.searchParams, params, body, caller: callerOf(req) });
     status = 200;
     send(res, status, result);
   } catch (err) {
