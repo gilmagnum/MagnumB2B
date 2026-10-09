@@ -95,6 +95,15 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 
 ## Endpoints
 
+**Caller headers (H1, reply 100).** The web proxy - the only holder of `BRIDGE_TOKEN` - sends `x-app-role`
+(`agent` | `picker` | `admin` | `superadmin` | '') and `x-app-agent` (a number or ''); the bridge trusts them.
+- **agent:** customer-scoped routes require `Accounts.Agent === x-app-agent`, else **403 FORBIDDEN**: `GET /price`,
+  `POST /prices`, `POST /orders` (its `accountKey`), `GET /customers/:key/balance`, `POST /documents/status` (every
+  stockId's customer). `GET /documents/:id` of another agent's customer → 404.
+- **picker:** 403 on `/price`, `/prices`, `/orders`, `/customers/:key/balance`; `GET /documents/:id` only for **open
+  (Status 0) doc 11/19**, else 404.
+- **admin / superadmin / no header** (a direct token holder): unrestricted.
+
 - `GET /health` → `{ ok: true }` (no auth)
 - `GET /items?shownOnSite=1[&category=<main or sub>][&search=<key/name/barcode>]` → `Item[]` (cached 60s)
 - `GET /items/:itemkey` → `Item` (with `cells` + stock per cell if matrix) · 404 if unknown
@@ -175,13 +184,17 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
     cell special > model special > discount by the cell's code (else the model's) > cell list (else the model's). A special
     wins only when VALID + ACTIVE: `ValidDate <= date <= EndDate` and `SpecialPrices.Active = 0` (the DB flag is inverted: 0 = פעיל);
     `PRICE_SPECIAL_RULE=always|newer` selects older rules; `/price`
-    then adds `specialFrom: <model>` when the special came from the model. The app's `price`/`discountPct` are used only when the
-    resolver has no price (`priceSource: 'web'`). If the app's net differs from the bridge's, the response line adds `webNet`
-    and bridge.log records `price differs <acc>/<item>: web X vs bridge Y`.
+    then adds `specialFrom: <model>` when the special came from the model.
+  - **H2 (reply 100): prices are server-only.** The client's line `price`/`discountPct` and `orderDiscountPct` are **ignored**
+    (a resolved price of 0 is valid; no resolved price → `NO_PRICE`). Only `x-app-role` admin/superadmin sending
+    **`priceOverride: true`** may set them; each override is logged and the line has `priceSource: 'override'`. If the app's
+    net differs from the bridge's, the response line adds `webNet` and bridge.log records `price differs …`.
+  - **H4:** a line `size` must be one of the item's ruler sizes (Supabase `rulers.sizes`, cached 30 min) → else 422 `BAD_SIZE`;
+    a size on an item without a ruler is rejected; a ruler with no sizes filled in yet is not checked.
   - Matrix: one line per cell SKU (`cells[].itemkey`); the cell inherits shownOnSite/pack sizes/ignoreStock from its parent.
   - Errors: 422 `ApiError` with codes `NO_ACCOUNT, ACCOUNT_NOT_FOUND, ACCOUNT_INACTIVE, BAD_KIND, NO_LINES, BAD_LINE,
-    BAD_SHIPPING, BAD_DISCOUNT, ITEM_NOT_FOUND, ITEM_INACTIVE, ITEM_HIDDEN, NO_PACKING, NO_STOCK, NO_PRICE, WRITE_DISABLED`;
-    400 `BAD_JSON/BAD_REQUEST`; 401 `UNAUTHORIZED`; 500 `INTERNAL/SCHEMA`.
+    BAD_SHIPPING, BAD_DISCOUNT, BAD_SIZE, BAD_NOTE, ITEM_NOT_FOUND, ITEM_INACTIVE, ITEM_HIDDEN, NO_PACKING, NO_STOCK, NO_PRICE,
+    WRITE_DISABLED`; 400 `BAD_JSON/BAD_REQUEST`; 401 `UNAUTHORIZED`; 403 `FORBIDDEN` (H1); 500 `INTERNAL/SCHEMA`.
 
 ## Push events fired by the bridge (POST PUSH_EVENT_URL, header x-push-secret)
 - new doc-11 order not made by the app → `agent_order_received` (agentId = Accounts.Agent) + `order_picking` (agentId null)

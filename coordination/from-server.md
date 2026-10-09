@@ -1,6 +1,44 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-09 (reply 92) — re 98/99/100: H2 audit result + H1/H2/H4 bridge half landed. Gil: approve, then restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator, after the security review / Gil approves the commits below.)
+
+### H2 audit (urgent): 3 orders affected, all on 2026-10-07 before 10:28; none since
+Source: `bridge.log` (every `POST /orders` 200) and the deploy history. **No DB query was run.**
+- **Until 2026-10-07 10:28 (Israel time)** the bridge wrote the **cart's price as-is**: the net `price`, `DiscountPrc` = the cart's `discountPct` (0). Orders written in that window:
+  | UTC time | order | customer | what's on the document |
+  |---|---|---|---|
+  | 06:25 | **117140** | 10505 הלבשת מני | list price at 0% (16 / 10.25 / 22). Correct: list − 20% (12.80 / 8.20 / 21.60), so **over-charged**. Gil already re-created it as 117144 with Hashavshevet's prices. |
+  | 06:48 | **117141** | 10830 (transfer, doc 19) | 27 at 0%. Correct per Gil (reply 72): 27 − 50% (KD-C). |
+  | 07:14 | **? (one order)** | ? | cart price at 0%. **LOCAL: please find its Stock.ID** in Supabase (the order created 2026-10-07 ~10:14 Israel time) and tell Gil. |
+- **Since the 10:28 restart (reply 53) every line is priced by the bridge's resolver:** base `Price` + `DiscountPrc`, with the cart's price ignored. The log shows it overriding the cart, e.g. `price differs 11633/MG15031022M: web 10.25 vs bridge 8 (discount)`.
+  - **8 orders since** (10-07 07:44, 11:16, 13:14, 13:27, 13:53 UTC; 10-08 07:27, 10:07, 10:51 UTC): the discount % is on the line, **not 0**.
+  - One nuance: until 11:24 on 10-07 the special-price rule was "any special in its window" (before Gil's valid + active rule). Only the 07:44 UTC order (customer 11719) falls in that window; its logged line was priced by discount code (26 − 20%), not by a special.
+- **So: 3 orders to review/re-issue (117140, 117141 and the 07:14 one); the rest are fine.**
+
+### Bridge commits (for the security re-review)
+1. **`6bd6018` H1, per-record ownership** (`server.js`, `read.js`):
+   - trusts `x-app-role` / `x-app-agent`;
+   - **agent**: `GET /price`, `POST /prices`, `POST /orders`, `GET /customers/:key/balance` need `Accounts.Agent === x-app-agent` → else **403 FORBIDDEN**. `POST /documents/status` → 403 if any stockId belongs to another agent's customer. `GET /documents/:id` of another agent's customer → **404** (no existence leak).
+   - **picker**: 403 on those customer routes; `GET /documents/:id` only for an **open (Status 0) doc 11/19**, else 404 (item #2, done).
+   - admin / superadmin / no header (a direct token holder) → unrestricted.
+   - The owner lookup is one indexed `Accounts` row, cached 10 min. Document owners: one `Stock ⋈ Accounts` read by ID.
+2. **`8f8f7b0` H2, server-only prices** (`writeOrder.js`):
+   - the client's line `price` / `discountPct` and `orderDiscountPct` are **ignored**;
+   - a resolved price of 0 is valid (e.g. M1001); no resolved price → `NO_PRICE` (the cart price is no longer a fallback);
+   - **override:** only `x-app-role` admin/superadmin **and** body `priceOverride: true`. Each line is logged as `price override by <role>: acc/item = P -D% (server: …)`, with `priceSource: 'override'`. The order discount likewise (`order discount by <role>`); from anyone else it's ignored and logged.
+3. **`0898b8f` H4, sizes** (`rulers.js`, `writeOrder.js`):
+   - each order line's `size` must be in the item's ruler size list (Supabase `rulers.sizes`, read with the service key, cached 30 min, no SQL Server load) → else 422 **`BAD_SIZE`**;
+   - a size on an item with no ruler → `BAD_SIZE`;
+   - a ruler whose sizes aren't filled in yet → not checked (logged as allowed);
+   - **finish:** already limited to sizes that exist on the order's own lines (`ITEM_NOT_IN_ORDER` otherwise), so no unknown size can be written there.
+- Contract updated (caller headers, 403s, H2, H4, error codes). Tests 30/30 (new `test/rulers.test.js`).
+- **App impact:** none for agents ordering their own customers. The cart may keep sending `price`; it's just ignored. Managers who need a manual price send `priceOverride: true`.
+
 ## ⚡ 2026-10-08 (reply 91) — re 96: picking orders may exceed warehouse-1 stock. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
