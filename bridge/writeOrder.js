@@ -1,6 +1,7 @@
 import { sql, getPool, bind, key } from './db.js';
 import { getAccount, getItem, getItemRows, getTableColumns, getPrintStyle, getMatrixFathers } from './read.js';
 import { resolvePrices } from './pricing.js';
+import { getRulerSizes, checkSize } from './rulers.js';
 import {
   ORDER_DOCUMENT_IDS,
   ORDER_WAREHOUSE,
@@ -190,12 +191,16 @@ export async function writeOrder(order, { commit = false, priceOverride = false 
     });
   }
   const unitsByItem = new Map();
+  const rulerSizes = order.lines.some((l) => l.size) ? await getRulerSizes() : null;
   const checked = order.lines.map((line) => {
     const itemKey = String(line.itemkey).trim();
     const item = itemByKey.get(itemKey);
     if (!item) throw new OrderError('ITEM_NOT_FOUND', `הפריט ${itemKey} לא נמצא`);
     if (!item.active) throw new OrderError('ITEM_INACTIVE', `הפריט ${itemKey} אינו פעיל`);
     if (!item.shownOnSite) throw new OrderError('ITEM_HIDDEN', `הפריט ${itemKey} אינו פתוח להזמנה באתר`);
+    // H4: a size must be one of the item's ruler sizes (Supabase rulers.sizes).
+    const sizeProblem = checkSize(item.sizeRulerCode, line.size?.trim(), rulerSizes);
+    if (sizeProblem) throw new OrderError('BAD_SIZE', `${itemKey}: ${sizeProblem}`);
     const perUnit = item[UNIT_FIELD[line.unit]];
     if (!(perUnit > 0)) {
       throw new OrderError('NO_PACKING', `לפריט ${itemKey} אין כמות ${line.unit === 'carton' ? 'בקרטון' : 'בחבילה'} - לא ניתן להזמין`);
