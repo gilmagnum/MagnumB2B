@@ -396,7 +396,11 @@ const routes = [
         lines: body.lines,
         shipping: body.shipping,
       },
-      { commit: !dryRun },
+      {
+        commit: !dryRun,
+        // H2: client prices only for a manager who explicitly asks (body.priceOverride === true).
+        priceOverride: body.priceOverride === true && ['admin', 'superadmin'].includes(caller.role) ? caller.role : false,
+      },
     );
     if (!dryRun) {
       queueCache.clear();

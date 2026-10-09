@@ -144,7 +144,9 @@ function validate(order) {
  * Dry run by default: inserted inside a transaction, read back, rolled back.
  * Pass { commit: true } to keep the order.
  */
-export async function writeOrder(order, { commit = false } = {}) {
+// priceOverride: false, or the caller's role ('admin' / 'superadmin') when a manager explicitly asked
+// to set prices / the order discount (H2) - then line price/discountPct and orderDiscountPct apply.
+export async function writeOrder(order, { commit = false, priceOverride = false } = {}) {
   validate(order);
   const accountKey = String(order.accountKey).trim();
   const orderKind = order.orderKind ?? 'picking';
@@ -211,17 +213,24 @@ export async function writeOrder(order, { commit = false } = {}) {
   // Reply 68: the bridge's resolution is authoritative (special > discount code > price list) and
   // the line carries the BASE price + discount % separately. The app's price is only a fallback
   // when the resolver has no price; a disagreement is logged (net per unit) for follow-up.
+  // H2 (reply 100): prices come from the server ONLY. The client's price / discountPct are ignored
+  // (a resolved price of 0 is valid, e.g. M1001); no resolved price = NO_PRICE. Only a manager
+  // (admin/superadmin) sending priceOverride: true may set them - logged per line.
   const orderLines = checked.map(({ line, itemKey, quantity }) => {
     const resolved = prices.get(itemKey);
-    const useResolved = resolved?.price > 0;
-    const price = useResolved ? resolved.price : line.price;
-    if (!(price >= 0)) throw new OrderError('NO_PRICE', `לא נמצא מחיר לפריט ${itemKey}`);
-    const discountPrc = useResolved ? (resolved.discountPrc ?? 0) : (line.discountPct ?? 0);
+    const override = priceOverride && line.price != null;
+    if (!override && !resolved) throw new OrderError('NO_PRICE', `לא נמצא מחיר לפריט ${itemKey}`);
+    const price = override ? line.price : resolved.price;
+    const discountPrc = override ? (line.discountPct ?? 0) : (resolved.discountPrc ?? 0);
+    if (override) {
+      console.log(`price override by ${priceOverride}: ${accountKey}/${itemKey} = ${price} -${discountPrc}%`
+        + (resolved ? ` (server: ${resolved.price} -${resolved.discountPrc ?? 0}%)` : ''));
+    }
     const out = {
       itemKey, quantity, price, discountPrc, size: line.size?.trim() || undefined,
-      priceSource: useResolved ? resolved.source : 'web',
+      priceSource: override ? 'override' : resolved.source,
     };
-    if (useResolved && line.price != null) {
+    if (!override && line.price != null) {
       const webNet = round2(line.price * (1 - (line.discountPct ?? 0) / 100));
       const net = round2(price * (1 - discountPrc / 100));
       if (Math.abs(webNet - net) >= 0.01) {
@@ -320,7 +329,12 @@ export async function writeOrder(order, { commit = false } = {}) {
   // Like Hashavshevet: totals come from the unrounded line sums.
   // Like issued Hashavshevet documents: TFtalVat = lines before the order discount,
   // DiscountPrc/DiscountPrcR = order discount %, TFtal = TFtalVat x (1 - discount) x VAT.
-  const orderDiscountPct = order.orderDiscountPct ?? 0;
+  // H2: the header discount is a manager decision too; ignored (logged) from anyone else.
+  const orderDiscountPct = priceOverride ? (order.orderDiscountPct ?? 0) : 0;
+  if (!priceOverride && order.orderDiscountPct) {
+    console.log(`order discount ignored (no override right): ${accountKey} ${order.orderDiscountPct}%`);
+  }
+  if (priceOverride && order.orderDiscountPct) console.log(`order discount by ${priceOverride}: ${accountKey} ${orderDiscountPct}%`);
   const totals = {
     net: round2(net),
     orderDiscountPct,
