@@ -750,9 +750,27 @@ export async function getProducedToday({ agent, account, q } = {}) {
   const today = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD, server local time
   const from = new Date(Date.now() - 30 * 24 * 60 * 60_000);
   const rows = await getDocuments({ agent, account, q, picked: true, orderDocIds: [11], from, limit: 200 });
+  // Transfers (doc 19, reply 104) produce no child document - the transfer itself is what gets
+  // produced. It counts when its own IssueDate or ValueDate is today; it is its own אסמכתא.
+  const transferDocs = new Set(Object.values(TRANSFER_ACCOUNTS).map((t) => Number(t.documentId)));
+  const producedTransfers = rows.filter((r) => r.status === 'produced' && transferDocs.has(r.documentId));
+  const transferDates = producedTransfers.length
+    ? await query(`SELECT ID, IssueDate, ValueDate FROM Stock WHERE ID IN (${producedTransfers.map((r) => Number(r.stockId)).join(',')})`)
+    : [];
+  const transferToday = new Set(
+    transferDates.filter((d) => isoDate(d.IssueDate) === today || isoDate(d.ValueDate) === today).map((d) => d.ID),
+  );
   return rows
-    .filter((r) => r.status === 'produced' && r.producedDocs.some((d) => d.date === today))
-    .map((r) => ({ ...r, produced: true, producedDate: today }));
+    .filter((r) => r.status === 'produced'
+      && (transferDocs.has(r.documentId) ? transferToday.has(r.stockId) : r.producedDocs.some((d) => d.date === today)))
+    .map((r) => ({
+      ...r,
+      produced: true,
+      producedDate: today,
+      ...(transferDocs.has(r.documentId) && !r.producedDocs.length && {
+        producedDocs: [{ stockId: r.stockId, documentId: r.documentId, docTypeName: r.docTypeName, docNumber: r.docNumber, date: today, total: r.total }],
+      }),
+    }));
 }
 
 // Reply 89: the columns that could mean "inactive" on one account (diagnostic, one indexed row).

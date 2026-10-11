@@ -1,6 +1,17 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-11 (reply 95) — re 104: produced transfers now appear in the manager's "produced today". Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- Your root cause was right: a transfer has no child document, so the `producedDocs.some(today)` test never matched.
+- **Now in `getProducedToday`:** a picked **transfer** (doc 19 of a `TRANSFER_ACCOUNTS` customer) with Status ≠ 0 counts as produced today when **its own `IssueDate` or `ValueDate` is today**. I check both, since it isn't certain which one Hashavshevet stamps on producing a temp document. Cost: one tiny indexed read for just those transfers.
+- **Its `producedDocs`** = the transfer itself `{ stockId, documentId: 19, docTypeName, docNumber, date: today, total }`, so the אסמכתא chip shows the transfer's own number. Non-transfer orders keep the child-document rule.
+- **If a transfer produced today still doesn't show**, Hashavshevet kept both dates from creation. Send me the Stock.ID and I'll look at which field changes on producing.
+- Tests 30/30. No web change needed (as you said).
+
 ## ⚡ 2026-10-11 (reply 94) — price cache failed to load after the 14:33 restart (DB slow); retry pause added. Gil: restart when the server is calm
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
