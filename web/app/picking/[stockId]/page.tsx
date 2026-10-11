@@ -230,22 +230,25 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
           const packStep = (l.packSize ?? 0) > 1 && !!l.packLabel; // step by a whole pack when we know the pack
           const step = packStep ? (l.packSize as number) : 1;
           const border = isPacking ? "var(--brand)" : sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)";
+          // Pickers work in the warehouse — give them bigger image / SKU / quantity for readability.
+          const isPicker = role === "picker";
+          const imgSz = isPicker ? 96 : 52;
           return (
             <div key={lineKey(l)} className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${border}` }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 {isPacking
-                  ? <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--brand-soft)", display: "grid", placeItems: "center", fontSize: 26, flex: "0 0 auto" }}>📦</div>
+                  ? <div style={{ width: imgSz, height: imgSz, borderRadius: 8, background: "var(--brand-soft)", display: "grid", placeItems: "center", fontSize: isPicker ? 48 : 26, flex: "0 0 auto" }}>📦</div>
                   : images[l.itemkey]
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={images[l.itemkey]} alt="" style={{ width: 52, height: 52, objectFit: "contain", borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />
-                    : <div style={{ width: 52, height: 52, borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />}
+                    ? <img src={images[l.itemkey]} alt="" style={{ width: imgSz, height: imgSz, objectFit: "contain", borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />
+                    : <div style={{ width: imgSz, height: imgSz, borderRadius: 8, background: "var(--surface-muted)", flex: "0 0 auto" }} />}
                 <div style={{ minWidth: 0, flex: 1 }}>
                   {isPacking
-                    ? <div style={{ fontWeight: 700 }}>{l.packingLabel ?? "אריזה"}</div>
+                    ? <div style={{ fontWeight: 700, fontSize: isPicker ? 22 : undefined }}>{l.packingLabel ?? "אריזה"}</div>
                     : <>
                         {/* Pickers see only the MAIN (parent) SKU — size/color are in the name below. */}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                          <span style={{ fontWeight: 700 }}>{parents[l.itemkey] ?? l.itemkey}</span>
+                          <span style={{ fontWeight: 700, fontSize: isPicker ? 24 : undefined }}>{parents[l.itemkey] ?? l.itemkey}</span>
                           {l.size ? <span className="chip chip-info">מידה {l.size}</span> : null}
                           {colors[l.itemkey] && (() => {
                             const hex = colorHex(colors[l.itemkey], colorOv);
@@ -260,18 +263,18 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14 }}>{isPacking
+                <span style={{ fontSize: isPicker ? 19 : 14 }}>{isPacking
                   ? "כמות למשלוח (קובע המלקט):"
                   : <>הוזמן: {l.packs != null && l.packLabel
                       ? <><b>{l.packs} {l.packLabel}</b> <span style={{ color: "var(--ink-muted)" }}>({l.units ?? l.qty} יח׳)</span></>
                       : <><b>{l.units ?? l.qty}</b>{l.unit ? ` ${l.unit}` : " יח׳"}</>}</>}</span>
                 {/* Stepper jumps by one pack (packSize units); the number stays editable for a manual fix. + on the right (RTL). */}
                 <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <button onClick={() => setQty(l, q + step)} disabled={readOnly} className="btn btn-primary btn-sm" style={{ padding: "8px 13px", fontSize: 18 }} title={packStep ? `+${l.packLabel}` : "+1"}>+</button>
+                  <button onClick={() => setQty(l, q + step)} disabled={readOnly} className="btn btn-primary btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `+${l.packLabel}` : "+1"}>+</button>
                   <input type="number" inputMode="numeric" min={0} max={isPacking ? undefined : l.qty} value={q} disabled={readOnly}
                     onChange={(e) => setQty(l, Number(e.target.value))}
-                    style={{ width: 72, padding: "8px", fontSize: 16, textAlign: "center", borderRadius: 8, border: "1px solid var(--border)" }} />
-                  <button onClick={() => setQty(l, q - step)} disabled={readOnly || q <= 0} className="btn btn-sm" style={{ padding: "8px 13px", fontSize: 18 }} title={packStep ? `−${l.packLabel}` : "−1"}>−</button>
+                    style={{ width: isPicker ? 96 : 72, padding: isPicker ? "10px" : "8px", fontSize: isPicker ? 26 : 16, fontWeight: isPicker ? 700 : undefined, textAlign: "center", borderRadius: 8, border: "1px solid var(--border)" }} />
+                  <button onClick={() => setQty(l, q - step)} disabled={readOnly || q <= 0} className="btn btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `−${l.packLabel}` : "−1"}>−</button>
                   {/* Fine ±1-unit control — mobile/tablet only (desktop has the native number-spinner), stacked +1 over −1. */}
                   {packStep && (
                     <span className="pick-fine">
