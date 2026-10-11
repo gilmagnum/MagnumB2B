@@ -4,6 +4,7 @@ import { Heebo } from "next/font/google";
 import { getProfile } from "../lib/auth";
 import AppHeader from "./components/AppHeader";
 import SWRegister from "./components/SWRegister";
+import BackToTop from "./components/BackToTop";
 import "./globals.css";
 
 const heebo = Heebo({ subsets: ["hebrew", "latin"], variable: "--font-heebo", display: "swap" });
@@ -34,6 +35,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <SWRegister />
         {me && <AppHeader role={me.role} name={me.full_name ?? ""} />}
         <main>{children}</main>
+        <BackToTop />
       </body>
     </html>
   );
