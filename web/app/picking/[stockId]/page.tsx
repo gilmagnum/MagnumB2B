@@ -272,9 +272,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                     onChange={(e) => setQty(l, Number(e.target.value))}
                     style={{ width: 72, padding: "8px", fontSize: 16, textAlign: "center", borderRadius: 8, border: "1px solid var(--border)" }} />
                   <button onClick={() => setQty(l, q - step)} disabled={readOnly || q <= 0} className="btn btn-sm" style={{ padding: "8px 13px", fontSize: 18 }} title={packStep ? `−${l.packLabel}` : "−1"}>−</button>
-                  {/* Fine ±1-unit control — the native number-spinner is desktop-only, so give mobile/tablet the same on pack-step lines. */}
+                  {/* Fine ±1-unit control — mobile/tablet only (desktop has the native number-spinner), stacked +1 over −1. */}
                   {packStep && (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, marginInlineStart: 2 }}>
+                    <span className="pick-fine">
                       <button onClick={() => setQty(l, q + 1)} disabled={readOnly} className="btn btn-sm" style={{ padding: "6px 9px", fontSize: 13 }} title="יחידה אחת">+1</button>
                       <button onClick={() => setQty(l, q - 1)} disabled={readOnly || q <= 0} className="btn btn-sm" style={{ padding: "6px 9px", fontSize: 13 }} title="יחידה אחת">−1</button>
                     </span>

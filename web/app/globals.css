@@ -156,6 +156,10 @@ h3 { font-size: 16px; font-weight: 700; }
 .cat-layout { display: grid; grid-template-columns: 220px 1fr; gap: 24px; }
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
+/* Picking fine ±1 buttons: mobile/tablet only (desktop has the native number spinner), stacked +1 over −1. */
+.pick-fine { display: inline-flex; flex-direction: column; gap: 4px; margin-inline-start: 2px; }
+@media (min-width: 1025px) { .pick-fine { display: none; } }
+
 main { padding: 24px; max-width: 1280px; margin-inline: auto; }
 
 @media (max-width: 820px) {
