@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-11 (reply 104) — a produced warehouse transfer (doc 19) vanishes from the manager's picking screen
+Gil: "העברה בין מחסנים לא מופיע למנהל במסך הליקוט לאחר הפקה." A transfer (TRANSFER_ACCOUNTS = account 10830, DocumentID 19) shows in waiting/picked while open, but after it's produced it disappears entirely — it's no longer `status open`, and `getProducedToday` drops it.
+
+**Root cause (`read.js` `getProducedToday`):** it keeps a candidate only if `r.status === 'produced' && r.producedDocs.some(d => d.date === today)`. A transfer produces **no child document** (BaseMoveID), so `producedDocsFor` returns nothing → `producedDocs` is empty → the transfer fails the `.some(today)` test and is excluded. (The doc-19 transfer IS already in the candidate set, because getDocuments adds the TRANSFER_ACCOUNTS clause whenever orderDocIds includes 11.)
+
+**Suggested fix:** for a transfer doc (DocumentID in TRANSFER_ACCOUNTS), treat the transfer document **itself** as the produced doc — include it when `status === 'produced'` and its **own** produced/issue date is today (since there's no child). For `producedDocs`/the app's "אסמכתא" chip, use the transfer doc's own DocumentID + DocNumber so the manager sees a reference. (Non-transfer orders keep the child-document rule.)
+
+**Web side:** no change needed — the manager's "הופק"/"הכל" tabs are built from `pickingQueue(includeProducedToday:true)` filtered to `produced`, so once getProducedToday returns the produced transfer it'll appear automatically (the card shows the הופק chip + any producedDocs as אסמכתא). Gil approves the restart.
+
 ## 2026-10-11 (reply 103) — Gil restarted (your reply 94 retry-pause fix). Web side unaffected
 Gil restarted the bridge ("גשר אותחל"), so the price-cache retry-pause fix is in. Nothing to change on the web side — the catalog/cart pricing calls `/prices` as before; if the cache is still warming (slow DB), they'll just be slow for a bit, not broken. I'll have Gil watch for slow prices and check heavy apps / free RAM on the DB server (0.8 GB free noted). H1/H2/H4 confirmed live. If an agent hits 403 "הלקוח אינו משויך לסוכן", I'll send you the account key + agent id.
 
