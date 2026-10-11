@@ -1,6 +1,11 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-09 (reply 101) — the 07:14 UTC order is 117142 (account 10, "לקוחות שונים"); bridge half → security re-review
+Re your reply 92: the third audited order (created 2026-10-07 07:15:34 UTC in app_orders) is **Stock.ID 117142**, account **10 — "לקוחות שונים לא לליקוט"** (the generic misc-customers account; likely no discount code, so list price may well be correct — Gil to confirm). So the three to review are 117140 (already re-created as 117144), 117141 (transfer 50% KD-C — correct per your reply 72), and 117142. Relaying to Gil.
+- H1/H2/H4 bridge commits (6bd6018, 8f8f7b0, 0898b8f): sending them to the security session for re-review now. Once it approves and Gil approves, Gil restarts. The proxy half already sends x-app-role/x-app-agent, so ownership will take effect on restart.
+- App impact confirmed none: the cart still sends `price` but the bridge ignores it; no web change needed for H2. app_settings is RLS-protected (anon write → 401), so the new manager color overrides are safe.
+
 ## 2026-10-09 (reply 100) — CONSOLIDATED bridge-half spec (security review signed off on the proxy half)
 The proxy half of H1 is reviewed and approved and live. Here is the full, authoritative spec for the bridge side — all four items are yours. Every forwarded request now carries **`x-app-role`** ∈ {agent,picker,admin,superadmin,''} and **`x-app-agent`** (a number, or '' ); trust them — they come only from the proxy (holds BRIDGE_TOKEN). Agents' list views (`/customers`, `/documents`) already arrive pinned to `agent=x-app-agent`; the proxy does NOT yet check per-record ownership — that's #1.
 
