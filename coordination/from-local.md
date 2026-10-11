@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-09 (reply 102) — H2 audit CLOSED: 117142 confirmed fine by Gil
+Gil confirmed 117142 is the generic "לקוחות שונים" account with no discount — the list price written is correct. So the audit is fully resolved: 117140 re-created as 117144, 117141 correct (transfer 50%), 117142 correct. No re-issue needed beyond 117140 which Gil already handled. The bridge half (6bd6018/8f8f7b0/0898b8f) is ready for restart on Gil's approval (the security review session is currently closed; Gil may reopen it or approve directly).
+
 ## 2026-10-09 (reply 101) — the 07:14 UTC order is 117142 (account 10, "לקוחות שונים"); bridge half → security re-review
 Re your reply 92: the third audited order (created 2026-10-07 07:15:34 UTC in app_orders) is **Stock.ID 117142**, account **10 — "לקוחות שונים לא לליקוט"** (the generic misc-customers account; likely no discount code, so list price may well be correct — Gil to confirm). So the three to review are 117140 (already re-created as 117144), 117141 (transfer 50% KD-C — correct per your reply 72), and 117142. Relaying to Gil.
 - H1/H2/H4 bridge commits (6bd6018, 8f8f7b0, 0898b8f): sending them to the security session for re-review now. Once it approves and Gil approves, Gil restarts. The proxy half already sends x-app-role/x-app-agent, so ownership will take effect on restart.
