@@ -1,5 +1,22 @@
 import { supabaseBrowser } from "./supabase/browser";
 
+// Map variant/cell SKUs to their parent (model) SKU via item_variants. Keys that aren't a
+// variant (plain + ruler items) are simply absent. Used so picking shows the MAIN SKU.
+export async function fetchParents(itemkeys: (string | null | undefined)[]): Promise<Record<string, string>> {
+  const keys = [...new Set(itemkeys.filter(Boolean) as string[])];
+  if (!keys.length) return {};
+  const out: Record<string, string> = {};
+  const sb = supabaseBrowser();
+  for (let i = 0; i < keys.length; i += 200) {
+    const chunk = keys.slice(i, i + 200);
+    const { data } = await sb.from("item_variants").select("itemkey,parent_itemkey").in("itemkey", chunk);
+    for (const r of (data ?? []) as { itemkey: string; parent_itemkey: string | null }[]) {
+      if (r.parent_itemkey) out[r.itemkey] = r.parent_itemkey;
+    }
+  }
+  return out;
+}
+
 // Look up product image URLs for a set of SKUs (images live in Supabase, not Hashavshevet).
 // Used to show thumbnails in cart / picking / document lines.
 // Matrix lines carry a variant SKU whose own row has no image — the photo lives on the

@@ -2,7 +2,7 @@
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { bridge, type DocumentDetail, type DocLine } from "../../../lib/bridge";
-import { fetchImages } from "../../../lib/images";
+import { fetchImages, fetchParents } from "../../../lib/images";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import { managerOrAbove } from "../../../lib/roles";
 import { openPickingSession, savePickingSession, releasePickingSession, handoffPickingSession, saveAndReleasePickingSession } from "../../picking-actions";
@@ -20,6 +20,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [tookOver, setTookOver] = useState(false);
   const [picked, setPicked] = useState<Record<string, number>>({});
   const [images, setImages] = useState<Record<string, string>>({});
+  const [parents, setParents] = useState<Record<string, string>>({}); // variant SKU -> main SKU
   const [picker, setPicker] = useState("");
   const [role, setRole] = useState("");
   const [notes, setNotes] = useState("");
@@ -47,6 +48,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       try { d = await bridge.document(id); } catch { setErr("הגשר עדיין לא מחובר — פרטי ההזמנה ייטענו כשהגשר יעלה."); return; }
       setDoc(d);
       fetchImages((d.lines ?? []).map((l) => l.itemkey)).then(setImages).catch(() => {});
+      fetchParents((d.lines ?? []).map((l) => l.itemkey)).then(setParents).catch(() => {});
       // Acquire the picking session (lock). Managers reopening a produced pick still lock it.
       const sess = await openPickingSession(id, pn).catch(() => ({} as { lockedBy?: string }));
       if (sess.lockedBy) {
@@ -232,7 +234,8 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                   {isPacking
                     ? <div style={{ fontWeight: 700 }}>{l.packingLabel ?? "אריזה"}</div>
                     : <>
-                        <div style={{ fontWeight: 700 }}>{l.itemkey}{l.size ? <span className="chip chip-info" style={{ marginInlineStart: 6 }}>מידה {l.size}</span> : null}</div>
+                        {/* Pickers see only the MAIN (parent) SKU — size/color are in the name below. */}
+                        <div style={{ fontWeight: 700 }}>{parents[l.itemkey] ?? l.itemkey}{l.size ? <span className="chip chip-info" style={{ marginInlineStart: 6 }}>מידה {l.size}</span> : null}</div>
                         <div style={{ fontSize: 13, color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</div>
                       </>}
                 </div>
