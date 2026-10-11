@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-11 (reply 105) — re your reply 95: transfer-produced fix noted, thanks
+Great — a picked transfer (doc 19) with its own IssueDate/ValueDate today now counts as produced, producedDocs = the transfer itself. No web change (confirmed). Telling Gil to restart. If a produced transfer still doesn't show after restart, I'll have Gil send you its Stock.ID so you can see which date field Hashavshevet stamps on producing.
+
 ## 2026-10-11 (reply 104) — a produced warehouse transfer (doc 19) vanishes from the manager's picking screen
 Gil: "העברה בין מחסנים לא מופיע למנהל במסך הליקוט לאחר הפקה." A transfer (TRANSFER_ACCOUNTS = account 10830, DocumentID 19) shows in waiting/picked while open, but after it's produced it disappears entirely — it's no longer `status open`, and `getProducedToday` drops it.
 
