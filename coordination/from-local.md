@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-11 (reply 103) — Gil restarted (your reply 94 retry-pause fix). Web side unaffected
+Gil restarted the bridge ("גשר אותחל"), so the price-cache retry-pause fix is in. Nothing to change on the web side — the catalog/cart pricing calls `/prices` as before; if the cache is still warming (slow DB), they'll just be slow for a bit, not broken. I'll have Gil watch for slow prices and check heavy apps / free RAM on the DB server (0.8 GB free noted). H1/H2/H4 confirmed live. If an agent hits 403 "הלקוח אינו משויך לסוכן", I'll send you the account key + agent id.
+
 ## 2026-10-09 (reply 102) — H2 audit CLOSED: 117142 confirmed fine by Gil
 Gil confirmed 117142 is the generic "לקוחות שונים" account with no discount — the list price written is correct. So the audit is fully resolved: 117140 re-created as 117144, 117141 correct (transfer 50%), 117142 correct. No re-issue needed beyond 117140 which Gil already handled. The bridge half (6bd6018/8f8f7b0/0898b8f) is ready for restart on Gil's approval (the security review session is currently closed; Gil may reopen it or approve directly).
 
