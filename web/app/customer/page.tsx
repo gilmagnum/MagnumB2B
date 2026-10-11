@@ -106,9 +106,12 @@ export default function CustomerPage() {
       {shown.length > 0 ? (
         <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
           {shown.map((c) => (
-            <li key={c.accountKey} className="card" style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <li key={c.accountKey} className="card" onClick={() => choose(c.accountKey, c.fullName)}
+              role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(c.accountKey, c.fullName); } }}
+              style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer" }}>
               <span>{c.fullName} <span style={{ color: "var(--ink-muted)" }}>({c.accountKey})</span></span>
-              <button onClick={() => choose(c.accountKey, c.fullName)} className="btn btn-primary btn-sm">בחר</button>
+              <button onClick={(e) => { e.stopPropagation(); choose(c.accountKey, c.fullName); }} className="btn btn-primary btn-sm" style={{ flex: "0 0 auto" }}>בחר</button>
             </li>
           ))}
         </ul>
