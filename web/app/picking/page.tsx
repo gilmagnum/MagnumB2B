@@ -6,12 +6,15 @@ import { managerOrAbove } from "../../lib/roles";
 import { getActiveLocks } from "../picking-actions";
 import { listPickingLogs, type PickLogRow } from "../order-actions";
 
-// Picking queue. Warehouse screen (role picker/admin). Read-only for now —
-// "finish picking" (marking Hashavshevet) is deferred until Gil examines a live pick.
+type Tab = "waiting" | "picked" | "produced" | "all";
+const TAB_LABEL: Record<Tab, string> = { waiting: "ממתין לליקוט", picked: "לוקט", produced: "הופק", all: "הכל" };
+
+// Picking queue. Warehouse screen (picker/manager). Managers get four filters
+// (waiting / picked / produced-today / all); pickers see waiting + picked only.
 export default function PickingPage() {
   const [role, setRole] = useState<string>("");
   const [allowed, setAllowed] = useState<boolean | null>(null);
-  const [state, setState] = useState<"waiting" | "picked">("waiting");
+  const [state, setState] = useState<Tab>("waiting");
   const [rows, setRows] = useState<Document[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -20,9 +23,12 @@ export default function PickingPage() {
   const [logs, setLogs] = useState<Record<number, PickLogRow>>({}); // picker notes + shortages by stockId
   const [openLog, setOpenLog] = useState<number | null>(null);
 
-  // Load picking logs (notes + shortages) for the "picked" tab so a manager can expand each row.
+  const mgr = managerOrAbove(role);
+  const tabs: Tab[] = mgr ? ["waiting", "picked", "produced", "all"] : ["waiting", "picked"];
+
+  // Load picking logs (notes + shortages) so a manager can expand picked/produced rows.
   useEffect(() => {
-    if (state !== "picked" || !managerOrAbove(role)) { setLogs({}); return; }
+    if (!mgr || state === "waiting") { setLogs({}); return; }
     let alive = true;
     listPickingLogs().then((ls) => {
       if (!alive) return;
@@ -31,7 +37,7 @@ export default function PickingPage() {
       setLogs(by);
     }).catch(() => {});
     return () => { alive = false; };
-  }, [state, role]);
+  }, [state, mgr]);
 
   useEffect(() => {
     (async () => {
@@ -46,10 +52,24 @@ export default function PickingPage() {
   const load = useCallback(async () => {
     if (!allowed) return;
     setLoading(true); setErr("");
+    const term = q.trim() || undefined;
+    const isMgr = managerOrAbove(role);
     try {
-      // Managers also see orders produced today in the "picked" tab.
-      const includeProducedToday = state === "picked" && managerOrAbove(role);
-      const r = await bridge.pickingQueue(0, { state, q: q.trim() || undefined, includeProducedToday });
+      let r: Document[];
+      if (state === "waiting") {
+        r = await bridge.pickingQueue(0, { state: "waiting", q: term });
+      } else if (state === "picked") {
+        r = (await bridge.pickingQueue(0, { state: "picked", q: term })).filter((d) => !d.produced);
+      } else if (state === "produced") {
+        r = (await bridge.pickingQueue(0, { state: "picked", q: term, includeProducedToday: true })).filter((d) => d.produced);
+      } else { // all
+        const [w, p] = await Promise.all([
+          bridge.pickingQueue(0, { state: "waiting", q: term }),
+          bridge.pickingQueue(0, { state: "picked", q: term, includeProducedToday: isMgr }),
+        ]);
+        const seen = new Set<number>();
+        r = [...w, ...p].filter((d) => (seen.has(d.stockId) ? false : (seen.add(d.stockId), true)));
+      }
       setRows(r);
       getActiveLocks(r.map((d) => d.stockId)).then(setLocks).catch(() => {});
     } catch {
@@ -66,8 +86,9 @@ export default function PickingPage() {
     <>
       <h1>ליקוט</h1>
       <div style={{ display: "flex", gap: 8, margin: "12px 0", flexWrap: "wrap" }}>
-        <button onClick={() => setState("waiting")} style={tab(state === "waiting")}>ממתינות לליקוט</button>
-        <button onClick={() => setState("picked")} style={tab(state === "picked")}>לוקטו</button>
+        {tabs.map((t) => (
+          <button key={t} onClick={() => setState(t)} style={tab(state === t)}>{TAB_LABEL[t]}</button>
+        ))}
         <input placeholder="חיפוש (לקוח/מספר)…" value={q}
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") load(); }}
           style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc", minWidth: 200 }} />
@@ -76,13 +97,13 @@ export default function PickingPage() {
 
       {err && <p style={{ color: "#a60", fontSize: 13 }}>{err}</p>}
       {loading ? <p>טוען…</p> : rows.length === 0 && !err ? (
-        <p style={{ color: "#888", padding: 12 }}>אין הזמנות {state === "waiting" ? "ממתינות לליקוט" : "שלוקטו"}.</p>
+        <p style={{ color: "#888", padding: 12 }}>אין הזמנות ({TAB_LABEL[state]}).</p>
       ) : (
         /* Responsive card list — no horizontal scroll on mobile/tablet. */
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 10 }}>
           {rows.map((d) => {
-            // Produced orders are view-only for daily tracking — no re-opening picking.
-            const canOpen = (state === "waiting" || managerOrAbove(role)) && !d.produced;
+            // Produced orders are view-only; a picked order can be reopened by a manager; waiting is open to all.
+            const canOpen = !d.produced && (!d.picked || mgr);
             const href = `/picking/${d.stockId}`;
             const inner = (
               <div className="card card-pad" style={{ display: "grid", gap: 6, height: "100%" }}>
@@ -101,7 +122,7 @@ export default function PickingPage() {
                     ))}
                   </div>
                 )}
-                {state === "picked" && (logs[d.stockId] || d.produced) && (
+                {mgr && (logs[d.stockId] || d.produced) && (
                   <div>
                     <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenLog(openLog === d.stockId ? null : d.stockId); }}
                       className="btn btn-sm" style={{ padding: "2px 10px" }}>{openLog === d.stockId ? "− הערות וחוסרים" : "+ הערות וחוסרים"}</button>
@@ -123,7 +144,7 @@ export default function PickingPage() {
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 2 }}>
                   <span style={{ color: canOpen ? "var(--brand)" : "var(--ink-muted)", fontWeight: 700 }}>
-                    {d.produced ? "הופק — למעקב" : state === "waiting" ? "ליקוט ←" : managerOrAbove(role) ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}
+                    {d.produced ? "הופק — למעקב" : !d.picked ? "ליקוט ←" : mgr ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}
                   </span>
                   {locks[d.stockId] && <span className="chip chip-warn" title="בליקוט כעת">🔒 {locks[d.stockId]}</span>}
                 </div>
