@@ -26,9 +26,19 @@ const COLORS: [string, string][] = [
   ["white", "#ffffff"], ["pink", "#ec4899"], ["gum", "#f6a6c0"], ["petrol ", "#1f6f78"],
 ];
 
-export function colorHex(label: string | null | undefined): string | null {
+// Resolve a label to a hex. Manager overrides (name -> hex, from settings) are checked first,
+// longest key wins, then the built-in map. Both match by substring so a base name like "נייבי"
+// also colors "נייבי 104".
+export function colorHex(label: string | null | undefined, overrides?: Record<string, string> | null): string | null {
   if (!label) return null;
   const s = label.toLowerCase().replace(/[`’]/g, "'").trim();
+  if (overrides) {
+    const ov = Object.entries(overrides)
+      .map(([k, v]) => [k.toLowerCase().replace(/[`’]/g, "'").trim(), v] as [string, string])
+      .filter(([k, v]) => k && /^#[0-9a-f]{6}$/i.test(v))
+      .sort((a, b) => b[0].length - a[0].length);
+    for (const [kw, hex] of ov) if (s.includes(kw)) return hex;
+  }
   for (const [kw, hex] of COLORS) if (s.includes(kw)) return hex;
   return null;
 }

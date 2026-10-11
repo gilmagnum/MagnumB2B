@@ -3,15 +3,24 @@ import { supabaseBrowser } from "./supabase/browser";
 // Map variant/cell SKUs to their parent (model) SKU via item_variants. Keys that aren't a
 // variant (plain + ruler items) are simply absent. Used so picking shows the MAIN SKU.
 export async function fetchParents(itemkeys: (string | null | undefined)[]): Promise<Record<string, string>> {
+  const meta = await fetchVariantMeta(itemkeys);
+  const out: Record<string, string> = {};
+  for (const [k, m] of Object.entries(meta)) if (m.parent) out[k] = m.parent;
+  return out;
+}
+
+// Variant metadata (parent SKU + color name) per cell SKU, from item_variants, in one read.
+export type VariantMeta = { parent: string | null; color: string | null };
+export async function fetchVariantMeta(itemkeys: (string | null | undefined)[]): Promise<Record<string, VariantMeta>> {
   const keys = [...new Set(itemkeys.filter(Boolean) as string[])];
   if (!keys.length) return {};
-  const out: Record<string, string> = {};
+  const out: Record<string, VariantMeta> = {};
   const sb = supabaseBrowser();
   for (let i = 0; i < keys.length; i += 200) {
     const chunk = keys.slice(i, i + 200);
-    const { data } = await sb.from("item_variants").select("itemkey,parent_itemkey").in("itemkey", chunk);
-    for (const r of (data ?? []) as { itemkey: string; parent_itemkey: string | null }[]) {
-      if (r.parent_itemkey) out[r.itemkey] = r.parent_itemkey;
+    const { data } = await sb.from("item_variants").select("itemkey,parent_itemkey,color_label").in("itemkey", chunk);
+    for (const r of (data ?? []) as { itemkey: string; parent_itemkey: string | null; color_label: string | null }[]) {
+      out[r.itemkey] = { parent: r.parent_itemkey ?? null, color: (r.color_label ?? "").trim() || null };
     }
   }
   return out;

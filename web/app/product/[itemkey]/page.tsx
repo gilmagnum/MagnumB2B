@@ -6,6 +6,7 @@ import { useOrderContext } from "../../../lib/useOrderContext";
 import { useRole } from "../../../lib/useRole";
 import { canSeeStock } from "../../../lib/roles";
 import { colorHex, textOn } from "../../../lib/colorName";
+import { getColorOverrides } from "../../../lib/colorOverrides";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import type { CatalogItem } from "../../../lib/supabase";
 import AddToCart from "../../components/AddToCart";
@@ -25,6 +26,8 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
   const [finalPrice, setFinalPrice] = useState<number | null>(null);
   const [activeImg, setActiveImg] = useState(0);
   const [rulerSizes, setRulerSizes] = useState<string[]>([]);
+  const [colorOv, setColorOv] = useState<Record<string, string>>({});
+  useEffect(() => { getColorOverrides().then(setColorOv).catch(() => {}); }, []);
 
   useEffect(() => {
     (async () => {
@@ -210,7 +213,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
               {matrix.colors.map((color) => (
                 <div key={color.i} className="card card-pad" style={{ display: "grid", gap: 4 }}>
                   {matrix.multiColor && (() => {
-                    const hex = colorHex(color.label);
+                    const hex = colorHex(color.label, colorOv);
                     return hex
                       ? <div style={{ marginBottom: 4 }}><span style={{ display: "inline-block", fontWeight: 700, background: hex, color: textOn(hex), padding: "2px 10px", borderRadius: 999, border: "1px solid var(--border)" }}>{color.label}</span></div>
                       : <div style={{ fontWeight: 700, color: "var(--brand-strong)", marginBottom: 4 }}>{color.label}</div>;

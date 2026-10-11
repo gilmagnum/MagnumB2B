@@ -51,9 +51,12 @@ export default async function SettingsPage() {
       {canEditRulers(me.role) && (
         <section style={{ marginTop: 28 }}>
           <h3 style={{ color: "var(--brand-strong)" }}>ניהול מערכת</h3>
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <a href="/settings/rulers" className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
               <Icon name="ruler" size={18} /> סרגלי מידות ←
+            </a>
+            <a href="/settings/colors" className="btn btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <span aria-hidden>🎨</span> גווני צבעים ←
             </a>
           </div>
 
