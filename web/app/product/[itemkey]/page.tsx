@@ -5,6 +5,7 @@ import { useCart, type Unit } from "../../../lib/useCart";
 import { useOrderContext } from "../../../lib/useOrderContext";
 import { useRole } from "../../../lib/useRole";
 import { canSeeStock } from "../../../lib/roles";
+import { colorHex, textOn } from "../../../lib/colorName";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import type { CatalogItem } from "../../../lib/supabase";
 import AddToCart from "../../components/AddToCart";
@@ -208,14 +209,19 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
             <div style={{ display: "grid", gap: 14 }}>
               {matrix.colors.map((color) => (
                 <div key={color.i} className="card card-pad" style={{ display: "grid", gap: 4 }}>
-                  {matrix.multiColor && <div style={{ fontWeight: 700, color: "var(--brand-strong)", marginBottom: 4 }}>{color.label}</div>}
+                  {matrix.multiColor && (() => {
+                    const hex = colorHex(color.label);
+                    return hex
+                      ? <div style={{ marginBottom: 4 }}><span style={{ display: "inline-block", fontWeight: 700, background: hex, color: textOn(hex), padding: "2px 10px", borderRadius: 999, border: "1px solid var(--border)" }}>{color.label}</span></div>
+                      : <div style={{ fontWeight: 700, color: "var(--brand-strong)", marginBottom: 4 }}>{color.label}</div>;
+                  })()}
                   {matrix.sizes.map((s) => {
                     const cell = matrix.grid.get(`${color.i}|${s.i}`);
                     if (!cell) return null;
                     return (
                       <div key={s.i} style={{ display: "flex", alignItems: "center", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 6 }}>
                         <span style={{ minWidth: 52, fontWeight: 700 }}>{s.label}</span>
-                        <div style={{ marginInlineStart: "auto", display: "grid", gap: 4, justifyItems: "end" }}>{matrixCellBody(cell, `${color.label} ${s.label}`.trim())}</div>
+                        <div style={{ display: "grid", gap: 4, justifyItems: "start" }}>{matrixCellBody(cell, `${color.label} ${s.label}`.trim())}</div>
                       </div>
                     );
                   })}
@@ -236,7 +242,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
               {perCarton > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "8px 10px" }}>
                   <span style={{ fontWeight: 700 }}>קרטון מעורב{perCarton ? ` (${perCarton} יח׳)` : ""}</span>
-                  <span style={{ marginInlineStart: "auto" }}>
+                  <span>
                     <Stepper itemkey={key} unit="carton" title={name} packSize={perCarton} price={effPrice} disabled={!canOrder} addLabel="קרטון" stock={item?.stock} />
                   </span>
                 </div>
@@ -248,7 +254,7 @@ export default function ProductPage({ params }: { params: Promise<{ itemkey: str
                   {rulerSizes.map((size) => (
                     <div key={size} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "6px 10px" }}>
                       <span style={{ minWidth: 54, fontWeight: 700 }}>{size}</span>
-                      <span style={{ marginInlineStart: "auto" }}>
+                      <span>
                         <Stepper itemkey={key} unit="bundle" sizeLabel={size} title={name} packSize={perBundle} price={effPrice} disabled={!canOrder} addLabel="חבילה" stock={item?.stock} />
                       </span>
                     </div>
