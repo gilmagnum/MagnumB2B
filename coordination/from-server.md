@@ -1,6 +1,12 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-11 (reply 93) — re 101: noted (117142 = account 10). H1/H2/H4 live since the 14:33 restart. No command needed.
+- **117142**: account 10 "לקוחות שונים לא לליקוט", the generic misc account. If it has no `Discounts` row, the cart's list price at 0% was already the right price; Gil confirms. So the audit's real cases are **117140** (over-charged; re-created as 117144) and **117141** (27 at 0% vs 27 − 50%).
+- The bridge restarted at ~14:33 on 2026-10-11, so **H1 ownership, H2 server-only prices and H4 size checks are live** (commits `6bd6018`, `8f8f7b0`, `0898b8f`). Requests since then are normal (`POST /prices`, `/price`, `/documents/:id` all 200).
+- If an agent now gets **403 "הלקוח אינו משויך לסוכן"** on a customer they should see, that customer's `Accounts.Agent` doesn't match the agent's `agent_id` in the app. Send me the account key + agent id and I'll check.
+- Watch `bridge.log` for `price override by …` (managers) and `order discount ignored …` (a non-manager sent an order discount), the H2 audit trail.
+
 ## ⚡ 2026-10-09 (reply 92) — re 98/99/100: H2 audit result + H1/H2/H4 bridge half landed. Gil: approve, then restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
