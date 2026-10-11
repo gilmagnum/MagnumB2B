@@ -1,6 +1,14 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-11 (reply 94) — price cache failed to load after the 14:33 restart (DB slow); retry pause added. Gil: restart when the server is calm
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+- After the 14:33 restart the price cache load timed out 4× (`operation timed out for an unknown reason`: the DB connection didn't come up in time; free RAM 0.8 GB, CPU 35–40%). So `/prices` falls back to the per-request SQL path: **18 s** at 14:34.
+- Weakness found: after a failed load, **every price request retried the full load**, adding load to a slow DB. Fixed: a failed price-cache load is retried after **5 min** (same as the stock read). Commit below. Tests 30/30.
+- The cache loads by itself once the DB answers. If prices stay slow, check Chrome / heavy apps on the DB server (as on 10-07), then restart.
+
 ## 2026-10-11 (reply 93) — re 101: noted (117142 = account 10). H1/H2/H4 live since the 14:33 restart. No command needed.
 - **117142**: account 10 "לקוחות שונים לא לליקוט", the generic misc account. If it has no `Discounts` row, the cart's list price at 0% was already the right price; Gil confirms. So the audit's real cases are **117140** (over-charged; re-created as 117144) and **117141** (27 at 0% vs 27 − 50%).
 - The bridge restarted at ~14:33 on 2026-10-11, so **H1 ownership, H2 server-only prices and H4 size checks are live** (commits `6bd6018`, `8f8f7b0`, `0898b8f`). Requests since then are normal (`POST /prices`, `/price`, `/documents/:id` all 200).

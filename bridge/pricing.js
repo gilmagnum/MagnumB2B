@@ -131,6 +131,7 @@ const codeKey = (v) => (norm(v) ? norm(v).toUpperCase() : null);
 
 let globalCache;
 let globalPending;
+let globalFailedAt = 0; // a failed load is retried after 5 min, not on every request
 function loadGlobal() {
   globalPending ??= (async () => {
     const started = Date.now();
@@ -241,7 +242,12 @@ export async function resolvePrices(accountKey, itemKeys, opts = {}) {
   const acc = String(accountKey).trim();
   // Global cache: stale-while-revalidate; before the first load, use SQL (and start the load).
   const gAge = globalCache ? Date.now() - globalCache.at : Infinity;
-  if (gAge >= GLOBAL_TTL) loadGlobal().catch((err) => console.error(`price cache load failed: ${err.message}`));
+  if (gAge >= GLOBAL_TTL && Date.now() - globalFailedAt >= 5 * 60_000) {
+    loadGlobal().catch((err) => {
+      globalFailedAt = Date.now();
+      console.error(`price cache load failed (retry in 5 min): ${err.message}`);
+    });
+  }
   if (!globalCache || activeOnly) return resolvePricesSql(accountKey, keys, opts);
   let acct = accountCache.get(acc);
   if (!acct) acct = await loadAccount(acc);
@@ -261,7 +267,10 @@ export async function resolvePrices(accountKey, itemKeys, opts = {}) {
 }
 
 // Warm the global price cache (server start-up).
-export const warmPriceCache = () => loadGlobal();
+export const warmPriceCache = () => loadGlobal().catch((err) => {
+  globalFailedAt = Date.now();
+  throw err;
+});
 
 // Pack info for an order line (reply 82): StockMoves.Quantity is total UNITS; Hashavshevet doesn't
 // keep whether the agent ordered cartons or bundles, so it is inferred: a ruler (size) line =
