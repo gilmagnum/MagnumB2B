@@ -207,6 +207,13 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         <b>{doc.customerName}</b> ({doc.accountKey}){doc.customer?.address ? ` · ${doc.customer.address}` : ""}{picker ? ` · מלקט: ${picker}` : ""}
       </p>
 
+      {/* Agent/order note from the visible "הערות" field (incl. orders typed directly in Hashavshevet). */}
+      {doc.orderNote?.trim() && (
+        <p className="chip chip-warn" style={{ display: "block", padding: 12, whiteSpace: "pre-wrap", fontWeight: 600 }}>
+          📝 הערות הזמנה: {doc.orderNote.trim()}
+        </p>
+      )}
+
       {tookOver && <p className="chip chip-info" style={{ display: "block", padding: 10 }}>הליקוט נלקח מהמלקט הקודם (לא היה פעיל) — המשך מהמצב השמור.</p>}
       {viewOnly && <p className="chip chip-info" style={{ display: "block", padding: 12 }}>צפייה בלבד — ההזמנה בליקוט כעת אצל מלקט אחר. מוצג המצב השמור; אין עריכה.</p>}
       {readOnly && !viewOnly && <p className="chip chip-warn" style={{ display: "block", padding: 12 }}>הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""}. פתיחה מחדש לעדכון מתאפשרת למנהל בלבד.</p>}
