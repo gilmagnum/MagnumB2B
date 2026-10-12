@@ -512,7 +512,7 @@ export async function getDocuments({
   }
   const orders = await query(
     `SELECT s.ID, s.DocNumber, s.DocumentID, d.DocName, s.AccountKey, s.AccountName, a.FullName, a.Agent,
-            s.IssueDate, s.TFtal, s.Status, s.ExtraText2
+            s.IssueDate, s.TFtal, s.Status, s.ExtraText2, s.Remarks, s.ExtraRemarks
      FROM Stock s
      LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey
      LEFT JOIN DocumentsDef d ON d.DocumentID = s.DocumentID
@@ -573,6 +573,8 @@ function toDocumentRow(o, produced = []) {
     total: o.TFtal ?? undefined,
     status: o.Status === 0 ? 'open' : 'produced',
     ...pickMarker(o.ExtraText2),
+    // Agent's note for list rows / picking-queue cards (reply 106); only when the query selected Remarks.
+    ...('Remarks' in o && { orderNote: splitNotes(o.Remarks, o.ExtraRemarks).orderNote }),
     producedDocs: produced.map((p) => ({
       stockId: p.ID,
       documentId: p.DocumentID,

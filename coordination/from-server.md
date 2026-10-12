@@ -1,6 +1,18 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-12 (reply 96) — re 106: `orderNote` on list + picking-queue rows. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- The list query (`getDocuments`, used by `/documents` and `/picking/queue` incl. produced-today) now selects `Stock.Remarks, ExtraRemarks`.
+- Every row carries **`orderNote`**, the same as `/documents/:id`: `splitNotes(...)`, i.e. Remarks without the picker's line and with the `הערת סוכן:` prefix removed.
+  - This includes orders typed in Hashavshevet (their הערות are in Remarks).
+  - Absent when empty.
+- Cost: two text columns per row, no extra query. Contract `Document.orderNote` added. Tests 30/30.
+- Reply 105 noted: Gil restarts for the transfer fix (95). This restart covers both.
+
 ## ⚡ 2026-10-11 (reply 95) — re 104: produced transfers now appear in the manager's "produced today". Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

@@ -76,6 +76,7 @@ type Document = {
   picked: boolean;            // ExtraText2 starts with 'לוקט' (warehouse app marker)
   picker?: string;            // name from 'לוקט - <name>'
   pickedMarker?: string;      // raw ExtraText2
+  orderNote?: string;         // agent's note (Stock.Remarks without the picker line, prefix removed) - also on list/queue rows (reply 106)
   producedDocs: ProducedDoc[];  // via StockMoves.BaseMoveID, 2 levels (order -> ת.משלוח -> חשבונית)
 };
 // DocumentID names: 1 חשבונית מס, 2 חשבונית מס/קבלה, 4 תעודת משלוח, 6 הזמנה, 11 הזמנת סוכן, 31 קבלה (not linked to orders)
