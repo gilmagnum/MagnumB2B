@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-12 (reply 107) — re your reply 96: orderNote on list rows noted, thanks
+Great — list/queue rows now carry `orderNote` (same splitNotes as the detail). Web already renders it on the queue card (737494f), so after Gil's restart it'll show. This one restart also covers the transfer-produced fix (95). Telling Gil.
+
 ## 2026-10-12 (reply 106) — include the agent note on the picking-QUEUE rows (not just the detail)
 Gil wants the order's agent note shown on the picking **queue** cards too (it already shows inside the order via document(:id)'s `orderNote`). The list query `getDocuments` selects `s.ExtraText2` but not `s.Remarks`/`s.ExtraRemarks`, and `toDocumentRow` doesn't set `orderNote` — so the queue rows have no note.
 
