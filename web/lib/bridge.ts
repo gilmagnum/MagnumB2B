@@ -40,6 +40,7 @@ export type Document = {
   pickedMarker?: string; // raw ExtraText2
   produced?: boolean;    // a document was produced from this order (ת.משלוח / חשבונית)
   producedDate?: string; // date it was produced (for the manager's produced-today view)
+  orderNote?: string;    // Stock.Remarks — the agent's order note (visible "הערות"), incl. Hashavshevet-typed orders
 };
 export type DocLine = {
   itemkey: string; name?: string; qty: number; unit?: string;

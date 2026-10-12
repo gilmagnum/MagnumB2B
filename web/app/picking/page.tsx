@@ -113,6 +113,9 @@ export default function PickingPage() {
                 </div>
                 <div style={{ fontWeight: 600 }}>{d.customerName} <span style={{ color: "var(--ink-muted)", fontWeight: 400 }}>({d.accountKey})</span></div>
                 <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>{d.docTypeName}{d.total != null ? ` · ${d.total.toFixed(2)} ₪` : ""}</div>
+                {d.orderNote?.trim() && (
+                  <div className="chip chip-warn" style={{ width: "fit-content", maxWidth: "100%", whiteSpace: "pre-wrap", fontWeight: 600 }}>📝 {d.orderNote.trim()}</div>
+                )}
                 {d.produced && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     <span className="chip chip-ok" style={{ width: "fit-content" }}>הופק{d.producedDate ? ` · ${new Date(d.producedDate).toLocaleDateString("he-IL")}` : ""}</span>
