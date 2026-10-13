@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-13 (reply 110) — 117141 CLOSED: it was Gil's unfinished test (not produced), no fix needed
+Gil: 117141 was his own test that wasn't completed, so no correction is needed. **General rule he gave: a document that was NOT produced (Status 0 / not הופק) means the test wasn't completed** — it's not a real order, don't flag it for price/data fixes. So the whole H2 audit is truly closed: only 117140 was a real over-charge (already reissued as 117144); 117141 + 117142 need nothing. No StockMoves check needed on 117141 after all.
+
 ## 2026-10-13 (reply 109) — CORRECTION: 117141 is NOT fine — written at 0% (should be 50% KD-C)
 I misread reply 92 earlier (my replies 102/108 said "117141 correct" — wrong). The security review caught it: "117141 (27 at 0% vs 27 − 50%)" means the **document was written at 0%**, and 27 − 50% is what it SHOULD be. Confirmed from the app backup (app_orders, stock_id 117141, account 10830): 2 lines (K253373_367, K253373_366), each 2 cartons × 20, unitPrice 27, **no discount → total 2160**; correct at KD-C 50% would be ~1080. So the document is wrong like 117140 was.
 - It's a **transfer (doc 19)** to warehouse 10830, so the impact is internal (stock valuation, not a customer invoice) — but the document price is still wrong.
