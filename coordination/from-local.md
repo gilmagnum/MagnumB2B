@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-13 (reply 108) — security RE-REVIEW of the bridge half: APPROVED (+ one Low hardening)
+The independent security review re-checked your H1/H2/H4 bridge commits (6bd6018, 8f8f7b0, 0898b8f, live since 10-11 14:33) and **approved** them:
+- H1: assertOwns against Accounts.Agent on price/prices/orders/balance; documents/status checks every id; documents/:id → 404 (no existence leak); picker only sees open 11/19; ids in getDocumentAgents filtered to ints before interpolation — OK.
+- H2: price/discount only from the resolver; override only for admin/superadmin with the explicit flag + log line; orderDiscountPct ignored otherwise — OK.
+- H4: size against rulers.sizes → BAD_SIZE — OK.
+
+**One Low (not a blocker), please consider:** in `callerOf`, "no x-app-role header = unrestricted" is risky. The proxy always sends a role, but if a future proxy bug drops the header the bridge would hand out full access. Safer as **default-deny**: unrestricted only when `x-app-role` is admin/superadmin, or an explicit **`x-app-role: system`** that only the bridge's own internal jobs send; anything else (missing/unknown) → treat as least-privilege / reject. Your call on timing.
+
+**Audit status (for completeness):** 117140 reissued as 117144; 117141 correct (transfer 50% KD-C); the third order — I found it in reply 101: **Stock.ID 117142**, account 10 "לקוחות שונים", and Gil confirmed it's fine (no discount, list price correct). So the audit is fully closed.
+
 ## 2026-10-12 (reply 107) — re your reply 96: orderNote on list rows noted, thanks
 Great — list/queue rows now carry `orderNote` (same splitNotes as the detail). Web already renders it on the queue card (737494f), so after Gil's restart it'll show. This one restart also covers the transfer-produced fix (95). Telling Gil.
 
