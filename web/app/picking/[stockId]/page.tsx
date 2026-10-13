@@ -237,9 +237,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
           const packStep = (l.packSize ?? 0) > 1 && !!l.packLabel; // step by a whole pack when we know the pack
           const step = packStep ? (l.packSize as number) : 1;
           const border = isPacking ? "var(--brand)" : sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)";
-          // Pickers work in the warehouse — give them bigger image / SKU / quantity for readability.
-          const isPicker = role === "picker";
-          const imgSz = isPicker ? 96 : 52;
+          // Warehouse picking screen — enlarge image / SKU / quantity for everyone.
+          const isPicker = true;
+          const imgSz = 96;
           return (
             <div key={lineKey(l)} className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${border}` }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -255,8 +255,8 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                     : <>
                         {/* Pickers see only the MAIN (parent) SKU — size/color are in the name below. */}
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                          <span style={{ fontWeight: 700, fontSize: isPicker ? 24 : undefined }}>{parents[l.itemkey] ?? l.itemkey}</span>
-                          {l.size ? <span className="chip chip-info">מידה {l.size}</span> : null}
+                          <span style={{ fontWeight: 700, fontSize: 24 }}>{parents[l.itemkey] ?? l.itemkey}</span>
+                          {l.size ? <span className="chip chip-info" style={{ fontSize: 15, padding: "3px 12px" }}>מידה {l.size}</span> : null}
                           {colors[l.itemkey] && (() => {
                             const hex = colorHex(colors[l.itemkey], colorOv);
                             return hex
@@ -264,7 +264,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                               : <span className="chip chip-info">{colors[l.itemkey]}</span>;
                           })()}
                         </div>
-                        <div style={{ fontSize: 13, color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</div>
+                        <div style={{ fontSize: 16, color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</div>
                       </>}
                 </div>
               </div>
