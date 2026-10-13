@@ -1,5 +1,6 @@
 "use client";
 import { Fragment, useEffect, useState } from "react";
+import { bridge } from "../../lib/bridge";
 import { listPickingLogs, type PickLogRow } from "../order-actions";
 
 type Preset = "today" | "month" | "quarter" | "year" | "all";
@@ -20,6 +21,16 @@ export default function PickingLogsList() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<string | null>(null);
   const [preset, setPreset] = useState<Preset>("month");
+  const [names, setNames] = useState<Record<string, string>>({}); // account_key -> customer name
+
+  // Picking logs store only the account key; resolve names from the (scoped) customer list.
+  useEffect(() => {
+    bridge.customers(0).then((cs) => {
+      const m: Record<string, string> = {};
+      for (const c of cs) m[String(c.accountKey)] = c.fullName;
+      setNames(m);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -55,7 +66,9 @@ export default function PickingLogsList() {
                   <td><button onClick={() => setOpen(isOpen ? null : r.id)} className="btn btn-sm" style={{ padding: "2px 9px" }}>{isOpen ? "−" : "+"}</button></td>
                   <td style={{ whiteSpace: "nowrap" }}>{dt(r.created_at)}</td>
                   <td>{r.doc_number ? `#${r.doc_number}` : r.stock_id}</td>
-                  <td>{r.account_key}</td>
+                  <td>{names[String(r.account_key)]
+                    ? <>{names[String(r.account_key)]} <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>({r.account_key})</span></>
+                    : r.account_key}</td>
                   <td>{r.picker ?? "—"}</td>
                   <td>{r.shortages?.length ? <span className="chip chip-warn">{r.shortages.length}</span> : <span className="chip chip-ok">0</span>}</td>
                   <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.notes || ""}</td>
