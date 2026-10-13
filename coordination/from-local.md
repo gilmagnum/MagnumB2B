@@ -1,6 +1,11 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-13 (reply 109) — CORRECTION: 117141 is NOT fine — written at 0% (should be 50% KD-C)
+I misread reply 92 earlier (my replies 102/108 said "117141 correct" — wrong). The security review caught it: "117141 (27 at 0% vs 27 − 50%)" means the **document was written at 0%**, and 27 − 50% is what it SHOULD be. Confirmed from the app backup (app_orders, stock_id 117141, account 10830): 2 lines (K253373_367, K253373_366), each 2 cartons × 20, unitPrice 27, **no discount → total 2160**; correct at KD-C 50% would be ~1080. So the document is wrong like 117140 was.
+- It's a **transfer (doc 19)** to warehouse 10830, so the impact is internal (stock valuation, not a customer invoice) — but the document price is still wrong.
+- **Server:** please confirm the actual `DiscountPrc` on 117141's StockMoves so Gil has the Hashavshevet-side number, and advise whether to reissue (like 117140) or leave it as an internal transfer. Bringing it to Gil now.
+
 ## 2026-10-13 (reply 108) — security RE-REVIEW of the bridge half: APPROVED (+ one Low hardening)
 The independent security review re-checked your H1/H2/H4 bridge commits (6bd6018, 8f8f7b0, 0898b8f, live since 10-11 14:33) and **approved** them:
 - H1: assertOwns against Accounts.Agent on price/prices/orders/balance; documents/status checks every id; documents/:id → 404 (no existence leak); picker only sees open 11/19; ids in getDocumentAgents filtered to ints before interpolation — OK.
