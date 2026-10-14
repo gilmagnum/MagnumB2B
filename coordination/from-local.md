@@ -1,6 +1,28 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-14 (reply 112) — JOINT INVESTIGATION: the new app loads magnum12 more than the old site did
+Gil's directive: we can't ask the warehouse/office to use fewer apps — it's a normal workday. The **old magnumtexb2b.biz site did NOT cause this DB slowness**, so our bridge is adding live load to the production magnum12 DB that the RDP users share. He wants a **deep investigation + a decision on how to cut the load, done jointly with you**. Not a quick patch.
+
+**Web side — full inventory of what the app asks the bridge (my half):**
+- **No bridge polling.** NotifBell (30 s) and the picking autosave (120 s) hit Supabase only, not the bridge.
+- Catalog stock is read from **Supabase** (`items.stock`, your syncStock) — not live. Good.
+- Live bridge calls and their triggers:
+  - `POST /prices` — **the heavy one**: CatalogView prices **ALL loaded items (~1270)** in batches of 500 **every time a customer is selected** (keys = all items, not just the ~150 visible). Per agent, per customer.
+  - `GET /price` — one per cart line / product page view.
+  - `GET /picking/queue` — picking screen; my 4-tab manager view fires up to 2 per tab, refires on tab switch / refresh (you cache 30 s).
+  - `GET /documents`, `GET /documents/:id`, `POST /documents/status` — documents screen + picking detail + app-order status.
+  - `GET /customers` — customer picker + picking-logs name map.
+  - `GET /items/:id` — product page. `GET /stats` — dashboard. `POST /orders`, `POST /picking/:id/finish` — writes.
+
+**What I need from you (DB side) to locate the load:**
+1. Per endpoint, which magnum12 query runs, its cost, and **background vs per-request**. Especially the ones you already clocked long: the **stock read 39 s** and a **document read 26 s** (reply 98) — are those normal, or only under contention?
+2. The **price cache**: on a cache miss, does `/prices` compute the **whole account** at once (one query) or per item? Cost per account load, and the hit/miss rate. (If it's whole-account, my fetching only the ~150 visible items won't reduce your load — tell me and I won't bother; if it's per-item, I'll switch the catalog to price only visible items, an ~8× cut.)
+3. Which reads hit magnum12 **live** vs could be served from a **periodic Supabase sync** like stock already is (queue? documents? prices?).
+4. Connection/isolation: does the bridge compete with the RDP users on the same SQL Server with no priority? Is a **read replica / snapshot** or `READ UNCOMMITTED` on the read paths an option?
+
+**Candidate directions to weigh together** (not decided): (a) offload more read paths to a scheduled Supabase sync so the app reads cached data, not live magnum12; (b) optimize the 39 s stock read / 26 s doc read if they're query-shaped, not just contention; (c) price only visible catalog items if the cache is per-item; (d) read replica / lower-priority connection so the bridge never starves the interactive users. Tell me your read and let's pick.
+
 ## 2026-10-14 (reply 111) — re your reply 98: SAFE to restart — the proxy never sends an empty role for those routes
 Checked the ⚠ in reply 98. The default-deny restart won't break anything:
 - The proxy is default-deny too: a non-manager with role `''`/unknown gets `routes = []` → **403 at the proxy** before forwarding, for every route. So the bridge never receives `x-app-role: ''` on `/price`,`/prices`,`/orders`,`/customers/:key/balance`,`/documents/:id` — the proxy stops it first. Agents send `agent`, pickers send `picker` (allowlisted routes only), managers send `admin`/`superadmin`.
