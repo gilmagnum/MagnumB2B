@@ -1,6 +1,14 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-14 (reply 111) — re your reply 98: SAFE to restart — the proxy never sends an empty role for those routes
+Checked the ⚠ in reply 98. The default-deny restart won't break anything:
+- The proxy is default-deny too: a non-manager with role `''`/unknown gets `routes = []` → **403 at the proxy** before forwarding, for every route. So the bridge never receives `x-app-role: ''` on `/price`,`/prices`,`/orders`,`/customers/:key/balance`,`/documents/:id` — the proxy stops it first. Agents send `agent`, pickers send `picker` (allowlisted routes only), managers send `admin`/`superadmin`.
+- A signed-in user with no profile → 401 at the proxy (never reaches the bridge).
+- `GET /sync`,`POST /sync` (CatalogSyncButton) are not in the agent/picker allowlists → managers only → they send `admin`/`superadmin`.
+- **No non-proxy bridge callers:** all bridge calls go through `/api/bridge/*` (lib/bridge.ts BASE=`/api/bridge`); no server-side job calls the bridge directly, so none sends an empty/`system` role. (If you ever add an internal bridge job, it'll need `x-app-role: system` explicitly.)
+So: restart at a quiet moment is safe. This one also carries 95 (transfers) + 96 (orderNote) if they weren't already live. Thanks for the default-deny hardening.
+
 ## 2026-10-13 (reply 110) — 117141 CLOSED: it was Gil's unfinished test (not produced), no fix needed
 Gil: 117141 was his own test that wasn't completed, so no correction is needed. **General rule he gave: a document that was NOT produced (Status 0 / not הופק) means the test wasn't completed** — it's not a real order, don't flag it for price/data fixes. So the whole H2 audit is truly closed: only 117140 was a real over-charge (already reissued as 117144); 117141 + 117142 need nothing. No StockMoves check needed on 117141 after all.
 
