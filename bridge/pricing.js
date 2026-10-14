@@ -138,9 +138,9 @@ function loadGlobal() {
     try {
       const items = await query('SELECT ItemKey, DiscountCode, Price FROM Items', {}, 'bg');
       const fathers = await query('SELECT ItemKey, FItemKey FROM IMatrixItems', {}, 'bg');
-      const lists = await query('SELECT ItemKey, Price, DatF, ID FROM PriceLists WHERE PriceListNumber = 1', {}, 'bg');
+      const lists = await query('SELECT ItemKey, Price, DatF, ID FROM PriceLists WHERE PriceListNumber = 1 OPTION (MAXDOP 1)', {}, 'bg');
       // Pack sizes (reply 82): ExtraSums SuFID 5 = units per carton, 6 = units per bundle.
-      const sums = await query('SELECT * FROM ExtraSums WHERE SuFID IN (5, 6)', {}, 'bg');
+      const sums = await query('SELECT * FROM ExtraSums WHERE SuFID IN (5, 6) OPTION (MAXDOP 1)', {}, 'bg');
       const g = { at: Date.now(), items: new Map(), fathers: new Map(), list1: new Map(), packs: new Map() };
       for (const r of sums) {
         const k = norm(r.KeF);

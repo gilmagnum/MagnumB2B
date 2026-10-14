@@ -1,6 +1,72 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-14 (reply 99) — re 112: DB-side findings (measured from bridge.log, no new DB load) + 2 load cuts. Re 111: noted. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator; this also loads reply 98's default-deny, safe per your reply 111.)
+
+### What the bridge actually asks magnum12 (every request is logged with its time)
+**Per request, normal day 2026-10-13 (UTC):** ~300 calls, **≈ 70 s of DB time in total for the whole day**.
+| route | calls | total | p50 | p95 | what runs |
+|---|---|---|---|---|---|
+| `GET /documents` (list/search) | 10 | 36 s | 3.0 s | 7.7 s | `Stock ⋈ Accounts ⋈ DocumentsDef`, filters + `ORDER BY ID OFFSET`, then produced-doc links. **The heaviest per-request query**; a name search (`LIKE`) scans. |
+| `GET /picking/queue` | 58 | 18 s | 0.05 s | 3.5 s | same list query for open doc 11 + links; **30 s cache** (most calls 0–1 ms) + stale fallback |
+| `GET /documents/:id` | 28 | 6 s | 0.04 s | 1.4 s | header + lines by StockID (indexed) + produced links + a small parent/children lookup; 15 s cache |
+| `POST /prices` | 60 | 4 s | **4 ms** | 0.3 s | **memory** (price cache) |
+| `GET /price` | 89 | 0 | 1 ms | 3 ms | memory |
+| `GET /customers` | 25 | 2 s | 34 ms | 0.35 s | one `Accounts` read (~4k rows) |
+| `GET /items/:key` | 26 | 1 s | 22 ms | 88 ms | one item + its extras/cells; stock from memory |
+| orders / finish / status | 25 | 2 s | | | the writes + one indexed read |
+- **Today (10-14)** the same routes took 10–1,000× longer **only inside the two stalls** (10:35–10:46 and 12:51–13:10 Israel time): queue up to 117 s, a document 26 s. Outside them, today matched the table above.
+
+**Background (no user waiting):**
+| job | how often | cost (healthy) |
+|---|---|---|
+| **all-items stock read** (`vBalItemWarehouse`, warehouse 1) | every 30 min, all day + **every restart** | **6.5–7 s**, the bridge's single heaviest query: it recomputes balances from all stock movements for ~11k items |
+| stock sync write to Supabase (+ an Items list + the matrix-children list) | same tick | ~3 s more |
+| price cache (Items, IMatrixItems, PriceLists list 1, pack sizes) | every 60 min + every restart | 1.2–3 s |
+| per-account price data (Accounts row, Discounts, SpecialPrices+Moves of account + central) | first `/prices` of an account, then every 30 min | a few small indexed reads |
+| push-event poll | every 60 s | 3 tiny indexed reads |
+| catalog sync | night only | ~8 s |
+- **Total, healthy:** ~48 stock reads × ~10 s ≈ 8 min of SQL work per day + ~1–2 min for everything else. That's ~1.5% of a 10-hour day, but **the stock read was a parallel aggregate that could grab all 4 cores for ~7 s every 30 min**.
+
+### Did the bridge cause today's stalls?
+**The evidence says no, it was a victim:**
+- The stock read ran normally (6.5–6.8 s) at 10:13, 11:20, 11:56 and 12:29.
+- The 10:35 stall began **20 min after** a normal read; the reads inside the stalls took 39–42 s or timed out (120 s).
+- The server at 10:47: CPU 69–82%, **free RAM 820 MB / 12 GB**, `sqlservr` only ~240 MB in memory and ~10% CPU, while Chrome (30 processes, one at ~30% CPU) and Power Automate (`uiflowservice` 846 MB + RPA notifiers) ran.
+- When SQL Server is paged out, everything waits: Hashavshevet users and the bridge alike.
+- **Restarts add load:** each one does an extra stock read + price-cache load. Today had 4.
+
+### Why the old site was lighter
+It had **its own MySQL DB** (Digitrade) on the same box. It never asked magnum12 live per page; its data came from its own copy. Ours reads live for documents/queue/items and recomputes stock every 30 min.
+
+### Load cuts in this restart (commit below, no behavior change for the app)
+1. **`OPTION (MAXDOP 1)`** on the heavy background queries: the all-items stock read, the price-list load, the pack sizes and the matrix-children list. Each uses **one core**, so it can't take all four from the office. It may take a few seconds longer; it's on the 120 s background connection.
+2. **Skip the stock read when nothing changed:** each 30-min tick first reads `MAX(ID)` of `Stock` and of `StockMoves` (two index seeks). If no document or line was added since the last good sync, it **skips** the all-items read and the Supabase upsert. A full read still runs at least every **2 h** (`STOCK_FORCE_MIN`).
+   - Honest expectation: on a busy workday something is added almost every 30 min, so this mostly saves the quiet hours. Item 1 is the daytime cut.
+
+### Your questions
+1. **Per endpoint:** the table above. The 39 s stock read and 26 s document read were **contention only**; healthy values are 6.5–7 s and 0.04 s.
+2. **Price cache:** **whole account at once** (account row, Discounts, all its + its central's specials), loaded on the first `/prices` for that account, then kept 30 min. Items, list prices and pack sizes are global (hourly). A bulk `/prices` call is pure memory.
+   - **So pricing only the ~150 visible items would not reduce DB load.** It only matters if the global cache isn't loaded (right after a restart or a failed load), when `/prices` falls back to SQL per item. That's rare. **Not worth changing.**
+3. **Live vs. synced:** `/prices`, `/price` and stock are already memory/sync.
+   - **The remaining live reads are the document list/search (the heaviest), the queue, `/documents/:id`, `/customers`.**
+   - **Candidate next step, to decide together:** mirror **open orders (doc 6/11/19) + the last ~60 days of order headers** into Supabase on a 1–2-minute incremental sync (by `Stock.ID` / Status changes), and serve the queue + documents list/search from Supabase. magnum12 would then only see one small incremental read every 1–2 min instead of per-user searches.
+   - `/documents/:id` (lines) and the writes stay live, since they need exact current data.
+   - Cheaper first steps: cache `/customers` 10 min; default the documents list to the last 90 days.
+   - Say which you prefer and I'll build it.
+4. **Priority / isolation:**
+   - The bridge's reads are already **READ UNCOMMITTED** (no locks taken or waited on).
+   - Heavy reads go one at a time on a separate 1-connection pool, now one core each.
+   - **No read replica:** that needs SQL Server Enterprise / an availability group or a second server.
+   - Snapshot isolation is a DB setting (IT) and doesn't reduce CPU.
+   - **The real fix for the box:** a **"min server memory"** floor for SQL Server (e.g. 3–4 GB) + "Lock pages in memory" for its service account (IT), so Chrome can't page SQL out. That's where the stalls come from.
+
+Tests 31/31.
+
 ## ⚡ 2026-10-14 (reply 98) — re 108: default-deny for the caller role (Low). Re 109/110: audit closed. Gil: restart at a quiet moment
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

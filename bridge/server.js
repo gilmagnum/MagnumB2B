@@ -525,16 +525,28 @@ server.listen(PORT, HOST, () => {
   if (stockMin > 0 && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     let stockRunning = false;
     let lastSkip;
+    // Reply 99: skip the all-items stock read (the bridge's heaviest query) when no Stock / StockMoves
+    // row was added since the last good sync; a full sync still runs at least every STOCK_FORCE_MIN (120).
+    const forceMs = Number(process.env.STOCK_FORCE_MIN || 120) * 60_000;
+    let lastSig;
+    let lastFullAt = 0;
     const stockTick = async () => {
       if (stockRunning) return;
       stockRunning = true;
       try {
+        const sig = await read.getStockSignature().catch(() => null);
+        if (sig && sig === lastSig && Date.now() - lastFullAt < forceMs) {
+          console.log(`stock sync skipped: no new documents since the last sync (${sig})`);
+          return;
+        }
         const r = await syncStock();
         if (r.skipped) {
           if (lastSkip !== r.skipped) console.log(`stock sync skipped: ${r.skipped}`);
           lastSkip = r.skipped;
         } else {
           lastSkip = undefined;
+          lastSig = sig;
+          lastFullAt = Date.now();
           console.log(`stock sync ok: ${r.items} items, ${r.ms}ms`);
         }
       } catch (err) {

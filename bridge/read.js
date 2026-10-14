@@ -76,8 +76,9 @@ export const STOCK_WAREHOUSE = Number(process.env.STOCK_WAREHOUSE || 1);
 // real 0). The 12:00 stall blamed on the view was Chrome starving the DB server (reply 79); the view
 // is read once per 30 min on the background connection, never per item (reply 88).
 const STOCK_VIEWS = {
-  byStock: `SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE}`,
-  item: `SELECT ITEMKEY AS ItemKey, ITEMWARHBAL AS qty FROM vBalItemWarehouse WHERE WAREHOUSE = ${STOCK_WAREHOUSE}`,
+  // OPTION (MAXDOP 1) (reply 99): the all-items aggregate uses one core, never all four the office shares.
+  byStock: `SELECT ItemKey, BALBYSTOCKWH AS qty FROM vBalByStockWH WHERE Warehouse = ${STOCK_WAREHOUSE} OPTION (MAXDOP 1)`,
+  item: `SELECT ITEMKEY AS ItemKey, ITEMWARHBAL AS qty FROM vBalItemWarehouse WHERE WAREHOUSE = ${STOCK_WAREHOUSE} OPTION (MAXDOP 1)`,
 };
 export const STOCK_VIEW = process.env.STOCK_VIEW === 'byStock' ? 'byStock' : 'item';
 const RETRY_AFTER_FAIL = 5 * 60_000; // a failed read is not retried for 5 min (no hammering a slow DB)
@@ -157,7 +158,7 @@ const groupChildren = (rows) => {
 // Warehouse stock for every item, parents rolled up: Map<itemKey, stock>.
 async function getRolledStock({ fresh = false } = {}) {
   const whStock = await getWarehouseStock({ fresh });
-  const rel = await query(CHILDREN_SQL(), {}, 'bg');
+  const rel = await query(`SELECT parent, child FROM (${CHILDREN_SQL()}) c OPTION (MAXDOP 1)`, {}, 'bg');
   return rollUpStock(whStock, groupChildren(rel), (k) => whStock.get(k));
 }
 
@@ -807,4 +808,12 @@ export async function getDocumentAgents(stockIds) {
     `SELECT s.ID, a.Agent FROM Stock s LEFT JOIN Accounts a ON a.AccountKey = s.AccountKey WHERE s.ID IN (${ids.join(',')})`,
   );
   return new Map(rows.map((r) => [r.ID, r.Agent == null ? null : Number(r.Agent) || 0]));
+}
+
+// Cheap change signature (reply 99): the newest Stock and StockMoves IDs (two clustered-index
+// seeks). Stock only moves when a document or line is added, so an unchanged signature means the
+// all-items stock read can be skipped.
+export async function getStockSignature() {
+  const [r] = await query('SELECT (SELECT MAX(ID) FROM Stock) AS s, (SELECT MAX(ID) FROM StockMoves) AS m');
+  return `${r?.s ?? 0}:${r?.m ?? 0}`;
 }
