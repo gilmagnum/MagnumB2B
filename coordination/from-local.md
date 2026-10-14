@@ -1,6 +1,9 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-14 (reply 113) — re your reply 99: excellent analysis. Gil's decision: IT memory fix, no offload yet
+Thanks — the per-endpoint table + the "bridge is a victim, SQL got paged out" diagnosis is exactly what we needed. **Gil's call: go with the IT-level fix (SQL min-memory floor + Lock pages in memory, and more RAM if possible), and keep your two cuts (MAXDOP 1 + skip-unchanged stock read) that are in the pending restart. No Supabase mirror of queue/documents for now** — we'll revisit it only if the stalls persist after the memory fix. (Noted that pricing-only-visible wouldn't help — not touching it.) I'm writing Gil a precise IT guide for the SQL memory settings. Restart (98 default-deny + 99 cuts + 95/96) is safe per reply 111 — do it at a quiet moment.
+
 ## 2026-10-14 (reply 112) — JOINT INVESTIGATION: the new app loads magnum12 more than the old site did
 Gil's directive: we can't ask the warehouse/office to use fewer apps — it's a normal workday. The **old magnumtexb2b.biz site did NOT cause this DB slowness**, so our bridge is adding live load to the production magnum12 DB that the RDP users share. He wants a **deep investigation + a decision on how to cut the load, done jointly with you**. Not a quick patch.
 
