@@ -355,7 +355,10 @@ const routes = [
     if (!doc || (agent && doc.agent !== agent)) throw notFound();
     // H1: an agent only their customers' documents; a picker only open picking orders/transfers.
     if (caller.role === 'agent' && (!caller.agent || doc.agent !== caller.agent)) throw notFound();
-    if (caller.role === 'picker' && !(doc.status === 'open' && [11, 19].includes(doc.documentId))) throw notFound();
+    // picker and any non-unrestricted, non-agent caller (missing / unknown role): open picking docs only.
+    if (!caller.unrestricted && caller.role !== 'agent' && !(doc.status === 'open' && [11, 19].includes(doc.documentId))) {
+      throw notFound();
+    }
     return doc;
   }],
 
@@ -419,17 +422,21 @@ const routes = [
 
 // --- H1: who is calling (reply 100) -------------------------------------------------
 // The web proxy (the only holder of BRIDGE_TOKEN) sends x-app-role (agent | picker | admin |
-// superadmin | '') and x-app-agent (a number or ''). Direct token holders without the headers
-// (scripts, the operator) count as unrestricted - same as admin.
+// superadmin | '') and x-app-agent (a number or ''). DEFAULT-DENY (security re-review, reply 108):
+// only admin / superadmin / system are unrestricted ('system' = scripts / the operator, sent
+// explicitly); agent = own customers; picker and anything else (missing, '', unknown) = least
+// privilege: no customer-scoped data, open picking documents only.
+const UNRESTRICTED_ROLES = new Set(['admin', 'superadmin', 'system']);
 function callerOf(req) {
   const role = String(req.headers['x-app-role'] ?? '').trim().toLowerCase();
-  return { role, agent: Number(req.headers['x-app-agent']) || 0 };
+  return { role, agent: Number(req.headers['x-app-agent']) || 0, unrestricted: UNRESTRICTED_ROLES.has(role) };
 }
 const FORBIDDEN_ACCOUNT = () => new HttpError(403, 'FORBIDDEN', 'הלקוח אינו משויך לסוכן');
-// Customer-scoped routes: an agent only for their own customers (Accounts.Agent); a picker never.
+// Customer-scoped routes: unrestricted roles all; an agent only their own customers (Accounts.Agent);
+// everyone else never.
 async function assertOwns(caller, accountKey) {
-  if (caller.role === 'picker') throw new HttpError(403, 'FORBIDDEN', 'אין הרשאה למלקט');
-  if (caller.role !== 'agent') return;
+  if (caller.unrestricted) return;
+  if (caller.role !== 'agent') throw new HttpError(403, 'FORBIDDEN', 'אין הרשאה');
   const owner = await read.getAccountAgent(accountKey);
   if (!caller.agent || owner !== caller.agent) throw FORBIDDEN_ACCOUNT();
 }

@@ -1,6 +1,24 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-14 (reply 98) — re 108: default-deny for the caller role (Low). Re 109/110: audit closed. Gil: restart at a quiet moment
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+- **Reply 108 Low, done (`callerOf` / `assertOwns` in `server.js`):**
+  - **unrestricted** only for `x-app-role` **admin / superadmin / system**. `system` is for scripts and the operator, sent explicitly; nothing in the bridge needs it internally.
+  - **agent**: own customers (unchanged).
+  - **picker AND any missing / '' / unknown role**: least privilege, i.e. **403** on `/price`, `/prices`, `/orders`, `/customers/:key/balance`, and `/documents/:id` only for an open doc 11/19.
+  - Smoke-tested: no header / picker / unknown → 403; system / admin → through.
+  - `priceOverride` stays admin/superadmin only.
+- **⚠ LOCAL, please check before Gil restarts:** does the proxy ever send `x-app-role: ''` for a call that needs prices / orders / balance / a closed document (e.g. a signed-in user without a role, or any server-side job)? After this restart those get 403/404. If such a caller exists, have it send its real role (or `system` for a trusted server job).
+- **Replies 109/110:** noted, **117141 closed** (Gil's unfinished test). Rule: a document never produced = an incomplete test, not a real order. Audit fully closed: only 117140 was real (reissued as 117144).
+- **Today's slowness and the push fix:** see reply 97.
+  - 13:10 restart: push fix live (the 403 is now dropped once: `push order_picking: 403 … - dropped`; `agent_order_received` sent once).
+  - Server at 13:11 calm (CPU 11–15%, 1.2 GB free). There was a slow patch 12:51–13:10: one document 26 s, the stock read 39 s.
+- Contract updated. Tests 31/31.
+
 ## ⚡ 2026-10-14 (reply 97) — Hashavshevet slow this morning (server load) + a push-event bug (duplicate agent pushes). Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

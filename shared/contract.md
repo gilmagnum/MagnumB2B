@@ -103,7 +103,8 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   stockId's customer). `GET /documents/:id` of another agent's customer → 404.
 - **picker:** 403 on `/price`, `/prices`, `/orders`, `/customers/:key/balance`; `GET /documents/:id` only for **open
   (Status 0) doc 11/19**, else 404.
-- **admin / superadmin / no header** (a direct token holder): unrestricted.
+- **admin / superadmin / system**: unrestricted (`system` = scripts / the operator, sent explicitly).
+- **missing, '' or unknown role → least privilege (default-deny, reply 108):** 403 on the customer routes above, `GET /documents/:id` only for open doc 11/19 (like picker).
 
 - `GET /health` → `{ ok: true }` (no auth)
 - `GET /items?shownOnSite=1[&category=<main or sub>][&search=<key/name/barcode>]` → `Item[]` (cached 60s)
