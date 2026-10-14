@@ -39,7 +39,32 @@ async function send(event) {
     headers: { 'Content-Type': 'application/json', 'x-push-secret': process.env.PUSH_EVENT_SECRET },
     body: JSON.stringify(event),
   });
-  if (!res.ok) throw new Error(`push ${event.key}: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    const err = new Error(`push ${event.key}: ${res.status} ${(await res.text()).slice(0, 200)}`);
+    err.permanent = res.status >= 400 && res.status < 500; // rejected (e.g. 403): retrying won't help
+    throw err;
+  }
+}
+
+// Sends each event on its own (pure orchestration, exported for tests). One failing event never
+// blocks or re-sends the others: a 4xx is dropped (logged), a network/5xx error is retried on the next
+// ticks up to MAX_TRIES. Returns the events still to retry. (Reply 97: before this, one 403 on
+// order_picking made the whole tick retry every minute - re-sending agent_order_received each time.)
+export const MAX_TRIES = 3;
+export async function sendAll(items, sendFn, log = console) {
+  const retry = [];
+  const sent = [];
+  for (const item of items) {
+    try {
+      await sendFn(item.event);
+      sent.push(item.event.key);
+    } catch (err) {
+      item.tries = (item.tries ?? 0) + 1;
+      if (err.permanent || item.tries >= MAX_TRIES) log.error(`push events: ${err.message} - dropped`);
+      else retry.push(item);
+    }
+  }
+  return { retry, sent };
 }
 
 export function startEventPoller({ log = console } = {}) {
@@ -54,6 +79,7 @@ export function startEventPoller({ log = console } = {}) {
   let lastProduced; // watermark: everything <= this was checked at least one tick after it appeared
   let seenProduced; // max produced-type ID seen last tick (becomes the watermark next tick)
   const sentProduced = new Set();
+  let pending = []; // events waiting for a retry (network / 5xx)
   let running = false;
 
   const tick = async () => {
@@ -99,15 +125,17 @@ export function startEventPoller({ log = console } = {}) {
         ...orders.filter((o) => trim(o.ExtraText3) !== APP_MARKER).flatMap(eventsForNewOrder),
         ...produced.filter((p) => !sentProduced.has(p.ID)).flatMap(eventsForProducedDoc),
       ];
-      for (const e of events) await send(e);
+      // Watermarks advance now: these documents are handled; failed sends live on in `pending`.
       produced.forEach((p) => sentProduced.add(p.ID));
       if (orders.length) lastOrder = orders.at(-1).ID;
       lastProduced = Math.max(lastProduced, seenProduced);
       seenProduced = Math.max(seenProduced, now.id);
       for (const id of sentProduced) if (id <= lastProduced) sentProduced.delete(id);
-      if (events.length) log.log(`push events sent: ${events.map((e) => e.key).join(', ')}`);
+      const { retry, sent } = await sendAll([...pending, ...events.map((event) => ({ event }))], send, log);
+      pending = retry;
+      if (sent.length) log.log(`push events sent: ${sent.join(', ')}`);
     } catch (err) {
-      log.error(`push events: ${err.message}`); // retried next tick (watermarks not advanced)
+      log.error(`push events: ${err.message}`); // DB read failed: nothing advanced, retried next tick
     } finally {
       running = false;
     }

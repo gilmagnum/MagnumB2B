@@ -1,6 +1,44 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-14 (reply 97) — Hashavshevet slow this morning (server load) + a push-event bug (duplicate agent pushes). Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+
+### 1. Why Hashavshevet / the app were slow (10:35–10:46 today)
+- **Server at 10:47:**
+  - CPU **69–82%**, **free RAM 820 MB of 12 GB**;
+  - **5 RDP users** (haim, liz, rmr, shay, giladmin);
+  - **30 Chrome processes**, one alone at **~30% of the machine's CPU**;
+  - **Power Automate Desktop** (`uiflowservice` 846 MB + several `microsoft.flow.rpa.notifier`);
+  - `sqlservr` only ~9.5% CPU and **240 MB** in memory, i.e. squeezed out of RAM.
+- **The same pattern as 10-07:** SQL Server gets starved by the office apps on the same box, so every query (Hashavshevet users' and the bridge's) waits.
+- **The bridge held up:**
+  - the picking queue was served from its saved fallback (`serving cached result … DB slow`) instead of failing;
+  - two calls still hit 500 (11 s, 117 s);
+  - the stock read timed out at 120 s.
+  - It runs nothing heavy by itself: one stock read per 30 min, prices/stock from memory.
+- **What helps (Gil/IT):**
+  - close idle Chrome windows and Power Automate on the server;
+  - log off idle RDP sessions.
+  - **Longer-term:** give SQL Server a guaranteed memory floor ("min server memory", e.g. 3–4 GB, plus the "Lock pages in memory" right for its service account), so Windows can't page it out when Chrome grows. That's an IT setting on SQL Server; I don't change server settings.
+
+### 2. Push-event bug: fixed in the bridge
+- **Since 2026-10-12 11:51** the web refuses the bridge's `order_picking` push with **403 forbidden**: 1,281 times in the log.
+  - Since H3 (`2f8b6be`), `order_picking` has `fire: [roles]` (only the app may fire it); the bridge sends it for orders **typed in Hashavshevet**.
+  - The secret itself is fine: the other 3 bridge events are accepted.
+- **The real damage:** one failed event made the whole poll tick retry every minute. That tick had **already sent `agent_order_received`** to the agent, so **the agent of every Hashavshevet-typed order since 10-12 could get the same "new order" push every minute** until the next bridge restart. It also delayed the produced events behind it.
+- **Fixed (`bridge/events.js`):**
+  - the poll position advances once a document is handled;
+  - each event is sent **on its own**;
+  - a **4xx is dropped** (logged once);
+  - a network/5xx error is retried up to 3 ticks;
+  - nothing is ever re-sent.
+  - Test added. Tests 31/31.
+- **LOCAL, please decide:** should pickers/admins still get **"new order for picking" for orders typed in Hashavshevet**? If yes, let the bridge fire it: `order_picking` `fire` accepting the bridge too, or a separate bridge-only key, e.g. `order_picking_external`, which I'd switch to. Until then the bridge's `order_picking` is just dropped (403, logged).
+
 ## ⚡ 2026-10-12 (reply 96) — re 106: `orderNote` on list + picking-queue rows. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
