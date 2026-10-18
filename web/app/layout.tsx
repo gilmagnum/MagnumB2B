@@ -31,6 +31,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang="he" dir="rtl" className={heebo.variable}>
+      <head>
+        {/* Apply the saved light/dark choice before paint (no flash). "system" leaves it to the OS. */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();` }} />
+      </head>
       <body>
         <SWRegister />
         {me && <AppHeader role={me.role} name={me.full_name ?? ""} />}

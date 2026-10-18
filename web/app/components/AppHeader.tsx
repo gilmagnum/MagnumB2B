@@ -7,6 +7,7 @@ import { useCart } from "../../lib/useCart";
 import HeaderSearch from "./HeaderSearch";
 import Icon from "./Icon";
 import NotifBell from "./NotifBell";
+import ThemeToggle from "./ThemeToggle";
 import { canSeeAdminPanel, managerOrAbove } from "../../lib/roles";
 
 type Role = "agent" | "customer" | "picker" | "admin" | "superadmin" | "";
@@ -88,6 +89,7 @@ export default function AppHeader({ role, name }: { role: Role; name: string }) 
 
       <div className="hdr-spacer" style={{ flex: 1 }} />
 
+      <ThemeToggle />
       <NotifBell />
 
       {!pickerOnly && (

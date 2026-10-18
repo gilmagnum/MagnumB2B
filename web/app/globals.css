@@ -34,7 +34,17 @@
     --ok-soft: oklch(30% 0.05 152); --warn-soft: oklch(32% 0.06 85); --danger-soft: oklch(31% 0.06 27);
   }
 }
+/* Explicit dark choice (forces dark even on a light system). */
+:root[data-theme="dark"] {
+  --canvas: oklch(20% 0.012 255); --surface: oklch(24% 0.014 255);
+  --surface-muted: oklch(28% 0.014 255); --border: oklch(34% 0.016 255);
+  --ink: oklch(96% 0.005 250); --ink-muted: oklch(72% 0.012 250);
+  --brand: oklch(72% 0.14 262); --brand-strong: oklch(80% 0.13 262); --brand-soft: oklch(30% 0.05 262);
+  --ok-soft: oklch(30% 0.05 152); --warn-soft: oklch(32% 0.06 85); --danger-soft: oklch(31% 0.06 27);
+}
 html { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 html, body { max-width: 100%; overflow-x: hidden; }
