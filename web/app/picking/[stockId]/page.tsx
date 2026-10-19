@@ -7,7 +7,9 @@ import { colorHex, textOn } from "../../../lib/colorName";
 import { getColorOverrides } from "../../../lib/colorOverrides";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import { managerOrAbove } from "../../../lib/roles";
+import { getSharedPickingEnabled } from "../../../lib/flags";
 import { openPickingSession, savePickingSession, releasePickingSession, handoffPickingSession, saveAndReleasePickingSession } from "../../picking-actions";
+import { getSharedState, splitPickingSession, claimRemainingLines, saveSharedLine, markPartDone, cleanupSharedPicking, type SharedState } from "../../shared-picking-actions";
 
 // Per-order picking (mobile/tablet first). The order is locked to one picker; picking starts
 // from 0; each line can be marked full in one click or typed; progress can be saved & resumed,
@@ -35,6 +37,12 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [handoff, setHandoff] = useState("");
   const [viewOnly, setViewOnly] = useState(false);              // manager viewing a pick in progress
   const [lockedProg, setLockedProg] = useState<Record<string, number>>({}); // the current picker's saved state
+  // --- shared picking (split lines) — only active when the flag is on ---
+  const [flagOn, setFlagOn] = useState(false);
+  const [shared, setShared] = useState<SharedState | null>(null); // null = solo
+  const [splitting, setSplitting] = useState(false);              // selecting my lines
+  const [splitSel, setSplitSel] = useState<Set<string>>(new Set());
+  const [myId, setMyId] = useState("");
 
   const lineKey = (l: DocLine) => String(l.lineId ?? `${l.itemkey}|${l.size ?? ""}`);
   const pickedRef = useRef(picked); pickedRef.current = picked;
@@ -45,10 +53,13 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       let pn = "", rl = "";
       const { data: { user } } = await supabaseBrowser().auth.getUser();
       if (user) {
+        setMyId(user.id);
         const { data: prof } = await supabaseBrowser().from("profiles").select("full_name, role").eq("id", user.id).single();
         pn = prof?.full_name ?? user.email ?? ""; rl = prof?.role ?? "";
         setPicker(pn); setRole(rl);
       }
+      const flag = await getSharedPickingEnabled().catch(() => false);
+      setFlagOn(flag);
       let d: DocumentDetail;
       try { d = await bridge.document(id); } catch { setErr("הגשר עדיין לא מחובר — פרטי ההזמנה ייטענו כשהגשר יעלה."); return; }
       setDoc(d);
@@ -58,6 +69,19 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         for (const [k, m] of Object.entries(meta)) { if (m.parent) p[k] = m.parent; if (m.color) c[k] = m.color; }
         setParents(p); setColors(c);
       }).catch(() => {});
+      // Shared mode: if this order is already split, enter it (no exclusive lock) instead of solo.
+      if (flag) {
+        const sh = await getSharedState(id).catch(() => null);
+        if (sh) {
+          setShared(sh);
+          const init: Record<string, number> = {};
+          for (const sl of sh.lines) init[sl.lineKey] = sl.pickedQty;
+          // packing lines live only in solo state; seed them from the doc for the owner's close.
+          for (const l of d.lines ?? []) if (l.isPacking && init[lineKey(l)] == null) init[lineKey(l)] = l.qty;
+          setPicked(init);
+          return;
+        }
+      }
       // Acquire the picking session (lock). Managers reopening a produced pick still lock it.
       const sess = await openPickingSession(id, pn).catch(() => ({} as { lockedBy?: string }));
       if (sess.lockedBy) {
@@ -90,11 +114,12 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const reopened = !!doc && alreadyPicked && isAdmin && !viewOnly;
 
   // Heartbeat: keep the lock alive + autosave progress while picking (not when just viewing).
+  // In shared mode saves are per-line (saveSharedLine), so the blob autosave is off.
   useEffect(() => {
-    if (!doc || lockedBy || readOnly || viewOnly || done) return;
+    if (!doc || lockedBy || readOnly || viewOnly || done || shared) return;
     const t = setInterval(() => { savePickingSession(id, pickedRef.current, notesRef.current).catch(() => {}); }, 120000);
     return () => clearInterval(t);
-  }, [doc, lockedBy, readOnly, viewOnly, done, id]);
+  }, [doc, lockedBy, readOnly, viewOnly, done, id, shared]);
 
   const shortageOf = (l: DocLine): "none" | "full" | "partial" => {
     if (l.isPacking) return "none"; // packing lines aren't a shortage — the picker sets them freely
@@ -103,9 +128,48 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     return p <= 0 ? "full" : "partial";
   };
   const shortages = lines.filter((l) => shortageOf(l) !== "none");
+
+  // --- shared-mode ownership (solo => everything is "mine") ---
+  const sharedByKey = useMemo(() => {
+    const m = new Map<string, { assignedId: string | null; assignedName: string | null }>();
+    if (shared) for (const sl of shared.lines) m.set(sl.lineKey, { assignedId: sl.assignedId, assignedName: sl.assignedName });
+    return m;
+  }, [shared]);
+  const mineLine = (l: DocLine) => !shared || sharedByKey.get(lineKey(l))?.assignedId === myId;
+  const assigneeName = (l: DocLine) => sharedByKey.get(lineKey(l))?.assignedName ?? null;
+  const hasFreeLines = !!shared && shared.lines.some((sl) => !sl.assignedId);
+  const iAmParticipant = !!shared && shared.participants.some((p) => p.pickerId === myId);
+  const isOwnerOrMgr = !!shared && (shared.ownerId === myId || isAdmin);
+
   // Product lines cap at the ordered qty; packing lines may go above the seed.
-  const setQty = (l: DocLine, v: number) => setPicked((p) => ({ ...p, [lineKey(l)]: l.isPacking ? Math.max(0, v) : Math.max(0, Math.min(l.qty, v)) }));
-  const fillAll = () => setPicked(Object.fromEntries(lines.map((l) => [lineKey(l), l.qty])));
+  const setQty = (l: DocLine, v: number) => {
+    if (shared && !mineLine(l)) return; // not my line — read-only
+    const nv = l.isPacking ? Math.max(0, v) : Math.max(0, Math.min(l.qty, v));
+    setPicked((p) => ({ ...p, [lineKey(l)]: nv }));
+    if (shared) saveSharedLine(id, lineKey(l), nv).catch(() => {}); // per-line save, no clobber
+  };
+  const fillAll = () => setPicked(Object.fromEntries(lines.filter(mineLine).map((l) => [lineKey(l), l.qty])));
+
+  // Refresh shared state (others' assignments + quantities); keep my own local edits.
+  const reloadShared = async () => {
+    const sh = await getSharedState(id).catch(() => null);
+    if (!sh) return;
+    setShared(sh);
+    setPicked((p) => { const n = { ...p }; for (const sl of sh.lines) if (sl.assignedId !== myId) n[sl.lineKey] = sl.pickedQty; return n; });
+  };
+  const confirmSplit = async () => {
+    const assign = lines.map((l) => ({ lineKey: lineKey(l), mine: !!l.isPacking || splitSel.has(lineKey(l)), qty: picked[lineKey(l)] ?? 0 }));
+    setSaving(true); const res = await splitPickingSession(id, picker, assign); setSaving(false);
+    if (res.error) { setErr(res.error); return; }
+    setSplitting(false); await reloadShared();
+  };
+  const claimRest = async () => {
+    setSaving(true); const res = await claimRemainingLines(id, picker); setSaving(false);
+    if (res.error) { setErr(res.error); return; }
+    await reloadShared();
+  };
+  const myPartDone = !!shared?.participants.find((p) => p.pickerId === myId)?.partDone;
+  const togglePartDone = async () => { await markPartDone(id, !myPartDone, notes.trim() || undefined).catch(() => {}); await reloadShared(); };
 
   const saveAndBack = async () => {
     // Save the current state AND release the lock, so another picker can continue from here.
@@ -121,12 +185,14 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const confirmFinish = async () => {
     if (!doc) return;
     setSaving(true);
+    // Shared pick → "לוקט ע״י A + B"; the picked map already holds every participant's per-line qty.
+    const finishPicker = shared ? (shared.participants.map((p) => p.pickerName).filter(Boolean).join(" + ") || picker) : picker;
     const shortageRows = shortages.map((l) => ({ itemkey: l.itemkey, size: l.size, name: l.name, ordered: l.qty, picked: picked[lineKey(l)] ?? 0, kind: shortageOf(l) }));
     try {
       const { data: { user } } = await supabaseBrowser().auth.getUser();
       await supabaseBrowser().from("picking_logs").insert({
         stock_id: doc.stockId, doc_number: doc.docNumber, account_key: doc.accountKey,
-        picker, notes: notes.trim() || null,
+        picker: finishPicker, notes: notes.trim() || null,
         lines: lines.map((l) => ({ itemkey: l.itemkey, size: l.size, ordered: l.qty, picked: picked[lineKey(l)] ?? 0 })),
         shortages: shortageRows, created_by: user?.id ?? null,
       });
@@ -134,7 +200,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     let hashavshevetOk = false, note = "";
     try {
       await bridge.finishPicking(doc.stockId, {
-        picker, notes: notes.trim() || undefined,
+        picker: finishPicker, notes: notes.trim() || undefined,
         lines: lines.map((l) => ({ itemkey: l.itemkey, size: l.size, pickedQty: picked[lineKey(l)] ?? 0 })),
       });
       hashavshevetOk = true;
@@ -151,11 +217,12 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         : /ITEM_NOT_IN_ORDER|422/.test(m) ? "פריט שאינו בהזמנה."
         : "הגשר לא זמין כרגע.";
     }
-    await releasePickingSession(id).catch(() => {}); // picking done → release the lock
+    // Release the lock (solo) or drop the shared rows (split).
+    await (shared ? cleanupSharedPicking(id) : releasePickingSession(id)).catch(() => {});
     setSaving(false); setConfirm(false);
     setDone(hashavshevetOk
-      ? `הליקוט הושלם ונכתב לחשבשבת ✓ · לוקט ע״י ${picker}`
-      : `התיעוד נשמר באפליקציה ✓ · לוקט ע״י ${picker}. (${note})`);
+      ? `הליקוט הושלם ונכתב לחשבשבת ✓ · לוקט ע״י ${finishPicker}`
+      : `התיעוד נשמר באפליקציה ✓ · לוקט ע״י ${finishPicker}. (${note})`);
     // Every exit from picking returns to the queue; a short pause lets the picker read the result.
     setTimeout(() => router.push("/picking"), hashavshevetOk ? 1800 : 3500);
   };
@@ -220,10 +287,37 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       {reopened && !done && <p className="chip chip-info" style={{ display: "block", padding: 12 }}>הזמנה זו כבר לוקטה{doc.picker ? ` ע״י ${doc.picker}` : ""} ונפתחה מחדש. שינוי יעדכן את הליקוט בחשבשבת. (שורה שנמחקה בעבר לא חוזרת.)</p>}
       {done && <p className="chip chip-ok" style={{ display: "block", padding: 12 }}>{done} <a href="/picking" style={{ color: "inherit", textDecoration: "underline" }}>לתור</a></p>}
 
-      {!done && !readOnly && (
+      {/* --- shared picking (split lines) controls --- */}
+      {flagOn && !done && !shared && !readOnly && !viewOnly && !lockedBy && !splitting && lines.filter((l) => !l.isPacking).length > 1 && (
+        <button onClick={() => { setSplitting(true); setSplitSel(new Set()); }} className="btn" style={{ margin: "4px 0 8px" }}>👥 פצל ליקוט (עבודה משותפת)</button>
+      )}
+      {splitting && (
+        <div className="card card-pad" style={{ margin: "4px 0 10px", display: "grid", gap: 8, borderInlineStart: "4px solid var(--brand)" }}>
+          <b>בחר את השורות שלך — השאר ישוחררו למלקט נוסף</b>
+          <span style={{ fontSize: 13, color: "var(--ink-muted)" }}>חבילות/משטחים נשארים אצלך (הפותח), ותסגור אותם בסיום.</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={confirmSplit} disabled={saving || splitSel.size === 0} className="btn btn-primary">אשר פיצול ({splitSel.size})</button>
+            <button onClick={() => setSplitting(false)} disabled={saving} className="btn">ביטול</button>
+          </div>
+        </div>
+      )}
+      {shared && !done && (
+        <div className="card card-pad" style={{ margin: "4px 0 10px", display: "grid", gap: 6 }}>
+          <div style={{ fontWeight: 700 }}>👥 ליקוט חלקי{shared.ownerName ? ` · פתח: ${shared.ownerName}` : ""}</div>
+          <div style={{ fontSize: 13, color: "var(--ink-muted)" }}>
+            {shared.participants.map((p) => `${p.pickerName}${p.partDone ? " ✓ סיים" : ""}`).join(" · ") || "—"}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {hasFreeLines && shared.ownerId !== myId && <button onClick={claimRest} disabled={saving} className="btn btn-primary btn-sm">קח את יתר השורות</button>}
+            {iAmParticipant && !isOwnerOrMgr && <button onClick={togglePartDone} disabled={saving} className={myPartDone ? "btn btn-sm" : "btn btn-primary btn-sm"}>{myPartDone ? "בטל סימון סיום" : "סיימתי את החלק שלי"}</button>}
+          </div>
+        </div>
+      )}
+
+      {!done && !readOnly && !splitting && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "12px 0 8px" }}>
           <span style={{ color: "var(--ink-muted)", fontSize: 13 }}>{lines.length} שורות · {shortages.length ? `${shortages.length} עם חוסר` : "הכל מלא"}</span>
-          <button onClick={fillAll} className="btn btn-sm">סמן הכל מלא ✓</button>
+          <button onClick={fillAll} className="btn btn-sm">סמן הכל מלא{shared ? " (שלי)" : ""} ✓</button>
         </div>
       )}
 
@@ -240,8 +334,16 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
           // Warehouse picking screen — enlarge image / SKU / quantity for everyone.
           const isPicker = true;
           const imgSz = 96;
+          // Shared: a line not assigned to me is read-only; in split-select it's a checkbox.
+          const lineRO = readOnly || (!!shared && !mineLine(l));
+          const otherName = shared && !mineLine(l) ? assigneeName(l) : null;
+          const selectable = splitting && !isPacking;
+          const sel = splitSel.has(lineKey(l));
           return (
-            <div key={lineKey(l)} className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${border}` }}>
+            <div key={lineKey(l)} onClick={selectable ? () => setSplitSel((s) => { const n = new Set(s); if (n.has(lineKey(l))) n.delete(lineKey(l)); else n.add(lineKey(l)); return n; }) : undefined}
+              className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${selectable && sel ? "var(--brand-strong)" : border}`, cursor: selectable ? "pointer" : undefined, outline: selectable && sel ? "2px solid var(--brand)" : undefined }}>
+              {selectable && <div style={{ fontWeight: 700, color: sel ? "var(--brand-strong)" : "var(--ink-muted)" }}>{sel ? "☑ השורה שלי" : "☐ בחר כשלי"}</div>}
+              {otherName && <div className="chip chip-info" style={{ width: "fit-content" }}>אצל {otherName}</div>}
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 {isPacking
                   ? <div style={{ width: imgSz, height: imgSz, borderRadius: 8, background: "var(--brand-soft)", display: "grid", placeItems: "center", fontSize: isPicker ? 48 : 26, flex: "0 0 auto" }}>📦</div>
@@ -277,19 +379,19 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                       : <><b>{l.units ?? l.qty}</b>{l.unit ? ` ${l.unit}` : " יח׳"}</>}</>}</span>
                 {/* Stepper jumps by one pack (packSize units); the number stays editable for a manual fix. + on the right (RTL). */}
                 <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <button onClick={() => setQty(l, q + step)} disabled={readOnly} className="btn btn-primary btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `+${l.packLabel}` : "+1"}>+</button>
-                  <input type="number" inputMode="numeric" min={0} max={isPacking ? undefined : l.qty} value={q} disabled={readOnly}
+                  <button onClick={() => setQty(l, q + step)} disabled={lineRO || splitting} className="btn btn-primary btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `+${l.packLabel}` : "+1"}>+</button>
+                  <input type="number" inputMode="numeric" min={0} max={isPacking ? undefined : l.qty} value={q} disabled={lineRO || splitting}
                     onChange={(e) => setQty(l, Number(e.target.value))}
                     style={{ width: isPicker ? 96 : 72, padding: isPicker ? "10px" : "8px", fontSize: isPicker ? 26 : 16, fontWeight: isPicker ? 700 : undefined, textAlign: "center", borderRadius: 8, border: "1px solid var(--border)" }} />
-                  <button onClick={() => setQty(l, q - step)} disabled={readOnly || q <= 0} className="btn btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `−${l.packLabel}` : "−1"}>−</button>
+                  <button onClick={() => setQty(l, q - step)} disabled={lineRO || splitting || q <= 0} className="btn btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `−${l.packLabel}` : "−1"}>−</button>
                   {/* Fine ±1-unit control — mobile/tablet only (desktop has the native number-spinner), stacked +1 over −1. */}
                   {packStep && (
                     <span className="pick-fine">
-                      <button onClick={() => setQty(l, q + 1)} disabled={readOnly} className="btn btn-sm" style={{ padding: "6px 9px", fontSize: 13 }} title="יחידה אחת">+1</button>
-                      <button onClick={() => setQty(l, q - 1)} disabled={readOnly || q <= 0} className="btn btn-sm" style={{ padding: "6px 9px", fontSize: 13 }} title="יחידה אחת">−1</button>
+                      <button onClick={() => setQty(l, q + 1)} disabled={lineRO || splitting} className="btn btn-sm" style={{ padding: "6px 9px", fontSize: 13 }} title="יחידה אחת">+1</button>
+                      <button onClick={() => setQty(l, q - 1)} disabled={lineRO || splitting || q <= 0} className="btn btn-sm" style={{ padding: "6px 9px", fontSize: 13 }} title="יחידה אחת">−1</button>
                     </span>
                   )}
-                  {!isPacking && <button onClick={() => setQty(l, l.qty)} disabled={readOnly} className="btn btn-sm" style={{ padding: "8px 12px" }}>מלא</button>}
+                  {!isPacking && <button onClick={() => setQty(l, l.qty)} disabled={lineRO || splitting} className="btn btn-sm" style={{ padding: "8px 12px" }}>מלא</button>}
                 </span>
               </div>
               {packStep && (
@@ -311,11 +413,12 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         })}
       </div>
 
-      {!done && !readOnly && (
+      {!done && !readOnly && !splitting && (
         <div style={{ position: "sticky", bottom: 0, background: "var(--surface)", borderTop: "1px solid var(--border)", padding: "12px 0", marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", zIndex: 10 }}>
-          <button onClick={() => setConfirm(true)} className="btn btn-primary" style={{ padding: "12px 20px", fontSize: 16 }}>{reopened ? "עדכון ליקוט" : "סיום ליקוט"}</button>
-          <button onClick={saveAndBack} disabled={saving} className="btn" style={{ padding: "12px 18px" }}>שמור וחזור</button>
-          <button onClick={resetRelease} disabled={saving} className="btn" style={{ padding: "12px 18px", color: "var(--danger)" }}>אפס ושחרר</button>
+          {/* Shared: only the owner/manager closes the order; a participant just leaves (their lines are saved). */}
+          {(!shared || isOwnerOrMgr) && <button onClick={() => setConfirm(true)} className="btn btn-primary" style={{ padding: "12px 20px", fontSize: 16 }}>{reopened ? "עדכון ליקוט" : "סיום ליקוט"}</button>}
+          <button onClick={shared ? () => router.push("/picking") : saveAndBack} disabled={saving} className="btn" style={{ padding: "12px 18px" }}>{shared ? "חזרה לתור" : "שמור וחזור"}</button>
+          {!shared && <button onClick={resetRelease} disabled={saving} className="btn" style={{ padding: "12px 18px", color: "var(--danger)" }}>אפס ושחרר</button>}
         </div>
       )}
 
@@ -324,7 +427,10 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", display: "grid", placeItems: "center", zIndex: 100, padding: 16 }} onClick={() => !saving && setConfirm(false)}>
           <div className="card card-pad" style={{ maxWidth: 480, width: "100%", maxHeight: "85vh", overflow: "auto" }} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ marginTop: 0 }}>{reopened ? "אישור עדכון ליקוט" : "אישור סיום ליקוט"}</h2>
-            <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>מלקט: <b>{picker || "—"}</b></p>
+            <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>מלקט: <b>{(shared ? shared.participants.map((p) => p.pickerName).filter(Boolean).join(" + ") : picker) || "—"}</b></p>
+            {shared && shared.participants.some((p) => !p.partDone) && (
+              <p className="chip chip-warn" style={{ display: "block", padding: 10 }}>⚠ לא כל המלקטים סימנו שסיימו את חלקם ({shared.participants.filter((p) => p.partDone).map((p) => p.pickerName).join(", ") || "אף אחד"} סיימו). סגירה תנעל את ההזמנה עם המצב הנוכחי — שורות שלא לוקטו ייחשבו חוסר.</p>
+            )}
             {shortages.length === 0
               ? <p className="chip chip-ok">אין חוסרים — כל השורות סופקו במלואן.</p>
               : (

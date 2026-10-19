@@ -4,6 +4,7 @@ import { bridge, type Document } from "../../lib/bridge";
 import { supabaseBrowser } from "../../lib/supabase/browser";
 import { managerOrAbove } from "../../lib/roles";
 import { getActiveLocks } from "../picking-actions";
+import { getSplitOrders } from "../shared-picking-actions";
 import { listPickingLogs, type PickLogRow } from "../order-actions";
 
 type Tab = "waiting" | "picked" | "produced" | "all";
@@ -20,6 +21,7 @@ export default function PickingPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [locks, setLocks] = useState<Record<number, string>>({});
+  const [splits, setSplits] = useState<Record<number, string>>({}); // split-mode orders by owner
   const [logs, setLogs] = useState<Record<number, PickLogRow>>({}); // picker notes + shortages by stockId
   const [openLog, setOpenLog] = useState<number | null>(null);
 
@@ -71,7 +73,9 @@ export default function PickingPage() {
         r = [...w, ...p].filter((d) => (seen.has(d.stockId) ? false : (seen.add(d.stockId), true)));
       }
       setRows(r);
-      getActiveLocks(r.map((d) => d.stockId)).then(setLocks).catch(() => {});
+      const ids = r.map((d) => d.stockId);
+      getActiveLocks(ids).then(setLocks).catch(() => {});
+      getSplitOrders(ids).then(setSplits).catch(() => {});
     } catch {
       setErr("הגשר עדיין לא מחובר — תור הליקוט ייטען כשהגשר יעלה.");
       setRows([]);
@@ -103,7 +107,9 @@ export default function PickingPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 10 }}>
           {rows.map((d) => {
             // Produced orders are view-only; a picked order can be reopened by a manager; waiting is open to all.
-            const canOpen = !d.produced && (!d.picked || mgr);
+            // A split (shared) order is always open to join (not locked).
+            const split = splits[d.stockId];
+            const canOpen = split ? !d.produced : (!d.produced && (!d.picked || mgr));
             const href = `/picking/${d.stockId}`;
             const inner = (
               <div className="card card-pad" style={{ display: "grid", gap: 6, height: "100%" }}>
@@ -147,9 +153,11 @@ export default function PickingPage() {
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginTop: 2 }}>
                   <span style={{ color: canOpen ? "var(--brand)" : "var(--ink-muted)", fontWeight: 700 }}>
-                    {d.produced ? "הופק — למעקב" : !d.picked ? "ליקוט ←" : mgr ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}
+                    {d.produced ? "הופק — למעקב" : split ? "ליקוט חלקי — הצטרף ←" : !d.picked ? "ליקוט ←" : mgr ? "פתח מחדש ←" : `לוקט${d.picker ? ` · ${d.picker}` : ""}`}
                   </span>
-                  {locks[d.stockId] && <span className="chip chip-warn" title="בליקוט כעת">🔒 {locks[d.stockId]}</span>}
+                  {split
+                    ? <span className="chip chip-info" title="ליקוט משותף">👥 {split}</span>
+                    : locks[d.stockId] && <span className="chip chip-warn" title="בליקוט כעת">🔒 {locks[d.stockId]}</span>}
                 </div>
               </div>
             );
