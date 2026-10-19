@@ -7,6 +7,8 @@ import NotificationPrefs from "../components/NotificationPrefs";
 import EmailTestButton from "../components/EmailTestButton";
 import DriveImages from "../components/DriveImages";
 import CatalogSyncButton from "../components/CatalogSyncButton";
+import SharedPickingToggle from "./SharedPickingToggle";
+import { SHARED_PICKING_KEY } from "../../lib/flags";
 import Icon from "../components/Icon";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +19,12 @@ export default async function SettingsPage() {
   if (!me) redirect("/login");
 
   let driveUrl = "";
+  let sharedPicking = false;
   if (canEditRulers(me.role)) {
     const { data } = await supabaseAdmin().from("app_settings").select("value").eq("key", "images_drive_url").single();
     driveUrl = ((data?.value as { url?: string } | null)?.url) ?? "";
+    const { data: sp } = await supabaseAdmin().from("app_settings").select("value").eq("key", SHARED_PICKING_KEY).maybeSingle();
+    sharedPicking = sp?.value === true;
   }
 
   return (
@@ -65,6 +70,11 @@ export default async function SettingsPage() {
 
           <h4 style={{ margin: "20px 0 0", color: "var(--brand-strong)" }}>סנכרון קטלוג</h4>
           <CatalogSyncButton />
+
+          {canManageUsers(me.role) && (<>
+            <h4 style={{ margin: "20px 0 0", color: "var(--brand-strong)" }}>ליקוט משותף (ניסיוני)</h4>
+            <SharedPickingToggle initial={sharedPicking} />
+          </>)}
         </section>
       )}
     </>
