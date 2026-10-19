@@ -9,12 +9,14 @@ import { managerOrAbove } from "../lib/roles";
 const LOCK_MIN = 10;
 const isActive = (updatedAt: string) => Date.now() - new Date(updatedAt).getTime() < LOCK_MIN * 60000;
 
-async function pickingUser(): Promise<{ id: string; role: string } | null> {
+async function pickingUser(): Promise<{ id: string; role: string; name: string } | null> {
   const { data: { user } } = await (await supabaseServer()).auth.getUser();
   if (!user) return null;
-  const { data: prof } = await supabaseAdmin().from("profiles").select("role").eq("id", user.id).single();
+  const { data: prof } = await supabaseAdmin().from("profiles").select("role, full_name").eq("id", user.id).single();
   const role = (prof?.role as string) ?? "";
-  return role === "picker" || managerOrAbove(role) ? { id: user.id, role } : null;
+  if (!(role === "picker" || managerOrAbove(role))) return null;
+  // Name is taken from the server profile — never from the client — so no one records under another's name.
+  return { id: user.id, role, name: (prof?.full_name as string) || user.email || "" };
 }
 
 export type SharedLine = { lineKey: string; assignedId: string | null; assignedName: string | null; pickedQty: number };
@@ -41,38 +43,41 @@ export async function getSharedState(stockId: number): Promise<SharedState | nul
 
 // The opener splits: assign chosen lines to themselves, release the rest. `assign` carries every order
 // line with a `mine` flag and its current picked qty (to seed the opener's lines).
-export async function splitPickingSession(stockId: number, pickerName: string, assign: { lineKey: string; mine: boolean; qty: number }[]): Promise<{ ok?: boolean; error?: string }> {
+export async function splitPickingSession(stockId: number, _clientName: string, assign: { lineKey: string; mine: boolean; qty: number }[]): Promise<{ ok?: boolean; error?: string }> {
   const u = await pickingUser();
   if (!u) return { error: "unauthorized" };
+  const name = u.name;
   const admin = supabaseAdmin();
   const { data: s } = await admin.from("picking_sessions").select("picker_id, owner_id, mode, updated_at").eq("stock_id", stockId).maybeSingle();
   if (s && s.mode === "split" && s.owner_id && s.owner_id !== u.id && !managerOrAbove(u.role)) return { error: "ההזמנה כבר בפיצול" };
   if (s && s.picker_id && s.picker_id !== u.id && isActive(s.updated_at as string) && !managerOrAbove(u.role)) return { error: "ההזמנה ננעלה על ידי מלקט אחר" };
   const now = new Date().toISOString();
-  await admin.from("picking_sessions").upsert({ stock_id: stockId, picker_id: u.id, picker_name: pickerName, owner_id: u.id, owner_name: pickerName, mode: "split", updated_at: now }, { onConflict: "stock_id" });
+  await admin.from("picking_sessions").upsert({ stock_id: stockId, picker_id: u.id, picker_name: name, owner_id: u.id, owner_name: name, mode: "split", updated_at: now }, { onConflict: "stock_id" });
   const rows = assign.map((a) => ({
     stock_id: stockId, line_key: a.lineKey,
-    assigned_picker_id: a.mine ? u.id : null, assigned_picker_name: a.mine ? pickerName : null,
+    assigned_picker_id: a.mine ? u.id : null, assigned_picker_name: a.mine ? name : null,
     picked_qty: a.mine ? Math.max(0, a.qty | 0) : 0, updated_at: now,
   }));
   const { error } = await admin.from("picking_lines").upsert(rows, { onConflict: "stock_id,line_key" });
   if (error) return { error: error.message };
-  await admin.from("picking_participants").upsert({ stock_id: stockId, picker_id: u.id, picker_name: pickerName, part_done: false, updated_at: now }, { onConflict: "stock_id,picker_id" });
+  await admin.from("picking_participants").upsert({ stock_id: stockId, picker_id: u.id, picker_name: name, part_done: false, updated_at: now }, { onConflict: "stock_id,picker_id" });
   return { ok: true };
 }
 
 // Entering picker takes all still-unassigned lines (atomic). Capped at 2 participants.
-export async function claimRemainingLines(stockId: number, pickerName: string): Promise<{ ok?: boolean; error?: string; claimed?: number }> {
+export async function claimRemainingLines(stockId: number, _clientName: string): Promise<{ ok?: boolean; error?: string; claimed?: number }> {
   const u = await pickingUser();
   if (!u) return { error: "unauthorized" };
+  const name = u.name;
   const admin = supabaseAdmin();
+  // Count-then-upsert: two parallel joins could in theory both pass (cosmetic — max 2 is a soft cap).
   const { data: parts } = await admin.from("picking_participants").select("picker_id").eq("stock_id", stockId);
   if ((parts ?? []).filter((p) => p.picker_id !== u.id).length >= 2) return { error: "כבר שני מלקטים על ההזמנה" };
   const { data: claimed, error } = await admin.from("picking_lines")
-    .update({ assigned_picker_id: u.id, assigned_picker_name: pickerName, updated_at: new Date().toISOString() })
+    .update({ assigned_picker_id: u.id, assigned_picker_name: name, updated_at: new Date().toISOString() })
     .eq("stock_id", stockId).is("assigned_picker_id", null).select("line_key");
   if (error) return { error: error.message };
-  await admin.from("picking_participants").upsert({ stock_id: stockId, picker_id: u.id, picker_name: pickerName, part_done: false, updated_at: new Date().toISOString() }, { onConflict: "stock_id,picker_id" });
+  await admin.from("picking_participants").upsert({ stock_id: stockId, picker_id: u.id, picker_name: name, part_done: false, updated_at: new Date().toISOString() }, { onConflict: "stock_id,picker_id" });
   return { ok: true, claimed: (claimed ?? []).length };
 }
 
@@ -93,8 +98,9 @@ export async function saveSharedLine(stockId: number, lineKey: string, qty: numb
 export async function markPartDone(stockId: number, done: boolean, notes?: string): Promise<{ ok?: boolean }> {
   const u = await pickingUser();
   if (!u) return { ok: false };
+  const note = notes ? String(notes).slice(0, 500) : null; // cap length
   await supabaseAdmin().from("picking_participants")
-    .update({ part_done: !!done, notes: notes ?? null, updated_at: new Date().toISOString() })
+    .update({ part_done: !!done, notes: note, updated_at: new Date().toISOString() })
     .eq("stock_id", stockId).eq("picker_id", u.id);
   return { ok: true };
 }
