@@ -121,6 +121,13 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
 - `POST /documents/status` `{ stockIds: number[] }` (max 500) → `{ [stockId]: 'open' | 'produced' | 'gone' }` - one indexed query (open = Status 0, produced = any other, gone = no such document).
   Open agent orders (doc 11, Status 0) + open transfers (doc 19) of transfer customers (10830). `waiting` (default) = no picker marker; `picked` = ExtraText2 `לוקט - <name>`
   (picked, waiting for production in Hashavshevet). Same row shape as /documents incl. `picked`, `picker`, `pickedMarker`.
+- `POST /picking/:stockId/approve-surplus[?dryRun=1]` **(WRITES; admin/superadmin only, else 403 - reply 118)** - the ONLY way a line
+  increases. Body `{ approver, lines: [{ itemkey, size?, ordered, newQty }] }` (`newQty` safe integer > `ordered` >= 0, else 422
+  `BAD_QTY`). One transaction, Stock row + lines locked: doc must be open 11/19 (else 409 `NOT_OPEN`); each line matched by itemkey
+  (+ size = `Details`; a no-size request matches only no-size lines; duplicates -> the last one holding `ordered`) and must hold
+  exactly `ordered` now (else 409 `STALE`, nothing written - replay-safe). Sets `Quantity = newQty` (absolute), TFtal/TftalVat from
+  the document's own Price/DiscountPrc, header totals recomputed; `Stock.ExtraText4 = 'עודף אושר - <approver>'`. Packing lines -> 422
+  `BAD_LINE`; unknown -> 422 `ITEM_NOT_IN_ORDER`. → `{ ok, stockId, dryRun, approver, approverField, lines: [{ itemkey, size?, from, to }], totals }`.
 - `POST /picking/:stockId/finish[?dryRun=1]` **(WRITES to Hashavshevet)** body `{ picker, notes?, lines: [{ itemkey, size?, pickedQty }] }` (`size` targets only that size's line)
   → `{ ok, stockId, dryRun, picker, notesField, notes, shortages: [{ itemkey, size?, ordered, picked, action: 'reduced'|'deleted' }] (never increases - surplus only via approve-surplus), totals: { net, gross } }`.
   One transaction, only on doc 11 with Status 0: pickedQty ≥ ordered → unchanged; 0 < pickedQty < ordered → line reduced

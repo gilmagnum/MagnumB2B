@@ -227,3 +227,126 @@ export async function finishPicking(stockId, body, { dryRun = false } = {}) {
     throw err;
   }
 }
+
+// --- approve-surplus (reply 118) ---------------------------------------------------------------
+// The ONLY path that increases a line: a manager approves a picker's surplus. Absolute set, never
+// add: each body line names the Quantity it expects now (`ordered`) and the target (`newQty`). If
+// the line no longer holds `ordered` (edited / re-picked / already approved) -> 409 STALE and nothing
+// is written - which also makes a replay safe. One transaction, the Stock row + its lines locked.
+const APPROVER_FIELD = 'ExtraText4'; // varchar(50), unused by staff (0 of 500 recent docs)
+const APPROVER_MAX = 50;
+
+export function validateSurplus(body) {
+  const approver = trim(body?.approver);
+  if (!approver || typeof approver !== 'string') throw new PickingError(400, 'BAD_REQUEST', 'חסר שם המאשר');
+  if (!Array.isArray(body.lines) || !body.lines.length) throw new PickingError(400, 'BAD_REQUEST', 'חסרות שורות');
+  if (body.lines.length > 200) throw new PickingError(400, 'BAD_REQUEST', 'יותר מדי שורות');
+  const lines = body.lines.map((l) => {
+    const itemkey = trim(l?.itemkey);
+    const size = trim(l?.size) || undefined;
+    if (!itemkey || typeof itemkey !== 'string') throw new PickingError(400, 'BAD_LINE', 'שורה לא תקינה');
+    if (size != null && typeof size !== 'string') throw new PickingError(400, 'BAD_LINE', `מידה לא תקינה לפריט ${itemkey}`);
+    const { ordered, newQty } = l;
+    if (!Number.isFinite(ordered) || ordered < 0 || !Number.isSafeInteger(newQty) || !(newQty > ordered)) {
+      throw new PickingError(422, 'BAD_QTY', `כמות לא תקינה לפריט ${itemkey} (נדרש: כמות חדשה שלמה וגדולה מהכמות שהוזמנה)`);
+    }
+    return { itemkey, size, ordered, newQty };
+  });
+  return { approver: approver.slice(0, APPROVER_MAX - 'עודף אושר - '.length), lines };
+}
+
+// Pure: match each request line to ONE document line (itemkey, + Details for a size line; not a
+// packing line); the line must hold exactly `ordered` now. Among several candidates (same item on two
+// lines) the LAST one holding `ordered` is taken. Returns [{ line, req }] or throws.
+export function planSurplus(docLines, reqLines, shipping = new Set()) {
+  const used = new Set();
+  return reqLines.map((r) => {
+    if (shipping.has(r.itemkey)) throw new PickingError(422, 'BAD_LINE', `${r.itemkey}: שורת אריזה אינה עודף`);
+    const candidates = docLines.filter((l) => trim(l.ItemKey) === r.itemkey
+      && (r.size ? trim(l.Details) === r.size : !trim(l.Details)) && !used.has(l.ID));
+    if (!candidates.length) throw new PickingError(422, 'ITEM_NOT_IN_ORDER', `${r.itemkey}${r.size ? ` (${r.size})` : ''} אינו בהזמנה`);
+    const match = candidates.filter((l) => l.Quantity === r.ordered).at(-1);
+    if (!match) {
+      throw new PickingError(409, 'STALE', `${r.itemkey}${r.size ? ` (${r.size})` : ''}: הכמות במסמך השתנתה (${candidates.map((l) => l.Quantity).join(', ')} במקום ${r.ordered})`);
+    }
+    used.add(match.ID);
+    return { line: match, req: r };
+  });
+}
+
+export async function approveSurplus(stockId, body, { dryRun = false } = {}) {
+  const { approver, lines: reqLines } = validateSurplus(body);
+  const id = Number(stockId);
+  const shipping = new Set(Object.values(SHIPPING_ITEMS).map((s) => s.itemKey));
+  const pool = await getPool('rw');
+  const tx = new sql.Transaction(pool);
+  await tx.begin();
+  const req = () => new sql.Request(tx).input('id', sql.Int, id);
+  try {
+    const [order] = (await req().query(
+      'SELECT ID, DocumentID, Status, AccountKey, DiscountPrc, VatPrc FROM Stock WITH (UPDLOCK, ROWLOCK) WHERE ID = @id',
+    )).recordset;
+    if (!order) throw new PickingError(404, 'DOC_NOT_FOUND', `הזמנה ${id} לא נמצאה`);
+    const transfer = TRANSFER_ACCOUNTS[trim(order.AccountKey)];
+    const pickable = order.DocumentID === ORDER_DOCUMENT_IDS.picking || (transfer && order.DocumentID === transfer.documentId);
+    if (!pickable || order.Status !== 0) throw new PickingError(409, 'NOT_OPEN', `הזמנה ${id} אינה פתוחה (כבר הופקה או סוג אחר)`);
+    if (!writeAllowed(order.AccountKey)) {
+      throw new PickingError(403, 'WRITE_DISABLED', 'כתיבה ללקוחות אמיתיים אינה מופעלת (ORDER_WRITE_ENABLED)');
+    }
+    const docLines = (await req().query(
+      'SELECT ID, ItemKey, Details, Quantity, Price, DiscountPrc, Tree FROM StockMoves WITH (UPDLOCK) WHERE StockID = @id ORDER BY LineNoForSorting, ID',
+    )).recordset;
+    if (docLines.some((l) => l.Tree !== 0)) throw new PickingError(409, 'TREE_UNSUPPORTED', 'הזמנה עם פריטי עץ/מטריצה מקוננים - יש לטפל בחשבשבת');
+    const plan = planSurplus(docLines, reqLines, shipping);
+
+    const vat = 1 + (order.VatPrc ?? VAT_PRC) / 100;
+    for (const { line, req: r } of plan) {
+      // The document's own Price + DiscountPrc - never a client price.
+      const total = round2(r.newQty * line.Price * (1 - (line.DiscountPrc ?? 0) / 100));
+      const done = await req()
+        .input('line', sql.Int, line.ID)
+        .input('q', sql.Float, r.newQty)
+        .input('was', sql.Float, r.ordered)
+        .input('t', sql.Float, total)
+        .input('tv', sql.Float, round2(total * vat))
+        .query(
+          `UPDATE StockMoves SET Quantity = @q, TFtal = @t, TftalVat = @tv,
+             SupplyQuantity = @q, BaseQuantity = @q, PurchQuantity = @q
+           WHERE ID = @line AND StockID = @id AND Quantity = @was`,
+        );
+      if (done.rowsAffected[0] !== 1) throw new PickingError(409, 'STALE', `${r.itemkey}: הכמות במסמך השתנתה`);
+    }
+    // Header totals from the lines - same math as finishPicking.
+    const [sum] = (await req().query(
+      `SELECT ISNULL(SUM(Quantity * Price * (1 - ISNULL(DiscountPrc, 0) / 100)), 0) AS net
+       FROM StockMoves WHERE StockID = @id AND Tree IN (0, 1)`,
+    )).recordset;
+    const net = round2(sum.net);
+    const gross = round2(sum.net * (1 - (order.DiscountPrc ?? 0) / 100) * (transfer ? 1 : vat));
+    const marker = `עודף אושר - ${approver}`.slice(0, APPROVER_MAX);
+    const upd = await req()
+      .input('net', sql.Float, net)
+      .input('gross', sql.Float, gross)
+      .input('marker', sql.NVarChar(APPROVER_MAX), marker)
+      .query(`UPDATE Stock SET TFtalVat = @net, TFtal = @gross, ${APPROVER_FIELD} = @marker WHERE ID = @id AND Status = 0`);
+    if (upd.rowsAffected[0] !== 1) throw new PickingError(409, 'NOT_OPEN', `הזמנה ${id} השתנתה בזמן האישור`);
+
+    if (dryRun) await tx.rollback();
+    else await tx.commit();
+    console.log(`surplus approved by ${approver} on ${id}${dryRun ? ' (dry run)' : ''}: `
+      + plan.map(({ req: r }) => `${r.itemkey}${r.size ? `|${r.size}` : ''} ${r.ordered}->${r.newQty}`).join(', '));
+    return {
+      ok: true,
+      stockId: id,
+      dryRun,
+      approver: marker,
+      approverField: APPROVER_FIELD,
+      lines: plan.map(({ req: r }) => ({ itemkey: r.itemkey, ...(r.size && { size: r.size }), from: r.ordered, to: r.newQty })),
+      totals: { net, gross },
+    };
+  } catch (err) {
+    await tx.rollback().catch(() => {});
+    if (err?.number === SQL_PERMISSION_DENIED) throw new PickingError(501, 'NO_PERMISSION', 'לבריג\' אין הרשאת עדכון בחשבשבת');
+    throw err;
+  }
+}

@@ -83,3 +83,41 @@ test('planPacking: picker quantity on M1001/M1002 (increase, 0 deletes, untouche
   assert.deepEqual(zero.result, [{ itemkey: 'M1001', qty: 0, action: 'deleted' }, { itemkey: 'M1002', qty: 1, action: 'unchanged' }]);
   assert.deepEqual(planPacking(lines, new Map([['A', 10]]), shipping).changes.map((c) => [c.lineId, c.action]), [[2, 'deleted']]);
 });
+
+test('approve-surplus validation (reply 118): integer newQty > ordered, approver required', async () => {
+  const { validateSurplus } = await import('../bridge/picking.js');
+  const ok = validateSurplus({ approver: ' גיל ', lines: [{ itemkey: 'A', ordered: 10, newQty: 12 }] });
+  assert.equal(ok.approver, 'גיל');
+  assert.deepEqual(ok.lines, [{ itemkey: 'A', size: undefined, ordered: 10, newQty: 12 }]);
+  const code = (body) => { try { validateSurplus(body); return 'ok'; } catch (e) { return e.code; } };
+  assert.equal(code({ lines: [{ itemkey: 'A', ordered: 10, newQty: 12 }] }), 'BAD_REQUEST'); // no approver
+  assert.equal(code({ approver: 'x', lines: [] }), 'BAD_REQUEST');
+  assert.equal(code({ approver: 'x', lines: [{ itemkey: 'A', ordered: 10, newQty: 10 }] }), 'BAD_QTY'); // not >
+  assert.equal(code({ approver: 'x', lines: [{ itemkey: 'A', ordered: 10, newQty: 12.5 }] }), 'BAD_QTY'); // not integer
+  assert.equal(code({ approver: 'x', lines: [{ itemkey: 'A', ordered: -1, newQty: 2 }] }), 'BAD_QTY');
+  assert.equal(code({ approver: 'x', lines: [{ itemkey: 'A', ordered: 10, newQty: '12' }] }), 'BAD_QTY'); // string
+  assert.equal(code({ approver: 'x', lines: [{ itemkey: 'A', ordered: 10, newQty: 2 ** 60 }] }), 'BAD_QTY'); // unsafe
+});
+
+test('approve-surplus matching: exact line, STALE, size lines, packing refused, last line of a duplicate', async () => {
+  const { planSurplus } = await import('../bridge/picking.js');
+  const doc = [
+    { ID: 1, ItemKey: 'A', Details: null, Quantity: 10 },
+    { ID: 2, ItemKey: 'R', Details: '2-4', Quantity: 5 },
+    { ID: 3, ItemKey: 'R', Details: '6-8', Quantity: 5 },
+    { ID: 4, ItemKey: 'B', Details: null, Quantity: 6 },
+    { ID: 5, ItemKey: 'B', Details: null, Quantity: 6 },
+    { ID: 6, ItemKey: 'M1001', Details: null, Quantity: 0 },
+  ];
+  const ship = new Set(['M1001', 'M1002']);
+  const ids = (reqs) => planSurplus(doc, reqs, ship).map((p) => p.line.ID);
+  assert.deepEqual(ids([{ itemkey: 'A', ordered: 10, newQty: 12 }]), [1]);
+  assert.deepEqual(ids([{ itemkey: 'R', size: '6-8', ordered: 5, newQty: 7 }]), [3]);
+  assert.deepEqual(ids([{ itemkey: 'B', ordered: 6, newQty: 9 }]), [5]); // last of the duplicates
+  assert.deepEqual(ids([{ itemkey: 'B', ordered: 6, newQty: 9 }, { itemkey: 'B', ordered: 6, newQty: 8 }]), [5, 4]);
+  const code = (reqs) => { try { planSurplus(doc, reqs, ship); return 'ok'; } catch (e) { return e.code; } };
+  assert.equal(code([{ itemkey: 'A', ordered: 8, newQty: 12 }]), 'STALE'); // document no longer holds 8
+  assert.equal(code([{ itemkey: 'R', ordered: 5, newQty: 7 }]), 'ITEM_NOT_IN_ORDER'); // R only exists per size
+  assert.equal(code([{ itemkey: 'Z', ordered: 1, newQty: 2 }]), 'ITEM_NOT_IN_ORDER');
+  assert.equal(code([{ itemkey: 'M1001', ordered: 0, newQty: 2 }]), 'BAD_LINE');
+});

@@ -10,7 +10,7 @@ import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.j
 import { warmPriceCache } from './pricing.js';
 import { ORDER_DOCUMENT_IDS, orderWriteEnabled, writeTestAccounts, ROOT } from './config.js';
 import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
-import { finishPicking, PickingError } from './picking.js';
+import { finishPicking, approveSurplus, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
 import { getBalance, getStats, StatsError } from './stats.js';
 
@@ -294,6 +294,21 @@ const routes = [
   ['POST', /^\/picking\/(\d+)\/finish$/, async ({ params: [stockId], query, body }) => {
     try {
       const result = await finishPicking(stockId, body, { dryRun: query.get('dryRun') === '1' });
+      queueCache.clear();
+      docCache.clear();
+      return result;
+    } catch (err) {
+      if (err instanceof PickingError) throw new HttpError(err.status, err.code, err.message);
+      throw err;
+    }
+  }],
+
+  // Manager approval of a picker's surplus (WRITES, reply 118): the only path that increases a line.
+  // { approver, lines: [{ itemkey, size?, ordered, newQty }] } -> { ok, stockId, lines: [{ itemkey, size?, from, to }] }.
+  ['POST', /^\/picking\/(\d+)\/approve-surplus$/, async ({ params: [stockId], query, body, caller }) => {
+    if (!['admin', 'superadmin'].includes(caller.role)) throw new HttpError(403, 'FORBIDDEN', 'אישור עודף למנהל בלבד');
+    try {
+      const result = await approveSurplus(stockId, body, { dryRun: query.get('dryRun') === '1' });
       queueCache.clear();
       docCache.clear();
       return result;
