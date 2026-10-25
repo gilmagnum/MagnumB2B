@@ -128,9 +128,6 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     return p <= 0 ? "full" : "partial";
   };
   const shortages = lines.filter((l) => shortageOf(l) !== "none");
-  // Surplus: picked above the ordered quantity (packing lines are set freely, so never a surplus).
-  const surplusOf = (l: DocLine) => (l.isPacking ? 0 : Math.max(0, (picked[lineKey(l)] ?? 0) - l.qty));
-  const surpluses = lines.filter((l) => surplusOf(l) > 0);
 
   // --- shared-mode ownership (solo => everything is "mine") ---
   const sharedByKey = useMemo(() => {
@@ -144,10 +141,10 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const iAmParticipant = !!shared && shared.participants.some((p) => p.pickerId === myId);
   const isOwnerOrMgr = !!shared && (shared.ownerId === myId || isAdmin);
 
-  // A picker may now pick ABOVE the ordered qty (surplus) — no cap; packing lines were always free.
+  // Product lines cap at the ordered qty; packing lines may go above the seed.
   const setQty = (l: DocLine, v: number) => {
     if (shared && !mineLine(l)) return; // not my line — read-only
-    const nv = Math.max(0, v);
+    const nv = l.isPacking ? Math.max(0, v) : Math.max(0, Math.min(l.qty, v));
     setPicked((p) => ({ ...p, [lineKey(l)]: nv }));
     if (shared) saveSharedLine(id, lineKey(l), nv).catch(() => {}); // per-line save, no clobber
   };
@@ -319,7 +316,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
 
       {!done && !readOnly && !splitting && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "12px 0 8px" }}>
-          <span style={{ color: "var(--ink-muted)", fontSize: 13 }}>{lines.length} שורות · {shortages.length ? `${shortages.length} עם חוסר` : "הכל מלא"}{surpluses.length ? ` · ${surpluses.length} עם עודף` : ""}</span>
+          <span style={{ color: "var(--ink-muted)", fontSize: 13 }}>{lines.length} שורות · {shortages.length ? `${shortages.length} עם חוסר` : "הכל מלא"}</span>
           <button onClick={fillAll} className="btn btn-sm">סמן הכל מלא{shared ? " (שלי)" : ""} ✓</button>
         </div>
       )}
@@ -333,8 +330,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
           const overStock = !isPacking && (l.onHand ?? Infinity) < l.qty;
           const packStep = (l.packSize ?? 0) > 1 && !!l.packLabel; // step by a whole pack when we know the pack
           const step = packStep ? (l.packSize as number) : 1;
-          const over = surplusOf(l); // picked above ordered
-          const border = isPacking ? "var(--brand)" : over > 0 ? "var(--danger)" : sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)";
+          const border = isPacking ? "var(--brand)" : sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)";
           // Warehouse picking screen — enlarge image / SKU / quantity for everyone.
           const isPicker = true;
           const imgSz = 96;
@@ -384,7 +380,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                 {/* Stepper jumps by one pack (packSize units); the number stays editable for a manual fix. + on the right (RTL). */}
                 <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <button onClick={() => setQty(l, q + step)} disabled={lineRO || splitting} className="btn btn-primary btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `+${l.packLabel}` : "+1"}>+</button>
-                  <input type="number" inputMode="numeric" min={0} value={q} disabled={lineRO || splitting}
+                  <input type="number" inputMode="numeric" min={0} max={isPacking ? undefined : l.qty} value={q} disabled={lineRO || splitting}
                     onChange={(e) => setQty(l, Number(e.target.value))}
                     style={{ width: isPicker ? 96 : 72, padding: isPicker ? "10px" : "8px", fontSize: isPicker ? 26 : 16, fontWeight: isPicker ? 700 : undefined, textAlign: "center", borderRadius: 8, border: "1px solid var(--border)" }} />
                   <button onClick={() => setQty(l, q - step)} disabled={lineRO || splitting || q <= 0} className="btn btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `−${l.packLabel}` : "−1"}>−</button>
@@ -406,10 +402,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
 
               {!isPacking && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  {over > 0 ? <span className="chip chip-danger" style={{ fontWeight: 700 }}>⚠ ליקוט עודף: +{over} (הוזמן {l.qty})</span>
-                    : sh === "none" ? <span className="chip chip-ok">✓ לוקט במלואו</span>
-                    : sh === "partial" ? <span className="chip chip-warn">חוסר: {l.qty - q}</span>
-                    : <span className="chip chip-danger">טרם לוקט</span>}
+                  {sh === "none" && <span className="chip chip-ok">✓ לוקט במלואו</span>}
+                  {sh === "partial" && <span className="chip chip-warn">חוסר: {l.qty - q}</span>}
+                  {sh === "full" && <span className="chip chip-danger">טרם לוקט</span>}
                   {overStock && <span className="chip chip-danger" style={{ fontWeight: 700 }}>⚠ הוזמן יותר מהמלאי{l.onHand != null ? ` (מלאי ${l.onHand})` : ""}</span>}
                 </div>
               )}
@@ -452,18 +447,6 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                   </ul>
                 </>
               )}
-            {surpluses.length > 0 && (
-              <>
-                <p style={{ fontWeight: 700, margin: "10px 0 6px", color: "var(--danger)" }}>⚠ ליקוט עודף ({surpluses.length}):</p>
-                <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 14 }}>
-                  {surpluses.map((l) => (
-                    <li key={lineKey(l)} style={{ marginBottom: 4 }}>
-                      <b>{l.itemkey}</b>{l.size ? ` (מידה ${l.size})` : ""} — <span style={{ color: "var(--danger)" }}>לוקטו {picked[lineKey(l)]} (הוזמן {l.qty}, עודף +{surplusOf(l)}) — השורה תוגדל</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
             <label style={{ display: "block", marginTop: 14, fontSize: 13, fontWeight: 600 }}>הערות מלקט (יוצגו באפליקציה וירשמו בחשבשבת)
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="input" style={{ marginTop: 4, resize: "vertical" }} placeholder="לא חובה…" />
             </label>
