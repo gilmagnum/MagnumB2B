@@ -14,6 +14,7 @@ export default function SurplusApprovalsPage() {
   const [ack, setAck] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState(""); // rare ops warning (e.g. written to Hashavshevet but not recorded)
 
   useEffect(() => {
     (async () => {
@@ -33,7 +34,7 @@ export default function SurplusApprovalsPage() {
     setBusy(r.id); setMsg((m) => ({ ...m, [r.id]: "" }));
     const res = await approveSurplus(r.id); // server writes the increase and records it; never the browser
     setBusy(null);
-    if (res.ok) setRows((rs) => rs.filter((x) => x.id !== r.id));
+    if (res.ok) { setRows((rs) => rs.filter((x) => x.id !== r.id)); if (res.warn) setNotice(res.warn); }
     else { setMsg((m) => ({ ...m, [r.id]: res.error || "שגיאה" })); if (!res.unknown) load(); }
   };
 
@@ -53,6 +54,7 @@ export default function SurplusApprovalsPage() {
       <p><a href="/picking" style={{ color: "var(--brand)" }}>← תור הליקוט</a></p>
       <h1>אישורי ליקוט עודף</h1>
       <p style={{ color: "var(--ink-muted)", fontSize: 14 }}>אישור יגדיל את שורת ההזמנה בחשבשבת ואת החיוב בהתאם. בדוק את הסכום לפני אישור.</p>
+      {notice && <p className="chip chip-danger" style={{ display: "block", padding: 10, fontWeight: 600 }}>⚠ {notice}</p>}
 
       {loading ? <p>טוען…</p> : rows.length === 0 ? (
         <p className="chip chip-ok" style={{ display: "inline-block", marginTop: 12 }}>אין עודפים ממתינים לאישור ✓</p>

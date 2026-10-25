@@ -13,16 +13,25 @@ function baseUrl(): string {
   return u.replace(/\/+$/, "");
 }
 
-// Thrown on an HTTP error. `definitive` = the bridge gave a conclusive client-error status
-// (4xx) → the write did NOT happen, safe to revert. Otherwise (network/5xx/timeout) the
-// outcome is UNKNOWN and must not be auto-released.
+// Statuses on which the bridge may give a conclusive "it did NOT happen" answer. Deliberately
+// excludes 408/425/429/499 and anything an ngrok/proxy interstitial could return — those are uncertain.
+const DEFINITIVE_STATUS = new Set([400, 403, 409, 422]);
+
+// Thrown on an HTTP error. `definitive` is true ONLY when the bridge returned one of the allowed
+// client-error statuses AND a machine `code` in its JSON body (STALE / FORBIDDEN / INVALID…): only
+// then do we know the write did not happen and may revert. Everything else (5xx, network, timeout,
+// a bare 4xx with no code, an HTML interstitial) is UNKNOWN and must not be auto-released.
 export class BridgeError extends Error {
   status: number;
+  code: string | null;
   definitive: boolean;
   constructor(status: number, body: string) {
     super(`bridge ${status}: ${body}`.slice(0, 500));
     this.status = status;
-    this.definitive = status >= 400 && status < 500;
+    let code: string | null = null;
+    try { const j = JSON.parse(body); if (j && typeof j.code === "string" && j.code) code = j.code; } catch { /* non-JSON body → no code */ }
+    this.code = code;
+    this.definitive = DEFINITIVE_STATUS.has(status) && code !== null;
   }
 }
 

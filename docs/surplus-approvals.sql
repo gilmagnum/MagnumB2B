@@ -22,7 +22,9 @@ create table if not exists public.surplus_approvals (
   resolved_by   uuid,
   resolved_at   timestamptz,
   created_at    timestamptz not null default now(),
-  constraint surplus_status_ck check (status in ('pending','approving','approved','rejected')),
+  -- 'stale' = the document changed after the request; it is terminal (a new request must be opened),
+  -- and sits OUTSIDE the one-open-per-document index below so a fresh request can be made.
+  constraint surplus_status_ck check (status in ('pending','approving','approved','rejected','stale')),
   constraint surplus_nonneg_ck check (units >= 0 and amount >= 0)
 );
 -- Only one OPEN request per document (prevents a second pending/approving row).
@@ -35,13 +37,25 @@ create table if not exists public.surplus_approval_log (
   id          uuid        primary key default gen_random_uuid(),
   surplus_id  uuid        not null,
   stock_id    bigint      not null,
-  action      text        not null,              -- 'approved' | 'rejected'
+  action      text        not null,              -- approved | rejected | stale | unknown
   units       integer     not null default 0,
   amount      numeric     not null default 0,
   by_name     text,
   by_uid      uuid,
-  at          timestamptz not null default now()
+  at          timestamptz not null default now(),
+  constraint surplus_log_action_ck check (action in ('approved','rejected','stale','unknown'))
 );
+
+-- Truly append-only: even service_role (which bypasses RLS) cannot rewrite history.
+create or replace function public.surplus_log_no_mutation() returns trigger language plpgsql as $$
+begin
+  raise exception 'surplus_approval_log is append-only';
+end;
+$$;
+drop trigger if exists surplus_log_immutable on public.surplus_approval_log;
+create trigger surplus_log_immutable
+  before update or delete or truncate on public.surplus_approval_log
+  for each statement execute function public.surplus_log_no_mutation();
 
 -- RLS on + REVOKE (standard): reached only through server actions (service_role).
 alter table public.surplus_approvals enable row level security;

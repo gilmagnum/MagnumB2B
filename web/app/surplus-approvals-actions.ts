@@ -21,6 +21,17 @@ async function who(): Promise<Me | null> {
   return { id: user.id, role, agentId: (prof?.agent_id as number | null) ?? null, name: (prof?.full_name as string) || user.email || "" };
 }
 
+// The caller must actually be picking this order — the session holder/owner, a shared participant,
+// or a manager. Stops a picker opening a surplus request against a document they aren't picking.
+async function isPickingThis(stockId: number, me: Me): Promise<boolean> {
+  if (managerOrAbove(me.role)) return true;
+  const admin = supabaseAdmin();
+  const { data: s } = await admin.from("picking_sessions").select("picker_id, owner_id").eq("stock_id", stockId).maybeSingle();
+  if (s && (s.picker_id === me.id || s.owner_id === me.id)) return true;
+  const { data: part } = await admin.from("picking_participants").select("picker_id").eq("stock_id", stockId).eq("picker_id", me.id).maybeSingle();
+  return !!part;
+}
+
 export type SurplusLine = { itemkey: string; size?: string; ordered: number; picked: number; surplus: number; unitPrice: number; discountPct: number; amount: number };
 export type SurplusRow = {
   id: string; stockId: number; docNumber: number | null; accountKey: string | null; customerName: string | null;
@@ -40,6 +51,7 @@ export async function recordSurplusApproval(p: {
 }): Promise<{ ok?: boolean; error?: string }> {
   const u = await who();
   if (!u) return { error: "unauthorized" };
+  if (!(await isPickingThis(p.stockId, u))) return { error: "אפשר לרשום עודף רק להזמנה שאתה מלקט." };
 
   // Read the document from the bridge — ordered qty + price are taken from here, not the client.
   let doc: DocumentDetail;
@@ -73,8 +85,9 @@ export async function recordSurplusApproval(p: {
     lines, units, amount, picker: u.name, created_by: u.id, status: "pending",
   });
   if (error) {
-    // 23505 = the partial unique index: an open request already exists for this document.
-    if ((error as { code?: string }).code === "23505") return { ok: true };
+    // 23505 = the partial unique index: an open request already exists for this document. Don't
+    // swallow it — a reopened-and-re-picked surplus would be lost silently. Surface it.
+    if ((error as { code?: string }).code === "23505") return { error: "כבר קיימת בקשת עודף פתוחה למסמך זה — מנהל צריך לטפל בה לפני רישום עודף נוסף." };
     return { error: error.message };
   }
   return { ok: true };
@@ -107,9 +120,10 @@ export async function pendingSurplusCount(): Promise<number> {
 //  2. read the lines from the claimed DB row (never the client).
 //  3. call the bridge's approve-surplus op: ABSOLUTE set of each line to newQty, with `ordered`
 //     for a staleness guard. The bridge touches only these lines.
-//  4. success -> 'approved' (+ log). Definitive 4xx refusal -> back to 'pending'. Anything else
-//     (network/5xx/timeout) -> stays 'approving' (UNKNOWN) for manual reconciliation; never auto-released.
-export async function approveSurplus(id: string): Promise<{ ok?: boolean; error?: string; unknown?: boolean }> {
+//  4. success -> 'approved' (+ log). STALE -> terminal 'stale' (+ log); other conclusive refusal
+//     -> back to 'pending'. Anything uncertain (network/5xx/timeout/no code) -> stays 'approving'
+//     (+ 'unknown' log) for manual reconciliation; never auto-released.
+export async function approveSurplus(id: string): Promise<{ ok?: boolean; error?: string; unknown?: boolean; warn?: string }> {
   const u = await who();
   if (!u || !managerOrAbove(u.role)) return { error: "אין הרשאה" };
 
@@ -130,21 +144,35 @@ export async function approveSurplus(id: string): Promise<{ ok?: boolean; error?
     });
   } catch (e) {
     if (e instanceof BridgeError && e.definitive) {
-      // The write did NOT happen — release back to pending so the manager can retry or reject.
+      if (e.code === "STALE") {
+        // The document changed since the request — terminal. Retrying would re-check against numbers
+        // that no longer match; a fresh request must be opened against the current document.
+        await admin.from("surplus_approvals").update({ status: "stale", resolved_by: u.id, resolved_at: new Date().toISOString() }).eq("id", id).eq("status", "approving");
+        await admin.from("surplus_approval_log").insert({ surplus_id: id, stock_id: stockId, action: "stale", units: claimed.units as number, amount: claimed.amount as number, by_name: u.name, by_uid: u.id });
+        return { error: "המסמך השתנה מאז הבקשה — יש לפתוח בקשת עודף חדשה מול המסמך הנוכחי." };
+      }
+      // Other conclusive refusal (FORBIDDEN / INVALID…): nothing was written — back to pending.
       await admin.from("surplus_approvals").update({ status: "pending" }).eq("id", id).eq("status", "approving");
-      const stale = /STALE|409/.test(e.message);
-      return { error: stale ? "המסמך השתנה מאז הבקשה — נדחה. בדוק מחדש." : "הגשר דחה את ההגדלה — לא בוצע שינוי." };
+      return { error: "הגשר דחה את ההגדלה — לא בוצע שינוי." };
     }
-    // Unknown outcome: leave 'approving' for manual reconciliation.
+    // Uncertain outcome: leave 'approving' (never auto-released), log it, and flag loudly.
+    await admin.from("surplus_approval_log").insert({ surplus_id: id, stock_id: stockId, action: "unknown", units: claimed.units as number, amount: claimed.amount as number, by_name: u.name, by_uid: u.id });
+    console.error("approveSurplus UNKNOWN outcome", { id, stockId, units: claimed.units, approver: u.name, err: (e as Error).message });
     return { error: "מצב לא ודאי — ייתכן שהכתיבה בוצעה או לא. בדוק בחשבשבת לפני אישור חוזר.", unknown: true };
   }
 
-  await admin.from("surplus_approvals")
+  // The bridge wrote the increase. Record it; if recording fails the money change already happened,
+  // so report it loudly rather than letting it look un-approved.
+  const { error: updErr } = await admin.from("surplus_approvals")
     .update({ status: "approved", resolved_by: u.id, resolved_at: new Date().toISOString(), approved_by: u.name })
     .eq("id", id).eq("status", "approving");
-  await admin.from("surplus_approval_log").insert({
+  const { error: logErr } = await admin.from("surplus_approval_log").insert({
     surplus_id: id, stock_id: stockId, action: "approved", units: claimed.units as number, amount: claimed.amount as number, by_name: u.name, by_uid: u.id,
   });
+  if (updErr || logErr) {
+    console.error("approveSurplus WROTE to Hashavshevet but failed to record", { id, stockId, units: claimed.units, approver: u.name, updErr: updErr?.message, logErr: logErr?.message });
+    return { ok: true, warn: "הוגדל בחשבשבת ✓ אך התיעוד באפליקציה נכשל — דווח למנהל המערכת." };
+  }
   return { ok: true };
 }
 
