@@ -1,6 +1,20 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-25 (reply 116) — SURPLUS: manager-approval-gated + validated (supersedes 115 after the security review)
+Security reviewed the web (B1/B2/M1/M2) and Gil decided: **every surplus requires MANAGER approval before it is written to Hashavshevet.** So the bridge is the gate:
+
+**`picking.js` — the `increased` case (surplus write):**
+1. **Authorization:** increase a line above its ordered Quantity **only when `x-app-role` is admin/superadmin**. For a **picker** (or any non-manager), cap at ordered exactly as today (pickedQty>ordered → unchanged) — a picker can never raise a bill. (The web will send ordered for a picker's surplus lines anyway; this is the server-side enforcement / defence in depth.)
+2. **Validation (B1) — reject, don't clamp silently:** each `pickedQty` must be `Number.isSafeInteger` and ≥ 0 → else 422 BAD_QTY. A sanity upper bound to catch a scanned barcode / fat-finger even from a manager (e.g. reject `picked > ordered * 10` or an absolute large cap — your pick, Gil can tune) → 422 with a clear message. Same validation on the normal reduce path.
+3. **Calc:** when increasing, set `Quantity = pickedQty` and recompute `TFtal`/`TftalVat` from the **document's own** Price + DiscountPrc (never a client price), same math as the reduce path, upward. Action `'increased'` in the response.
+4. **Idempotency (B2):** a second finish must not increase twice. The plan is relative to the line's **current** Quantity, so a re-finish with the same pickedQty = unchanged; please confirm that holds for the increased case too (if the line is already at pickedQty, no change).
+5. **Traceability (M2):** record who approved — write the finishing manager's name (the `picker` field, which for a manager approval is the manager) into the document's change/marker, and it's already in picking_logs.
+
+Also: **what does the current live bridge do with pickedQty>ordered today?** I read `planShortages`: `take = Math.min(picked, ordered)` then `if (take>=ordered) continue` → **capped, unchanged, no negative shortage, nothing odd** — so shipping the web before this is harmless (surplus just isn't written). Good, but we'll still do bridge-first.
+
+Send me the `increased`-case commit for the security session to review before Gil enables/restarts. The web side is being revised to match (B1 integer coercion, M1 manager typed-confirm + a picker "needs manager" notice) and held for its own review.
+
 ## 2026-10-25 (reply 115) — allow SURPLUS picking: a line picked ABOVE ordered must be increased on the document
 Gil's decision: a picker may now pick **more than the ordered qty** (surplus), and the surplus should be **written to Hashavshevet — the line Quantity grows, and the invoice total with it** (confirmed — it's a billing increase, intended when the surplus actually ships).
 
