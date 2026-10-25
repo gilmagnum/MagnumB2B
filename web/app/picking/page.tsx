@@ -5,6 +5,7 @@ import { supabaseBrowser } from "../../lib/supabase/browser";
 import { managerOrAbove } from "../../lib/roles";
 import { getActiveLocks } from "../picking-actions";
 import { getSplitOrders } from "../shared-picking-actions";
+import { pendingSurplusCount } from "../surplus-approvals-actions";
 import { listPickingLogs, type PickLogRow } from "../order-actions";
 
 type Tab = "waiting" | "picked" | "produced" | "all";
@@ -24,9 +25,12 @@ export default function PickingPage() {
   const [splits, setSplits] = useState<Record<number, string>>({}); // split-mode orders by owner
   const [logs, setLogs] = useState<Record<number, PickLogRow>>({}); // picker notes + shortages by stockId
   const [openLog, setOpenLog] = useState<number | null>(null);
+  const [surplusCount, setSurplusCount] = useState(0); // pending surplus approvals (managers)
 
   const mgr = managerOrAbove(role);
   const tabs: Tab[] = mgr ? ["waiting", "picked", "produced", "all"] : ["waiting", "picked"];
+
+  useEffect(() => { if (mgr) pendingSurplusCount().then(setSurplusCount).catch(() => {}); }, [mgr]);
 
   // Load picking logs (notes + shortages) so a manager can expand picked/produced rows.
   useEffect(() => {
@@ -88,7 +92,12 @@ export default function PickingPage() {
 
   return (
     <>
-      <h1>ליקוט</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <h1 style={{ margin: 0 }}>ליקוט</h1>
+        {mgr && surplusCount > 0 && (
+          <a href="/picking/approvals" className="btn btn-primary btn-sm" style={{ background: "var(--danger)", borderColor: "var(--danger)" }}>⚠ אישורי עודף ({surplusCount})</a>
+        )}
+      </div>
       <div style={{ display: "flex", gap: 8, margin: "12px 0", flexWrap: "wrap" }}>
         {tabs.map((t) => (
           <button key={t} onClick={() => setState(t)} style={tab(state === t)}>{TAB_LABEL[t]}</button>
@@ -135,7 +144,7 @@ export default function PickingPage() {
                   <div>
                     <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenLog(openLog === d.stockId ? null : d.stockId); }}
                       className="btn btn-sm" style={{ padding: "2px 10px" }}>{openLog === d.stockId ? "− הערות וחוסרים" : "+ הערות וחוסרים"}</button>
-                    {openLog === d.stockId && (() => { const lg = logs[d.stockId]; return (
+                    {openLog === d.stockId && (() => { const lg = logs[d.stockId]; const surp = (lg?.lines ?? []).filter((x) => (x.picked ?? 0) > (x.ordered ?? 0)); return (
                       <div style={{ marginTop: 6, fontSize: 13, background: "var(--surface-muted)", borderRadius: 8, padding: 8 }}>
                         {lg?.picker && <div>מלקט: <b>{lg.picker}</b></div>}
                         {lg?.notes && <div>הערת מלקט: {lg.notes}</div>}
@@ -147,6 +156,10 @@ export default function PickingPage() {
                                 </ul></div>
                             : <div style={{ color: "var(--ok)" }}>אין חוסרים</div>)
                           : <div style={{ color: "var(--ink-muted)" }}>אין תיעוד ליקוט באפליקציה למסמך זה.</div>}
+                        {surp.length > 0 && <div style={{ marginTop: 4, color: "var(--danger)" }}><b>⚠ עודף ({surp.length}):</b>
+                          <ul style={{ margin: "2px 0 0", paddingInlineStart: 16 }}>
+                            {surp.map((s, i) => <li key={i}>{s.itemkey}{s.size ? ` (${s.size})` : ""} — לוקט {s.picked} (הוזמן {s.ordered}, +{s.picked - s.ordered})</li>)}
+                          </ul></div>}
                       </div>
                     ); })()}
                   </div>
