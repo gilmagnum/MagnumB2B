@@ -1,15 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
-import { bridge } from "../../../lib/bridge";
 import { supabaseBrowser } from "../../../lib/supabase/browser";
 import { managerOrAbove } from "../../../lib/roles";
-import { listPendingSurplus, resolveSurplus, type SurplusRow } from "../../surplus-approvals-actions";
+import { listPendingSurplus, approveSurplus, rejectSurplus, type SurplusRow } from "../../surplus-approvals-actions";
 
-// Manager screen: approve/reject picker surpluses. Approving writes the increase to Hashavshevet
-// (a manager finishPicking with the surplus quantities), then records the decision.
+// Manager screen: approve/reject picker surpluses. Approving calls a server action that writes the
+// ABSOLUTE increase to Hashavshevet (server-side, write-once) and records the decision. The browser
+// never calls the bridge and never carries the money numbers.
 export default function SurplusApprovalsPage() {
   const [allowed, setAllowed] = useState<boolean | null>(null);
-  const [me, setMe] = useState("");
   const [rows, setRows] = useState<SurplusRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [ack, setAck] = useState<Record<string, boolean>>({});
@@ -20,8 +19,7 @@ export default function SurplusApprovalsPage() {
     (async () => {
       const { data: { user } } = await supabaseBrowser().auth.getUser();
       if (!user) { setAllowed(false); return; }
-      const { data: prof } = await supabaseBrowser().from("profiles").select("role, full_name").eq("id", user.id).single();
-      setMe(prof?.full_name ?? user.email ?? "");
+      const { data: prof } = await supabaseBrowser().from("profiles").select("role").eq("id", user.id).single();
       setAllowed(managerOrAbove(prof?.role));
     })();
   }, []);
@@ -33,25 +31,16 @@ export default function SurplusApprovalsPage() {
 
   const approve = async (r: SurplusRow) => {
     setBusy(r.id); setMsg((m) => ({ ...m, [r.id]: "" }));
-    try {
-      // Write the increase: a MANAGER finishPicking with the surplus quantities (bridge increases those lines).
-      await bridge.finishPicking(r.stockId, {
-        picker: `עודף אושר ע״י ${me}`,
-        lines: r.lines.map((l) => ({ itemkey: l.itemkey, size: l.size, pickedQty: l.picked })),
-      });
-      const res = await resolveSurplus(r.id, true);
-      if (res.error) throw new Error(res.error);
-      setRows((rs) => rs.filter((x) => x.id !== r.id));
-    } catch (e) {
-      const m = (e as Error).message || "";
-      setMsg((mm) => ({ ...mm, [r.id]: /NOT_OPEN|409/.test(m) ? "המסמך אינו פתוח (אולי כבר הופק) — לא ניתן להגדיל." : /BAD_QTY|422/.test(m) ? "כמות לא תקינה." : `שגיאה: ${m || "הגשר לא זמין"}` }));
-    } finally { setBusy(null); }
+    const res = await approveSurplus(r.id); // server writes the increase and records it; never the browser
+    setBusy(null);
+    if (res.ok) setRows((rs) => rs.filter((x) => x.id !== r.id));
+    else { setMsg((m) => ({ ...m, [r.id]: res.error || "שגיאה" })); if (!res.unknown) load(); }
   };
 
   const reject = async (r: SurplusRow) => {
     if (!window.confirm("לדחות את העודף? המסמך יישאר בכמות שהוזמנה.")) return;
     setBusy(r.id);
-    const res = await resolveSurplus(r.id, false);
+    const res = await rejectSurplus(r.id);
     setBusy(null);
     if (res.error) setMsg((m) => ({ ...m, [r.id]: res.error! }));
     else setRows((rs) => rs.filter((x) => x.id !== r.id));

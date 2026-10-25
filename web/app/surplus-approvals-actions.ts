@@ -2,52 +2,81 @@
 import { supabaseServer } from "../lib/supabase/server";
 import { supabaseAdmin } from "../lib/supabase/admin";
 import { managerOrAbove } from "../lib/roles";
+import { callBridge, BridgeError } from "../lib/bridgeServer";
+import type { DocumentDetail, DocLine } from "../lib/bridge";
 
-// Surplus approvals: a picker's over-pick is recorded here (document written at ordered); a MANAGER
-// approves it on the approvals screen, which triggers a manager finish that writes the increase.
-// See docs/surplus-approvals.sql.
+// Surplus approvals. A picker's over-pick is recorded here as 'pending' (the document is written
+// at the ordered quantity by finishPicking). A MANAGER approves it; approval runs ENTIRELY on the
+// server: claim the row atomically, read the lines from the DB, then call the bridge's dedicated
+// approve-surplus op (an ABSOLUTE set of only those lines, with a staleness guard). Money numbers
+// (ordered/price) come from the Hashavshevet document, never from the client. See docs/surplus-approvals.sql.
 
-async function who(): Promise<{ id: string; role: string; name: string } | null> {
+type Me = { id: string; role: string; agentId: number | null; name: string };
+async function who(): Promise<Me | null> {
   const { data: { user } } = await (await supabaseServer()).auth.getUser();
   if (!user) return null;
-  const { data: prof } = await supabaseAdmin().from("profiles").select("role, full_name").eq("id", user.id).single();
+  const { data: prof } = await supabaseAdmin().from("profiles").select("role, full_name, agent_id").eq("id", user.id).single();
   const role = (prof?.role as string) ?? "";
   if (!(role === "picker" || managerOrAbove(role))) return null;
-  return { id: user.id, role, name: (prof?.full_name as string) || user.email || "" };
+  return { id: user.id, role, agentId: (prof?.agent_id as number | null) ?? null, name: (prof?.full_name as string) || user.email || "" };
 }
 
-export type SurplusLine = { itemkey: string; size?: string; ordered: number; picked: number; surplus: number; unitPrice?: number; discountPct?: number; amount: number };
+export type SurplusLine = { itemkey: string; size?: string; ordered: number; picked: number; surplus: number; unitPrice: number; discountPct: number; amount: number };
 export type SurplusRow = {
   id: string; stockId: number; docNumber: number | null; accountKey: string | null; customerName: string | null;
   lines: SurplusLine[]; units: number; amount: number; picker: string | null; status: string;
   approvedBy: string | null; createdAt: string;
 };
 
-const net = (unitPrice?: number, discountPct?: number) => (unitPrice ?? 0) * (1 - (discountPct ?? 0) / 100);
+const net = (unitPrice: number, discountPct: number) => unitPrice * (1 - (discountPct || 0) / 100);
+const round2 = (n: number) => Math.round(n * 100) / 100;
+const keyOf = (itemkey: string, size?: string) => `${itemkey}\u0000${size ?? ""}`;
 
-// Called when a non-manager finishes with a surplus: record it as pending (amounts recomputed here).
+// Called when a non-manager finishes with a surplus. The client sends only the physical picked
+// counts; ordered quantity and price are read from the Hashavshevet document (authoritative).
 export async function recordSurplusApproval(p: {
-  stockId: number; docNumber?: number | null; accountKey?: string | null; customerName?: string | null;
-  lines: { itemkey: string; size?: string; ordered: number; picked: number; unitPrice?: number; discountPct?: number }[];
+  stockId: number;
+  lines: { itemkey: string; size?: string; picked: number }[];
 }): Promise<{ ok?: boolean; error?: string }> {
   const u = await who();
   if (!u) return { error: "unauthorized" };
-  const lines: SurplusLine[] = (p.lines ?? [])
-    .map((l) => {
-      const ordered = Math.max(0, Math.floor(Number(l.ordered) || 0));
-      const picked = Math.max(0, Math.floor(Number(l.picked) || 0));
-      const surplus = Math.max(0, picked - ordered);
-      return { itemkey: String(l.itemkey), size: l.size, ordered, picked, surplus, unitPrice: l.unitPrice, discountPct: l.discountPct, amount: Math.round(surplus * net(l.unitPrice, l.discountPct) * 100) / 100 };
-    })
-    .filter((l) => l.surplus > 0);
+
+  // Read the document from the bridge — ordered qty + price are taken from here, not the client.
+  let doc: DocumentDetail;
+  try {
+    doc = await callBridge<DocumentDetail>(`/documents/${p.stockId}`, { role: u.role, agentId: u.agentId });
+  } catch {
+    return { error: "לא ניתן לקרוא את המסמך מהגשר כרגע — נסה שוב." };
+  }
+  const byKey = new Map<string, DocLine>();
+  for (const l of doc.lines ?? []) if (!l.isShipping && !l.isPacking) byKey.set(keyOf(l.itemkey, l.size), l);
+
+  const lines: SurplusLine[] = [];
+  for (const cl of p.lines ?? []) {
+    const picked = Math.max(0, Math.floor(Number(cl.picked) || 0));
+    const dl = byKey.get(keyOf(cl.itemkey, cl.size));
+    if (!dl) continue; // only lines that exist on the document
+    const ordered = Math.max(0, Math.floor(Number(dl.qty) || 0));
+    const surplus = Math.max(0, picked - ordered);
+    if (surplus <= 0) continue;
+    const unitPrice = Number(dl.unitPrice) || 0;
+    const discountPct = Number(dl.discountPct) || 0;
+    lines.push({ itemkey: String(dl.itemkey), size: dl.size, ordered, picked, surplus, unitPrice, discountPct, amount: round2(surplus * net(unitPrice, discountPct)) });
+  }
   if (!lines.length) return { ok: true };
   const units = lines.reduce((s, l) => s + l.surplus, 0);
-  const amount = Math.round(lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
+  const amount = round2(lines.reduce((s, l) => s + l.amount, 0));
+
+  // One open request per document (the partial unique index also enforces this).
   const { error } = await supabaseAdmin().from("surplus_approvals").insert({
-    stock_id: p.stockId, doc_number: p.docNumber ?? null, account_key: p.accountKey ?? null, customer_name: p.customerName ?? null,
+    stock_id: p.stockId, doc_number: doc.docNumber ?? null, account_key: doc.accountKey ?? null, customer_name: doc.customerName ?? null,
     lines, units, amount, picker: u.name, created_by: u.id, status: "pending",
   });
-  if (error) return { error: error.message };
+  if (error) {
+    // 23505 = the partial unique index: an open request already exists for this document.
+    if ((error as { code?: string }).code === "23505") return { ok: true };
+    return { error: error.message };
+  }
   return { ok: true };
 }
 
@@ -73,14 +102,62 @@ export async function pendingSurplusCount(): Promise<number> {
   return count ?? 0;
 }
 
-// Mark a pending surplus approved/rejected (manager only). On approve, the CLIENT first writes the
-// increase to Hashavshevet (a manager finishPicking) and then calls this to record the decision.
-export async function resolveSurplus(id: string, approve: boolean): Promise<{ ok?: boolean; error?: string }> {
+// Approve a surplus (manager only). Runs entirely server-side and is write-once:
+//  1. atomically claim the row (pending -> approving); a second caller gets nothing.
+//  2. read the lines from the claimed DB row (never the client).
+//  3. call the bridge's approve-surplus op: ABSOLUTE set of each line to newQty, with `ordered`
+//     for a staleness guard. The bridge touches only these lines.
+//  4. success -> 'approved' (+ log). Definitive 4xx refusal -> back to 'pending'. Anything else
+//     (network/5xx/timeout) -> stays 'approving' (UNKNOWN) for manual reconciliation; never auto-released.
+export async function approveSurplus(id: string): Promise<{ ok?: boolean; error?: string; unknown?: boolean }> {
   const u = await who();
   if (!u || !managerOrAbove(u.role)) return { error: "אין הרשאה" };
-  const { error } = await supabaseAdmin().from("surplus_approvals")
-    .update({ status: approve ? "approved" : "rejected", resolved_by: u.id, resolved_at: new Date().toISOString(), approved_by: approve ? u.name : null })
-    .eq("id", id).eq("status", "pending");
-  if (error) return { error: error.message };
+
+  const admin = supabaseAdmin();
+  const { data: claimed, error: claimErr } = await admin.from("surplus_approvals")
+    .update({ status: "approving" }).eq("id", id).eq("status", "pending")
+    .select("id, stock_id, lines, units, amount").single();
+  if (claimErr || !claimed) return { error: "הבקשה כבר טופלה או נתפסה על ידי מנהל אחר." };
+
+  const stockId = claimed.stock_id as number;
+  const rowLines = (claimed.lines as SurplusLine[]) ?? [];
+  const bridgeLines = rowLines.map((l) => ({ itemkey: l.itemkey, size: l.size, ordered: l.ordered, newQty: l.picked }));
+
+  try {
+    await callBridge(`/picking/${stockId}/approve-surplus`, {
+      method: "POST", role: u.role, agentId: u.agentId,
+      body: { approver: u.name, lines: bridgeLines },
+    });
+  } catch (e) {
+    if (e instanceof BridgeError && e.definitive) {
+      // The write did NOT happen — release back to pending so the manager can retry or reject.
+      await admin.from("surplus_approvals").update({ status: "pending" }).eq("id", id).eq("status", "approving");
+      const stale = /STALE|409/.test(e.message);
+      return { error: stale ? "המסמך השתנה מאז הבקשה — נדחה. בדוק מחדש." : "הגשר דחה את ההגדלה — לא בוצע שינוי." };
+    }
+    // Unknown outcome: leave 'approving' for manual reconciliation.
+    return { error: "מצב לא ודאי — ייתכן שהכתיבה בוצעה או לא. בדוק בחשבשבת לפני אישור חוזר.", unknown: true };
+  }
+
+  await admin.from("surplus_approvals")
+    .update({ status: "approved", resolved_by: u.id, resolved_at: new Date().toISOString(), approved_by: u.name })
+    .eq("id", id).eq("status", "approving");
+  await admin.from("surplus_approval_log").insert({
+    surplus_id: id, stock_id: stockId, action: "approved", units: claimed.units as number, amount: claimed.amount as number, by_name: u.name, by_uid: u.id,
+  });
+  return { ok: true };
+}
+
+// Reject a surplus (manager only). Atomic claim pending -> rejected + audit log. No bridge write.
+export async function rejectSurplus(id: string): Promise<{ ok?: boolean; error?: string }> {
+  const u = await who();
+  if (!u || !managerOrAbove(u.role)) return { error: "אין הרשאה" };
+  const { data: r, error } = await supabaseAdmin().from("surplus_approvals")
+    .update({ status: "rejected", resolved_by: u.id, resolved_at: new Date().toISOString() })
+    .eq("id", id).eq("status", "pending").select("stock_id, units, amount").single();
+  if (error || !r) return { error: "הבקשה כבר טופלה." };
+  await supabaseAdmin().from("surplus_approval_log").insert({
+    surplus_id: id, stock_id: r.stock_id as number, action: "rejected", units: r.units as number, amount: r.amount as number, by_name: u.name, by_uid: u.id,
+  });
   return { ok: true };
 }

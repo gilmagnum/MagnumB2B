@@ -35,7 +35,6 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
   const [role, setRole] = useState("");
   const [notes, setNotes] = useState("");
   const [confirm, setConfirm] = useState(false);
-  const [surplusAck, setSurplusAck] = useState(false); // manager typed-confirm for writing a surplus
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState("");
   const [handoff, setHandoff] = useState("");
@@ -155,7 +154,6 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     const n = Math.floor(Number(v));
     const nv = Number.isFinite(n) ? Math.max(0, n) : 0;
     setPicked((p) => ({ ...p, [lineKey(l)]: nv }));
-    setSurplusAck(false); // a changed quantity voids a prior surplus approval
     if (shared) saveSharedLine(id, lineKey(l), nv).catch(() => {}); // per-line save, no clobber
   };
   const fillAll = () => setPicked(Object.fromEntries(lines.filter(mineLine).map((l) => [lineKey(l), l.qty])));
@@ -197,9 +195,9 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     setSaving(true);
     // Shared pick → "לוקט ע״י A + B"; the picked map already holds every participant's per-line qty.
     const finishPicker = shared ? (shared.participants.map((p) => p.pickerName).filter(Boolean).join(" + ") || picker) : picker;
-    // A surplus is written only by a manager; a picker's finish sends the ordered qty (no bill increase).
-    // The bridge enforces this too (manager-only increase); this is the matching client behaviour.
-    const finishQty = (l: DocLine) => (!isAdmin && surplusOf(l) > 0 ? l.qty : (picked[lineKey(l)] ?? 0));
+    // finishPicking NEVER increases a line: a surplus is capped to the ordered qty here, and the
+    // increase is written later only via the manager approvals screen (one audited write path).
+    const finishQty = (l: DocLine) => (surplusOf(l) > 0 ? l.qty : (picked[lineKey(l)] ?? 0));
     const shortageRows = shortages.map((l) => ({ itemkey: l.itemkey, size: l.size, name: l.name, ordered: l.qty, picked: picked[lineKey(l)] ?? 0, kind: shortageOf(l) }));
     try {
       const { data: { user } } = await supabaseBrowser().auth.getUser();
@@ -217,12 +215,12 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         lines: lines.map((l) => ({ itemkey: l.itemkey, size: l.size, pickedQty: finishQty(l) })),
       });
       hashavshevetOk = true;
-      // A picker's surplus was written as ordered above; queue it for a manager to approve (→ a manager
-      // finish writes the increase). A manager finishing directly already wrote the surplus.
-      if (!isAdmin && surpluses.length > 0) {
+      // The surplus was capped to ordered above; queue it for a manager to approve. The amount and
+      // ordered qty are read server-side from the document — the client sends only the picked count.
+      if (surpluses.length > 0) {
         recordSurplusApproval({
-          stockId: doc.stockId, docNumber: doc.docNumber, accountKey: doc.accountKey, customerName: doc.customerName,
-          lines: surpluses.map((l) => ({ itemkey: l.itemkey, size: l.size, ordered: l.qty, picked: picked[lineKey(l)] ?? 0, unitPrice: l.unitPrice, discountPct: l.discountPct })),
+          stockId: doc.stockId,
+          lines: surpluses.map((l) => ({ itemkey: l.itemkey, size: l.size, picked: picked[lineKey(l)] ?? 0 })),
         }).catch(() => {});
       }
       fetch("/api/push/event", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -241,7 +239,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
     // Release the lock (solo) or drop the shared rows (split).
     await (shared ? cleanupSharedPicking(id) : releasePickingSession(id)).catch(() => {});
     setSaving(false); setConfirm(false);
-    const surplusNote = !isAdmin && surpluses.length > 0 ? " · ⚠ נרשם ליקוט עודף — מחייב אישור מנהל (לא נכתב כעודף)" : "";
+    const surplusNote = surpluses.length > 0 ? " · ⚠ נרשם ליקוט עודף — מחייב אישור מנהל (לא נכתב כעודף)" : "";
     setDone(hashavshevetOk
       ? `הליקוט הושלם ונכתב לחשבשבת ✓ · לוקט ע״י ${finishPicker}${surplusNote}`
       : `התיעוד נשמר באפליקציה ✓ · לוקט ע״י ${finishPicker}. (${note})`);
@@ -437,15 +435,15 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
         })}
       </div>
 
-      {!done && !readOnly && !splitting && !isAdmin && surpluses.length > 0 && (
+      {!done && !readOnly && !splitting && surpluses.length > 0 && (
         <p className="chip chip-warn" style={{ display: "block", padding: 10, marginTop: 12, fontWeight: 600 }}>⚠ יש ליקוט עודף — בסיום, המסמך ייכתב בכמות שהוזמנה והעודף יועבר <b>לאישור מנהל</b>.</p>
       )}
       {!done && !readOnly && !splitting && (
         <div style={{ position: "sticky", bottom: 0, background: "var(--surface)", borderTop: "1px solid var(--border)", padding: "12px 0", marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap", zIndex: 10 }}>
           {/* Shared: only the owner/manager closes the order; a participant just leaves (their lines are saved). */}
-          {/* A picker CAN finish with a surplus — it's recorded for a manager to approve (not written as surplus). */}
+          {/* Anyone can finish with a surplus — it's recorded for a manager to approve (never written here). */}
           {(!shared || isOwnerOrMgr) && (
-            <button onClick={() => { setSurplusAck(false); setConfirm(true); }} className="btn btn-primary" style={{ padding: "12px 20px", fontSize: 16 }}>{reopened ? "עדכון ליקוט" : "סיום ליקוט"}</button>
+            <button onClick={() => setConfirm(true)} className="btn btn-primary" style={{ padding: "12px 20px", fontSize: 16 }}>{reopened ? "עדכון ליקוט" : "סיום ליקוט"}</button>
           )}
           <button onClick={shared ? () => router.push("/picking") : saveAndBack} disabled={saving} className="btn" style={{ padding: "12px 18px" }}>{shared ? "חזרה לתור" : "שמור וחזור"}</button>
           {!shared && <button onClick={resetRelease} disabled={saving} className="btn" style={{ padding: "12px 18px", color: "var(--danger)" }}>אפס ושחרר</button>}
@@ -483,18 +481,11 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                 <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 14 }}>
                   {surpluses.map((l) => (
                     <li key={lineKey(l)} style={{ marginBottom: 4 }}>
-                      <b>{l.itemkey}</b>{l.size ? ` (מידה ${l.size})` : ""} — <span style={{ color: "var(--danger)" }}>לוקטו {picked[lineKey(l)]} (הוזמן {l.qty}, עודף +{surplusOf(l)} · {(surplusOf(l) * netPrice(l.unitPrice, l.discountPct)).toFixed(2)} ₪)</span>{isAdmin ? " — השורה תוגדל" : ""}
+                      <b>{l.itemkey}</b>{l.size ? ` (מידה ${l.size})` : ""} — <span style={{ color: "var(--danger)" }}>לוקטו {picked[lineKey(l)]} (הוזמן {l.qty}, עודף +{surplusOf(l)} · {(surplusOf(l) * netPrice(l.unitPrice, l.discountPct)).toFixed(2)} ₪)</span>
                     </li>
                   ))}
                 </ul>
-                {isAdmin ? (
-                  <label style={{ display: "flex", gap: 8, marginTop: 8, fontSize: 13, fontWeight: 600, color: "var(--danger)" }}>
-                    <input type="checkbox" checked={surplusAck} onChange={(e) => setSurplusAck(e.target.checked)} />
-                    אני מאשר הגדלת המסמך ב-{surpluses.reduce((s, l) => s + surplusOf(l), 0)} יח' · <b>{surpluses.reduce((s, l) => s + surplusOf(l) * netPrice(l.unitPrice, l.discountPct), 0).toFixed(2)} ₪</b> (החיוב יגדל בהתאם)
-                  </label>
-                ) : (
-                  <p className="chip chip-warn" style={{ display: "block", padding: 10 }}>בסיום, המסמך ייכתב בכמות שהוזמנה והעודף יועבר <b>לאישור מנהל</b> ({surpluses.reduce((s, l) => s + surplusOf(l) * netPrice(l.unitPrice, l.discountPct), 0).toFixed(2)} ₪). מנהל שיאשר — יכתוב את ההגדלה.</p>
-                )}
+                <p className="chip chip-warn" style={{ display: "block", padding: 10 }}>בסיום, המסמך ייכתב בכמות שהוזמנה והעודף יועבר <b>לאישור מנהל</b> (~{surpluses.reduce((s, l) => s + surplusOf(l) * netPrice(l.unitPrice, l.discountPct), 0).toFixed(2)} ₪). הסכום המדויק יחושב מהמסמך בעת האישור.</p>
               </>
             )}
             <label style={{ display: "block", marginTop: 14, fontSize: 13, fontWeight: 600 }}>הערות מלקט (יוצגו באפליקציה וירשמו בחשבשבת)
@@ -502,7 +493,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
             </label>
             <div style={{ display: "flex", gap: 10, marginTop: 16, justifyContent: "flex-end" }}>
               <button onClick={() => setConfirm(false)} disabled={saving} className="btn">ביטול</button>
-              <button onClick={confirmFinish} disabled={saving || (isAdmin && surpluses.length > 0 && !surplusAck)} className="btn btn-primary">{saving ? "שומר…" : reopened ? "אשר ועדכן ליקוט" : "אשר וסיים ליקוט"}</button>
+              <button onClick={confirmFinish} disabled={saving} className="btn btn-primary">{saving ? "שומר…" : reopened ? "אשר ועדכן ליקוט" : "אשר וסיים ליקוט"}</button>
             </div>
           </div>
         </div>
