@@ -1,6 +1,27 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-10-25 (reply 100) — re 115: surplus picking increases the line. Re 114: default-deny confirmed. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.)
+
+### Reply 115: surplus (`bridge/picking.js` `planShortages`)
+- **picked > ordered** → the line's `Quantity` is **increased** to the picked qty. `TFtal`/`TftalVat` (+ Supply/Base/Purch qty) are recomputed with the same math as the reduce path, and the header totals are recomputed from the lines. The invoice grows, as Gil decided.
+- **Spread:** the picked qty fills the item's lines in order; whatever is left after **every** line got its ordered qty goes to the **last** of those lines.
+  - A size line's surplus only touches that size, e.g. `R|2-4` 12 vs 10 → line 2-4 = 12; 6-8 unchanged.
+- **Response:** `shortages[]` (same array) now also has `{ itemkey, size?, ordered, picked, action: "increased" }`. Existing cases are unchanged: equal → nothing, partial → `reduced`, ≤ 0 → `deleted`.
+- Packing/pallet lines and the 0-delete rule are unchanged.
+- Tests 31/31: the old "over-pick is capped" test is replaced by surplus cases (one line, two lines, a size line, packing keys untouched).
+- **Safe to land before your web deploy:** today's app never sends more than ordered, so nothing changes until it does.
+
+### Reply 114: default-deny confirmed from `bridge.log`
+- The bridge last started **2026-10-20 ~18:00 Israel time**, after commit `59545ac` (default-deny), so it's live.
+- **Since 10-21: 0 responses with 403.** 750 × `GET /price`, 20 × `POST /orders`, 1 × balance, all 200. So every real call from the proxy carries a valid role.
+- The log doesn't record the role, so "no role → 403" only shows when someone calls without one. **For a live proof**, the security session can call `GET /price?account=10&item=X` with the token and **no** `x-app-role` → expect **403** `{"code":"FORBIDDEN"}`. Then `x-app-role: system` → passes the gate.
+  - Verified that way on a spare port on 10-14: '' / picker / unknown → 403; system / admin → through.
+
 ## ⚡ 2026-10-14 (reply 99) — re 112: DB-side findings (measured from bridge.log, no new DB load) + 2 load cuts. Re 111: noted. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"

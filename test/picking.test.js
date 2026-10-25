@@ -21,8 +21,18 @@ test('partial pick reduces, zero deletes', () => {
   assert.deepEqual(r.shortages.map((s) => s.action), ['reduced', 'deleted']);
 });
 
-test('over-pick is capped at the ordered quantity', () => {
-  assert.deepEqual(planShortages([line(1, 'A', 10)], new Map([['A', 15]]), ship).changes, []);
+test('surplus (reply 115): over-pick increases the line; two lines -> the last one carries the extra', () => {
+  const one = planShortages([line(1, 'A', 10, 20, 5)], new Map([['A', 15]]), ship);
+  assert.deepEqual(one.changes, [{ lineId: 1, action: 'increased', qty: 15, price: 20, discountPrc: 5 }]);
+  assert.deepEqual(one.shortages, [{ itemkey: 'A', ordered: 10, picked: 15, action: 'increased' }]);
+  const two = planShortages([line(1, 'A', 6), line(2, 'A', 6)], new Map([['A', 14]]), ship);
+  assert.deepEqual(two.changes.map((c) => [c.lineId, c.action, c.qty]), [[2, 'increased', 8]]);
+  // a surplus on one size line doesn't touch another size of the same item
+  const sized = (ID, size, q) => ({ ...line(ID, 'R', q), Details: size });
+  const s = planShortages([sized(1, '2-4', 10), sized(2, '6-8', 10)], new Map([['R|2-4', 12], ['R|6-8', 10]]), ship);
+  assert.deepEqual(s.changes.map((c) => [c.lineId, c.action, c.qty]), [[1, 'increased', 12]]);
+  // packing keys in the map are never treated as surplus here
+  assert.deepEqual(planShortages([line(1, 'A', 10)], new Map([['A', 10], ['M1001', 3]]), ship).changes, []);
 });
 
 test('same item on two lines: picked qty fills lines in order', () => {

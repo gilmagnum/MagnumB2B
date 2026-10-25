@@ -62,10 +62,13 @@ export function mergePickNotes(existing, notes, max = NOTES_MAX) {
 
 export const pickKey = (itemKey, size) => (size ? `${itemKey}|${size}` : itemKey);
 
-// Pure plan: which lines to reduce/delete. pickedQty per item is spread over that item's lines in
-// line order; items not in `picked` and shipping lines are left untouched.
+// Pure plan: which lines to reduce/delete/increase. pickedQty per item is spread over that item's lines
+// in line order; items not in `picked` and shipping lines are left untouched. SURPLUS (Gil, reply 115):
+// what's left after every line of that item got its ordered qty is added to the LAST such line
+// ('increased' - the line, and the invoice, grow).
 export function planShortages(lines, picked, shipping = new Set()) {
   const remaining = new Map(picked);
+  const lastLine = new Map(); // key -> the last line it matched (gets the surplus)
   const changes = [];
   const shortages = [];
   for (const line of lines) {
@@ -75,6 +78,7 @@ export function planShortages(lines, picked, shipping = new Set()) {
     const size = trim(line.Details) || undefined;
     const k = size && remaining.has(pickKey(itemKey, size)) ? pickKey(itemKey, size) : itemKey;
     if (!remaining.has(k)) continue;
+    lastLine.set(k, { line, itemKey, size });
     const ordered = line.Quantity;
     const take = Math.min(remaining.get(k), ordered);
     remaining.set(k, remaining.get(k) - take);
@@ -82,6 +86,15 @@ export function planShortages(lines, picked, shipping = new Set()) {
     const action = take <= 0 ? 'deleted' : 'reduced';
     changes.push({ lineId: line.ID, action, qty: Math.max(take, 0), price: line.Price, discountPrc: line.DiscountPrc ?? 0 });
     shortages.push({ itemkey: itemKey, ...(size && { size }), ordered, picked: Math.max(take, 0), action });
+  }
+  // Surplus: a key with units left over had all its lines filled to their ordered qty.
+  for (const [k, left] of remaining) {
+    const target = lastLine.get(k);
+    if (!(left > 0) || !target) continue;
+    const { line, itemKey, size } = target;
+    const qty = line.Quantity + left;
+    changes.push({ lineId: line.ID, action: 'increased', qty, price: line.Price, discountPrc: line.DiscountPrc ?? 0 });
+    shortages.push({ itemkey: itemKey, ...(size && { size }), ordered: line.Quantity, picked: qty, action: 'increased' });
   }
   return { changes, shortages };
 }
