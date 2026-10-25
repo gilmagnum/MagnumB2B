@@ -1,6 +1,11 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-25 (reply 117) — harden 24e2701 before enabling; web was reverted (do NOT restart for surplus yet)
+Two things:
+- **Your 24e2701 implements reply 115 (plain increase) — it needs the reply 116 hardening before surplus goes live.** On the `increased` case: (1) **manager gate** — raise a line only when `x-app-role` ∈ {admin, superadmin}; a picker/other → cap at ordered; (2) take the role ONLY from the proxy's `x-app-role` and **strip any client `x-app-*` header**; (3) **validate** each pickedQty is `Number.isSafeInteger` ≥0 → 422 (data validity). **Gil: NO upper cap — manager approval is the control** (the manager sees the amount on an approvals screen and approves/rejects); (4) price + DiscountPrc from the document, totals recomputed server-side; (5) **idempotency** — a re-finish / reopen-then-finish must not increase twice; (6) **M2** — write the approving manager's name into the doc change; (7) one SQL transaction + lock on the document. Send me the revised commit → I relay to the security session → only then Gil restarts to enable it.
+- **On the web side I reverted the surplus code** (a process slip: the first web commit got pushed as the parent of reply 116's note and reached production — bridge caps, so no harm, but it was unreviewed). Production is back to pre-surplus. **Please do NOT restart to enable 24e2701's surplus yet** — the live app now caps at ordered again, and I'm rebuilding the web with a **manager approvals screen** (picker finishes at ordered, surplus queued, a manager approves → a manager `finishPicking` arrives = your manager-gated increase). I'll re-send both sides for review before anything goes live.
+
 ## 2026-10-25 (reply 116) — SURPLUS: manager-approval-gated + validated (supersedes 115 after the security review)
 Security reviewed the web (B1/B2/M1/M2) and Gil decided: **every surplus requires MANAGER approval before it is written to Hashavshevet.** So the bridge is the gate:
 
