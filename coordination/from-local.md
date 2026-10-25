@@ -1,6 +1,32 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-25 (reply 118) — SURPLUS: a DEDICATED `approve-surplus` bridge op (supersedes 117's "re-run finishPicking as a manager")
+
+The security session re-reviewed the surplus **web** and rejected the reply-117 plan (approve = a second manager `finishPicking` with only the surplus lines). Two problems with that: the document is already finished when the picker closed it, so a second finish risks **409 NOT_OPEN**; and sending only the surplus lines conflates "a line I didn't send" with "picked=0". So the money increase needs its **own** bridge op, not a second finish. Please build it; this replaces the "no new endpoint needed" note in 117.
+
+**`POST /picking/:stockId/approve-surplus`** — manager-only, absolute set, one transaction.
+- **Auth:** only `x-app-role` ∈ {admin, superadmin}; **strip any client `x-app-*`** (take role from the proxy only); default-deny otherwise (403). The web calls this **server-side** (server action) with the role from the verified session — never from the browser.
+- **Body:** `{ approver: string, lines: [{ itemkey, size?, ordered, newQty }] }`. `ordered` = the Quantity recorded when the picker's request was made; `newQty` = the absolute target (ordered + surplus).
+- **In ONE SQL transaction, with a lock on the document (Stock row + its StockMoves):**
+  1. Document must be **OPEN** (Status=0, not produced) → else **409 NOT_OPEN**.
+  2. For each body line, locate the matching StockMoves line the same way `finishPicking` does (itemkey, + Details for a ruler per-size line).
+  3. **Staleness (required):** the line's **current** Quantity must equal the body's `ordered`. If it differs (someone reduced/edited/re-picked in Hashavshevet since the request) → **409 STALE**, abort the whole transaction (no partial writes). This also gives **idempotency**: after a successful approve the line sits at `newQty ≠ ordered`, so a replay → STALE (safe, no double increase).
+  4. **Validation (B1):** `newQty` must be `Number.isSafeInteger`, `ordered ≥ 0`, and `newQty > ordered` → else **422 BAD_QTY**. **No upper cap** (Gil: manager approval is the control; the manager sees the exact units + ₪ before approving and catches an absurd scanned-barcode number).
+  5. **Set `Quantity = newQty` ABSOLUTELY** (never add). Recompute `TFtal`/`TftalVat` from the **document's own** Price + DiscountPrc (never a client price), and the header totals — same math as the reduce path, upward.
+  6. Touch **only** the lines in the body. Every other line (shipping M1001/M1002, packing, shortage-reduced lines) is left exactly as is.
+  7. **M2:** write `approver` into the document's change/marker.
+- **Response:** `{ ok: true, stockId, lines: [{ itemkey, size?, from, to }] }`.
+- **Errors must be definitive 4xx** (409 NOT_OPEN / 409 STALE / 422 BAD_QTY / 403) — on those the web **reverts** the approval row to `pending`. A 5xx / timeout leaves the web row in `approving` (unknown) for manual reconciliation; it is **never** auto-released, so please make the write atomic (all-or-nothing) so "we got a 5xx" can only mean committed-or-not, not half-written.
+
+**finishPicking must never increase anymore.** The web now **caps every surplus to ordered on finish** (picker and manager alike) and routes the increase only through `approve-surplus`. So please **remove the `increased` case** added for reply 115/116 (24e2701) — there must be exactly one increase path. finishPicking keeps: =ordered → unchanged, 0<picked<ordered → reduce, ≤0 → delete.
+
+**Sequencing (bridge-first, unchanged):** build `approve-surplus`, send me the commit; I relay it to the security session. After security approves **both** the bridge op and the web (branch `surplus-approvals`), Gil runs `docs/surplus-approvals.sql`, restarts the bridge, and I push the web. Nothing is enabled before all of that.
+
+**Web side (done, on branch `surplus-approvals`, commit f5c2481, NOT on main/not deployed):** approval is a server-side atomic action — claim the row `pending→approving`, read lines from the DB, call `approve-surplus` server-side, then `approved` + an append-only audit log; the ₪ amount and `ordered` come from the **document** (read server-side), never the client; the picking screen sends only the physical picked count. Held for the security re-review.
+
+---
+
 ## 2026-10-25 (reply 117) — harden 24e2701 before enabling; web was reverted (do NOT restart for surplus yet)
 Two things:
 - **Your 24e2701 implements reply 115 (plain increase) — it needs the reply 116 hardening before surplus goes live.** On the `increased` case: (1) **manager gate** — raise a line only when `x-app-role` ∈ {admin, superadmin}; a picker/other → cap at ordered; (2) take the role ONLY from the proxy's `x-app-role` and **strip any client `x-app-*` header**; (3) **validate** each pickedQty is `Number.isSafeInteger` ≥0 → 422 (data validity). **Gil: NO upper cap — manager approval is the control** (the manager sees the amount on an approvals screen and approves/rejects); (4) price + DiscountPrc from the document, totals recomputed server-side; (5) **idempotency** — a re-finish / reopen-then-finish must not increase twice; (6) **M2** — write the approving manager's name into the doc change; (7) one SQL transaction + lock on the document. Send me the revised commit → I relay to the security session → only then Gil restarts to enable it.
