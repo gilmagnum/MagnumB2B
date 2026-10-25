@@ -122,7 +122,7 @@ type ApiError = { error: { code: string; message: string } };  // message in Heb
   Open agent orders (doc 11, Status 0) + open transfers (doc 19) of transfer customers (10830). `waiting` (default) = no picker marker; `picked` = ExtraText2 `לוקט - <name>`
   (picked, waiting for production in Hashavshevet). Same row shape as /documents incl. `picked`, `picker`, `pickedMarker`.
 - `POST /picking/:stockId/finish[?dryRun=1]` **(WRITES to Hashavshevet)** body `{ picker, notes?, lines: [{ itemkey, size?, pickedQty }] }` (`size` targets only that size's line)
-  → `{ ok, stockId, dryRun, picker, notesField, notes, shortages: [{ itemkey, size?, ordered, picked, action: 'reduced'|'deleted'|'increased' }], totals: { net, gross } }`.
+  → `{ ok, stockId, dryRun, picker, notesField, notes, shortages: [{ itemkey, size?, ordered, picked, action: 'reduced'|'deleted' }] (never increases - surplus only via approve-surplus), totals: { net, gross } }`.
   One transaction, only on doc 11 with Status 0: pickedQty ≥ ordered → unchanged; 0 < pickedQty < ordered → line reduced
   (Quantity/TFtal/TftalVat/Supply/Base/PurchQuantity); 0 → line deleted; header TFtalVat/TFtal recomputed;
   `Stock.ExtraText2 = 'לוקט - <picker>'`; notes go on their own line in `Stock.Remarks` (visible הערות) under the agent's line, as `הערת מלקט: <notes>` (CRLF) (a re-run replaces the previous `ליקוט:` part). Never produces the document.
