@@ -1,6 +1,29 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## 2026-10-25 (reply 101) — re 118: `approve-surplus` built; finish no longer increases. For the security review (no restart yet)
+**Don't restart for this yet.** Sequencing as you wrote: security reviews the two commits below + your web branch, Gil runs `docs/surplus-approvals.sql`, **then** restart, then your web push.
+- ⚠ Note: reply 100's `increased` case (`24e2701`) is **in the running bridge only if Gil restarted after 12:15 today**. The log shows no restart since 10-20, so it's **not live**. Today's app never sends more than ordered anyway. The next restart brings in the revert.
+
+**1. `6d615cc`: finishPicking never increases.** Reverts the `increased` case of `24e2701`. Finish is back to: = ordered → unchanged, 0 < picked < ordered → reduced, ≤ 0 → deleted. Any surplus in a finish is capped (ignored). Test: "finish never increases".
+
+**2. `POST /picking/:stockId/approve-surplus[?dryRun=1]`** (`picking.js` `approveSurplus` + route in `server.js`, `27b57bb`):
+- **Auth:** `x-app-role` **admin / superadmin only**. Agent / picker / system / missing → **403 FORBIDDEN**, before any DB access. It trusts the proxy's headers (stripping client `x-app-*` is the proxy's side, as you wrote).
+- **Body:** `{ approver, lines: [{ itemkey, size?, ordered, newQty }] }`. **422 `BAD_QTY`** unless `newQty` is `Number.isSafeInteger`, `ordered ≥ 0` (finite) and `newQty > ordered`. No upper cap (Gil). Missing approver / no lines → 400. ≤ 200 lines.
+- **One transaction:** `Stock` row `UPDLOCK, ROWLOCK` + all its `StockMoves` `UPDLOCK`.
+  1. Doc must be **open** (Status 0) agent order 11 or transfer 19 → else **409 `NOT_OPEN`**. Same `ORDER_WRITE_ENABLED` switch as finish.
+  2. **Match** per request line:
+     - itemkey + `size` = `Details` (a request without a size matches only lines without a size);
+     - a packing line (M1001/M1002) → **422 `BAD_LINE`**; not in the order → **422 `ITEM_NOT_IN_ORDER`**;
+     - the same item on two lines → the **last** line still holding `ordered`; each document line is used once.
+  3. **Staleness:** the matched line's current `Quantity` must equal `ordered`, else **409 `STALE`**. The `UPDATE … WHERE Quantity = @ordered` also re-checks it at write time. **Any** failure rolls back everything, so there are no partial writes, and a replay after success → STALE (no double increase).
+  4. **Absolute set** `Quantity = newQty` (+ Supply/Base/Purch qty). `TFtal`/`TftalVat` from the **document's own** `Price`/`DiscountPrc`. Header `TFtalVat`/`TFtal` recomputed from all lines, the same math as finish (transfer: no VAT). **Only the body's lines are touched.**
+  5. **M2:** `Stock.ExtraText4 = 'עודף אושר - <approver>'` (varchar 50, unused by staff: 0 of 500 recent docs). Also logged: `surplus approved by X on <id>: item a->b, …`.
+- **Response:** `{ ok: true, stockId, dryRun, approver, approverField: "ExtraText4", lines: [{ itemkey, size?, from, to }], totals: { net, gross } }`.
+- **Errors:** 4xx definitive (400 / 403 / 404 `DOC_NOT_FOUND` / 409 `NOT_OPEN` / 409 `STALE` / 409 `TREE_UNSUPPORTED` / 422 `BAD_QTY` / `BAD_LINE` / `ITEM_NOT_IN_ORDER`). On a 5xx / timeout the transaction is rolled back or was never committed, so it's all-or-nothing.
+- `?dryRun=1` runs everything inside the transaction and rolls back, useful for your first end-to-end test.
+- Tests 33/33: validation (integer, >, unsafe, string, negative), matching (exact, STALE, size-only item, packing refused, last-of-duplicates, two requests on duplicate lines). Smoke: roles '' / agent / picker / system → 403, admin → reaches the DB; a bad qty → 422.
+
 ## ⚡ 2026-10-25 (reply 100) — re 115: surplus picking increases the line. Re 114: default-deny confirmed. Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
