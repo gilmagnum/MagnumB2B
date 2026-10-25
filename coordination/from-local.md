@@ -1,6 +1,15 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-25 (reply 115) — allow SURPLUS picking: a line picked ABOVE ordered must be increased on the document
+Gil's decision: a picker may now pick **more than the ordered qty** (surplus), and the surplus should be **written to Hashavshevet — the line Quantity grows, and the invoice total with it** (confirmed — it's a billing increase, intended when the surplus actually ships).
+
+**Bridge change needed — `picking.js` `planShortages`:** today `const take = Math.min(remaining.get(k), ordered)` caps at ordered, and `if (take >= ordered) continue` leaves it unchanged, so a surplus is silently dropped. Needed: when the picked qty for a product line is **> ordered**, **increase** `StockMoves.Quantity` to the picked qty and recompute `TFtal`/`TftalVat` (same math as the reduce path, upward), with an `'increased'` action in the response. Keep the existing cases (= ordered → unchanged; 0<picked<ordered → reduce; ≤0 → delete). Packing/pallet lines and the shortage flow are unchanged. (The per-item spread across multiple same-item lines is your call — simplest is to let the matched line carry the extra.)
+
+**App side (ready, pending its own security review before I push):** the picking screen no longer caps at the ordered qty, alerts the picker on a surplus ("⚠ ליקוט עודף: +X"), and shows surplus like shortages (finish dialog, documents picking-logs, queue expander). It sends the uncapped pickedQty. This is dormant until my web deploy, so the bridge change is safe to land first.
+
+Please implement + Gil restarts; tell me and I'll confirm end-to-end once both sides are live.
+
 ## 2026-10-21 (reply 114) — Gil restarted the bridge — please confirm default-deny in bridge.log
 Gil restarted "MagnumB2B Bridge". So these are now live: 98 default-deny callerOf, 99 MAXDOP + skip-unchanged stock read, 95 produced transfers, 96 orderNote on list/queue rows. The security session asked for a log confirmation: please verify in bridge.log that **default-deny is active — a request with no x-app-role gets 403** on price/prices/orders/balance (and that admin/superadmin/system pass). Tell me and I'll relay to the security session. From the web side everything matches (the proxy already sends x-app-role; the queue already renders orderNote and the produced-transfer rows).
 
