@@ -28,8 +28,13 @@ export class BridgeError extends Error {
   constructor(status: number, body: string) {
     super(`bridge ${status}: ${body}`.slice(0, 500));
     this.status = status;
+    // The bridge returns { error: { code, message } }; some older routes return { code } at the top.
     let code: string | null = null;
-    try { const j = JSON.parse(body); if (j && typeof j.code === "string" && j.code) code = j.code; } catch { /* non-JSON body → no code */ }
+    try {
+      const j = JSON.parse(body);
+      const c = j?.error?.code ?? j?.code;
+      if (typeof c === "string" && c) code = c;
+    } catch { /* non-JSON body → no code */ }
     this.code = code;
     this.definitive = DEFINITIVE_STATUS.has(status) && code !== null;
   }
