@@ -55,11 +55,12 @@ export default function PickingLogsList() {
     <div className="table-wrap">
       <table className="data-table" style={{ minWidth: 640 }}>
         <thead>
-          <tr><th></th><th>תאריך</th><th>הזמנה</th><th>לקוח</th><th>מלקט</th><th>חוסרים</th><th>הערה</th></tr>
+          <tr><th></th><th>תאריך</th><th>הזמנה</th><th>לקוח</th><th>מלקט</th><th>חוסרים / עודף</th><th>הערה</th></tr>
         </thead>
         <tbody>
           {rows.map((r) => {
             const isOpen = open === r.id;
+            const surp = (r.lines ?? []).filter((x) => (x.picked ?? 0) > (x.ordered ?? 0)); // surplus derived from lines
             return (
               <Fragment key={r.id}>
                 <tr>
@@ -70,7 +71,10 @@ export default function PickingLogsList() {
                     ? <>{names[String(r.account_key)]} <span style={{ color: "var(--ink-muted)", fontSize: 12 }}>({r.account_key})</span></>
                     : r.account_key}</td>
                   <td>{r.picker ?? "—"}</td>
-                  <td>{r.shortages?.length ? <span className="chip chip-warn">{r.shortages.length}</span> : <span className="chip chip-ok">0</span>}</td>
+                  <td style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {r.shortages?.length ? <span className="chip chip-warn">חוסר {r.shortages.length}</span> : <span className="chip chip-ok">0</span>}
+                    {surp.length > 0 && <span className="chip chip-danger">עודף {surp.length}</span>}
+                  </td>
                   <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.notes || ""}</td>
                 </tr>
                 {isOpen && (
@@ -90,6 +94,16 @@ export default function PickingLogsList() {
                         </ul>
                       </>
                     ) : <span style={{ color: "var(--ok)" }}>אין חוסרים — כל השורות סופקו במלואן.</span>}
+                    {surp.length > 0 && (
+                      <>
+                        <b style={{ display: "block", marginTop: 8, color: "var(--danger)" }}>⚠ ליקוט עודף ({surp.length}):</b>
+                        <ul style={{ margin: "6px 0 0", paddingInlineStart: 18, fontSize: 14 }}>
+                          {surp.map((s, i) => (
+                            <li key={i}><b>{s.itemkey}</b>{s.size ? ` (מידה ${s.size})` : ""} — <span style={{ color: "var(--danger)" }}>לוקטו {s.picked} (הוזמן {s.ordered}, עודף +{s.picked - s.ordered})</span></li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                   </td></tr>
                 )}
               </Fragment>
