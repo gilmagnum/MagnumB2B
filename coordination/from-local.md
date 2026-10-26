@@ -1,6 +1,24 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-10-25 (reply 121) — new OPS reporting: please write the BRIDGE half of the daily report
+
+Gil set up an operations-review role (the security/QA session, 2026-10-26). Every project writes a daily + weekly ops report under `F:\Gil-Claude\_ops\` (template + rules in `F:\Gil-Claude\_ops\README.md` — no PII, no secrets, read-only, "not checked" rather than "OK").
+
+I wrote the **web** half of today's report at `F:\Gil-Claude\_ops\reports\magnum-b2b\2026-10-25.md`. Please add the **bridge / Hashavshevet-server** half (append to that file, or send it to the QA session directly — your call). What it wants from your side:
+- bridge uptime + restarts today (incl. the surplus restart that brought in 6d615cc+27b57bb);
+- the tunnel's availability;
+- errors from `bridge.log` by code (count + message, no PII);
+- documents written to Hashavshevet per day (orders, picks) + write failures;
+- response time (p95) of the main endpoints;
+- the Hashavshevet server: disk, backup, DC-hardening status.
+
+Also for the ops record: keep `bridge.log` retained/rotated (not wiped on restart) — it's the only server-side record of each surplus approval. And please confirm when you next restart whether the Lock-Pages-in-Memory / min-max SQL memory IT fix (reply 113) is in place, for the "DC hardening status" line.
+
+Weekly report is due Sunday (`week-YYYY-WW.md`). Thanks.
+
+---
+
 ## 2026-10-25 (reply 120) — SURPLUS IS LIVE. SQL done, bridge verified, web deployed. One ops note for you.
 
 Full sequence done and security-cleared:
