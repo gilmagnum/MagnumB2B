@@ -4,6 +4,8 @@ import { bridge } from "../../lib/bridge";
 import { listPickingLogs, type PickLogRow } from "../order-actions";
 
 type Preset = "today" | "month" | "quarter" | "year" | "all";
+// Packing/pallet lines (M1001 חבילות / M1002 משטחים) are set freely by the picker — never a surplus.
+const isPackingLine = (x: { itemkey?: string; isPacking?: boolean }) => !!x.isPacking || /^M100[12]$/i.test(x.itemkey ?? "");
 const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 function rangeFor(p: Preset): { from?: string; to?: string } {
   if (p === "all") return {};
@@ -60,7 +62,7 @@ export default function PickingLogsList() {
         <tbody>
           {rows.map((r) => {
             const isOpen = open === r.id;
-            const surp = (r.lines ?? []).filter((x) => (x.picked ?? 0) > (x.ordered ?? 0)); // surplus derived from lines
+            const surp = (r.lines ?? []).filter((x) => !isPackingLine(x) && (x.picked ?? 0) > (x.ordered ?? 0)); // surplus derived from lines (packing/pallet excluded)
             return (
               <Fragment key={r.id}>
                 <tr>

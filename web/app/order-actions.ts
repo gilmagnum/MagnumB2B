@@ -72,7 +72,7 @@ export async function getDraft(accountKey: string): Promise<{ lines: Line[]; upd
 }
 
 // --- Picking logs (picker notes + shortages, saved on finish) ---
-export type PickLogLine = { itemkey: string; size?: string; ordered: number; picked: number };
+export type PickLogLine = { itemkey: string; size?: string; ordered: number; picked: number; isPacking?: boolean };
 export type PickShortage = { itemkey: string; size?: string; name?: string; ordered: number; picked: number; kind: "full" | "partial" };
 export type PickLogRow = {
   id: string; stock_id: number | null; doc_number: number | null; account_key: string | null;

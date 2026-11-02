@@ -10,6 +10,8 @@ import { listPickingLogs, type PickLogRow } from "../order-actions";
 
 type Tab = "waiting" | "picked" | "produced" | "all";
 const TAB_LABEL: Record<Tab, string> = { waiting: "ממתין לליקוט", picked: "לוקט", produced: "הופק", all: "הכל" };
+// Packing/pallet lines (M1001 חבילות / M1002 משטחים) are set freely by the picker — never a surplus.
+const isPackingLine = (x: { itemkey?: string; isPacking?: boolean }) => !!x.isPacking || /^M100[12]$/i.test(x.itemkey ?? "");
 
 // Picking queue. Warehouse screen (picker/manager). Managers get four filters
 // (waiting / picked / produced-today / all); pickers see waiting + picked only.
@@ -144,7 +146,7 @@ export default function PickingPage() {
                   <div>
                     <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenLog(openLog === d.stockId ? null : d.stockId); }}
                       className="btn btn-sm" style={{ padding: "2px 10px" }}>{openLog === d.stockId ? "− הערות וחוסרים" : "+ הערות וחוסרים"}</button>
-                    {openLog === d.stockId && (() => { const lg = logs[d.stockId]; const surp = (lg?.lines ?? []).filter((x) => (x.picked ?? 0) > (x.ordered ?? 0)); return (
+                    {openLog === d.stockId && (() => { const lg = logs[d.stockId]; const surp = (lg?.lines ?? []).filter((x) => !isPackingLine(x) && (x.picked ?? 0) > (x.ordered ?? 0)); return (
                       <div style={{ marginTop: 6, fontSize: 13, background: "var(--surface-muted)", borderRadius: 8, padding: 8 }}>
                         {lg?.picker && <div>מלקט: <b>{lg.picker}</b></div>}
                         {lg?.notes && <div>הערת מלקט: {lg.notes}</div>}

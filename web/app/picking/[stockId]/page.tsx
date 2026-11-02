@@ -204,7 +204,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
       await supabaseBrowser().from("picking_logs").insert({
         stock_id: doc.stockId, doc_number: doc.docNumber, account_key: doc.accountKey,
         picker: finishPicker, notes: notes.trim() || null,
-        lines: lines.map((l) => ({ itemkey: l.itemkey, size: l.size, ordered: l.qty, picked: picked[lineKey(l)] ?? 0 })),
+        lines: lines.map((l) => ({ itemkey: l.itemkey, size: l.size, ordered: l.qty, picked: picked[lineKey(l)] ?? 0, isPacking: !!l.isPacking })),
         shortages: shortageRows, created_by: user?.id ?? null,
       });
     } catch { /* log best-effort */ }
