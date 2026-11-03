@@ -377,17 +377,18 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                     ? <div style={{ fontWeight: 700, fontSize: isPicker ? 22 : undefined }}>{l.packingLabel ?? "אריזה"}</div>
                     : <>
                         {/* Pickers see only the MAIN (parent) SKU — size/color are in the name below. */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                          <span style={{ fontWeight: 700, fontSize: 24 }}>{parents[l.itemkey] ?? l.itemkey}</span>
-                          {l.size ? <span className="chip chip-info" style={{ fontSize: 15, padding: "3px 12px" }}>מידה {l.size}</span> : null}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+                          <span style={{ fontWeight: 700, fontSize: 24, minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}>{parents[l.itemkey] ?? l.itemkey}</span>
+                          {/* Size emphasised as a filled pill, like the colour chip below. */}
+                          {l.size ? <span style={{ fontWeight: 800, fontSize: 16, background: "var(--brand-strong)", color: "#fff", padding: "3px 14px", borderRadius: 999, border: "1px solid var(--border)", whiteSpace: "nowrap" }}>מידה {l.size}</span> : null}
                           {colors[l.itemkey] && (() => {
                             const hex = colorHex(colors[l.itemkey], colorOv);
                             return hex
-                              ? <span style={{ fontWeight: 700, fontSize: 14, background: hex, color: textOn(hex), padding: "2px 12px", borderRadius: 999, border: "1px solid var(--border)" }}>{colors[l.itemkey]}</span>
+                              ? <span style={{ fontWeight: 700, fontSize: 14, background: hex, color: textOn(hex), padding: "2px 12px", borderRadius: 999, border: "1px solid var(--border)", whiteSpace: "nowrap" }}>{colors[l.itemkey]}</span>
                               : <span className="chip chip-info">{colors[l.itemkey]}</span>;
                           })()}
                         </div>
-                        <div style={{ fontSize: 16, color: "var(--ink-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</div>
+                        <div style={{ fontSize: 16, color: "var(--ink-muted)", overflowWrap: "anywhere", wordBreak: "break-word" }}>{l.name}</div>
                       </>}
                 </div>
               </div>
