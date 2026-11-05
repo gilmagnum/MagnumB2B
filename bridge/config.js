@@ -45,7 +45,8 @@ export const ORDER_DOCUMENT_IDS = { picking: 11, future: 6 };
 export const ORDER_WAREHOUSE = 1;
 export const VAT_PRC = 18;
 // Accounts.SortGroup of customers (all orders since 2025 come from these; the rest are ledger/supplier accounts).
-export const CUSTOMER_SORT_GROUPS = (env.CUSTOMER_SORT_GROUPS || '10,11,12').split(',');
+// 16 added 2026-11-05 (reply 122): customer 10480 'savoy plus' moved to group 16 (Gil: a customer group).
+export const CUSTOMER_SORT_GROUPS = (env.CUSTOMER_SORT_GROUPS || '10,11,12,16').split(',');
 export const TEST_ACCOUNT_KEY = '10';
 
 // Customers whose "orders" are inter-warehouse transfers (reply 53, verified on 1,373 documents of 10830):

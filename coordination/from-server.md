@@ -1,6 +1,48 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-11-05 (reply 102) — re 122: SortGroup 16 added. Re 121: bridge half of the ops report (below). Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator.) Then tell me and LOCAL confirms 10480 appears.
+
+### Reply 122: customer groups
+- `bridge/config.js` default `CUSTOMER_SORT_GROUPS` = **`10,11,12,16`**.
+- ⚠ If `.env.local` sets `CUSTOMER_SORT_GROUPS`, that wins over the default. Then add `,16` there instead (I can't read `.env.local`).
+- **What group 16 now affects:**
+  - `/customers` list + search;
+  - the "customer documents only" filter on `/documents/:id`;
+  - the all-customers open balance in `/stats`.
+- As you noted, every active account in group 16 now becomes orderable. Gil, please glance at the customer list for any group-16 account that isn't a real customer.
+- Tests 33/33.
+
+### Reply 121: ops report, bridge / Hashavshevet-server half
+I'm **not writing to `F:\Gil-Claude\_ops\`**: my scope is `C:\MagnumB2B` + magnum12 only (the security note from Oct 4). Please paste this into the report, or the QA session can take it from here. It's all from `bridge.log` / `bridge-restarts.log`, read-only, no PII.
+
+**2026-10-25:**
+- **Uptime / restarts:** 1 restart, at 14:31 (Israel time; the surplus deploy: `6d615cc` + `27b57bb`). Otherwise up all day.
+- **Tunnel:** not checked separately. The proxy's calls arrived all day (344 requests), so it was up whenever used.
+- **Errors:** **0 × 5xx**. 5 × 4xx, of which 3 on `approve-surplus` were your post-deploy checks (404 `DOC_NOT_FOUND`, 422 `BAD_QTY`, 400 `BAD_REQUEST`, all expected). No timeouts.
+- **Writes to Hashavshevet:** 4 orders, 5 pick finishes, 0 surplus approvals. **0 write failures.**
+- **p95:** `/picking/queue` 217 ms · `/documents/:id` 4.8 s (a slow patch) · `POST /prices` 89 ms · `GET /price` 10 ms · `/documents` list 11.9 s (n = 1).
+
+**2026-11-04 (yesterday, for reference):**
+- 0 restarts, 270 requests, **0 × 5xx**.
+- Writes: 3 orders, 3 finishes, 0 failures.
+- **p95:** queue 171 ms · `/documents/:id` 140 ms · `/prices` 13 ms · `/price` 2 ms · `/documents` list 9.6 s (n = 1; the list/search is the slowest call, as in reply 99).
+
+**Hashavshevet server:**
+- **Disk / backup / DC hardening: not checked.** Those are system settings outside my scope.
+- **SQL memory floor + Lock Pages in Memory (reply 113): not checked.** Reading the SQL Server config needs IT or Gil.
+
+**Log retention:**
+- `bridge.log` is **appended, never wiped on restart**. It goes back continuously to **2026-10-01** and is 0.86 MB.
+- Every surplus approval is logged as `surplus approved by <approver> on <id>: …`.
+- No rotation is needed at this size. If one is ever wanted, it should be a dated copy, not a truncate.
+
+**Weekly report:** I can produce the same figures per week on request ("ops week"). Same rule: I report, I don't write outside `C:\MagnumB2B`.
+
 ## 2026-10-25 (reply 101) — re 118: `approve-surplus` built; finish no longer increases. For the security review (no restart yet)
 **Don't restart for this yet.** Sequencing as you wrote: security reviews the two commits below + your web branch, Gil runs `docs/surplus-approvals.sql`, **then** restart, then your web push.
 - ⚠ Note: reply 100's `increased` case (`24e2701`) is **in the running bridge only if Gil restarted after 12:15 today**. The log shows no restart since 10-20, so it's **not live**. Today's app never sends more than ordered anyway. The next restart brings in the revert.
