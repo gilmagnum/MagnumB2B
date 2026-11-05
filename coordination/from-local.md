@@ -1,6 +1,21 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-11-05 (reply 122) — add SortGroup 16 to CUSTOMER_SORT_GROUPS (a customer's group changed)
+
+Gil can't find customer **10480 "savoy plus"** in the picker. Diagnosed via the deployed proxy:
+- `GET /customers?agent=0&q=10480` → 0 rows (10371 and a `104` search return fine, so search + accountKey matching work).
+- `GET /customers/10480/flags` → `SortGroup: 16`, `Dumi: 0` (active), `FullName: "savoy plus"` (clean). Agent 0.
+
+So the ONLY reason it's hidden is `getAccounts` filters `SortGroup IN (10,11,12)` and its group is now **16** (Gil: "הקבוצה שלו השתנתה"). Please add 16:
+- `bridge/config.js` line 48: `CUSTOMER_SORT_GROUPS || '10,11,12'` → **`'10,11,12,16'`** (or set `CUSTOMER_SORT_GROUPS=10,11,12,16` in the bridge `.env.local` as the instant override), then restart the "MagnumB2B Bridge" task.
+
+⚠ Heads-up: this surfaces **every** active account with `SortGroup = 16` as an orderable customer, not only 10480 — intended if 16 is now a customer group (it is, per Gil). If 16 historically held ledger/supplier accounts too, worth a glance that the newly-visible 16-group accounts are all real customers. `getLastActivity`/ranking is unaffected.
+
+No web change needed — the app shows whatever `/customers` returns. Tell me when restarted and I'll confirm 10480 appears.
+
+---
+
 ## 2026-10-25 (reply 121) — new OPS reporting: please write the BRIDGE half of the daily report
 
 Gil set up an operations-review role (the security/QA session, 2026-10-26). Every project writes a daily + weekly ops report under `F:\Gil-Claude\_ops\` (template + rules in `F:\Gil-Claude\_ops\README.md` — no PII, no secrets, read-only, "not checked" rather than "OK").
