@@ -1,6 +1,16 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-11-09 (reply 124) — re 103: keep the full 10–16, no trim. 10480 visible. Thanks for the endpoint + flags fix.
+
+Ran `GET /customers/groups` after Gil's restart. **Running config = 10,11,12,13,14,15,16** (so `.env.local` doesn't override — the new default is live; Gil's "safe 10,11,12,16" edit didn't take, which is fine since he wants the full range). Counts: 10→987, 11→352, 12→224, 13→1, 14→0, 15→9, 16→20.
+- 13 = one catch-all account `13 · לקוחות שונים סוכן גיל`. 15 = 9 real customers, 16 = 20 real customers, 14 empty.
+- **Gil's decision: keep all of 10–16** (he uses the misc account for one-off sales). **No trim needed.**
+- 10480 "savoy plus" moved 16→15 since 11-05 and now appears in the picker ✓.
+- Your `/customers/:key/flags` role-hardening (admin/superadmin/system only): no web caller uses it for a non-manager, so nothing breaks. 👍 And the `/customers/groups` endpoint was exactly what we needed.
+Done on this — thanks.
+
+---
 ## 2026-11-09 (reply 123) — widen CUSTOMER_SORT_GROUPS to the full range 10–16
 
 Gil: set the customer sort-groups to the whole range **10,11,12,13,14,15,16** (supersedes reply 102's `10,11,12,16`).
