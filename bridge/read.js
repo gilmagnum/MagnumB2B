@@ -817,3 +817,27 @@ export async function getStockSignature() {
   const [r] = await query('SELECT (SELECT MAX(ID) FROM Stock) AS s, (SELECT MAX(ID) FROM StockMoves) AS m');
   return `${r?.s ?? 0}:${r?.m ?? 0}`;
 }
+
+// Reply 123: per sort group, how many accounts would show as customers (same rules as getAccounts:
+// active, named, not "לא פעיל") + a few sample names, so Gil can confirm a group holds real customers.
+// One small read of Accounts (~4k rows). groups = array of numbers.
+export async function getSortGroupSummary(groups) {
+  const list = [...new Set(groups.map(Number).filter((n) => Number.isInteger(n) && n >= 0))].slice(0, 30);
+  if (!list.length) return [];
+  const rows = await query(
+    `SELECT SortGroup, AccountKey, FullName,
+            ROW_NUMBER() OVER (PARTITION BY SortGroup ORDER BY AccountKey) AS rn,
+            COUNT(*) OVER (PARTITION BY SortGroup) AS n
+     FROM Accounts
+     WHERE ${ACCOUNT_ACTIVE} AND SortGroup IN (${list.join(',')})
+       AND LTRIM(RTRIM(ISNULL(FullName, ''))) <> '' AND FullName NOT LIKE N'%לא פעיל%'`,
+  );
+  return list.map((g) => {
+    const inGroup = rows.filter((r) => Number(r.SortGroup) === g);
+    return {
+      sortGroup: g,
+      accounts: inGroup[0]?.n ?? 0,
+      samples: inGroup.filter((r) => r.rn <= 8).map((r) => ({ accountKey: trim(r.AccountKey), name: trim(r.FullName) })),
+    };
+  });
+}

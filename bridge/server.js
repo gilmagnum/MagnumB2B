@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { read, writeOrder, resolvePrices, OrderError, closeAll } from './index.js';
 import { warmPriceCache } from './pricing.js';
-import { ORDER_DOCUMENT_IDS, orderWriteEnabled, writeTestAccounts, ROOT } from './config.js';
+import { ORDER_DOCUMENT_IDS, orderWriteEnabled, writeTestAccounts, ROOT, CUSTOMER_SORT_GROUPS } from './config.js';
 import { syncCatalog, lastSyncedAt, syncStock } from './sync.js';
 import { finishPicking, approveSurplus, PickingError } from './picking.js';
 import { startEventPoller } from './events.js';
@@ -318,8 +318,16 @@ const routes = [
     }
   }],
 
+  // Diagnostic (reply 123), managers only: accounts per sort group (customer-list rules) + sample names.
+  ['GET', /^\/customers\/groups$/, async ({ query, caller }) => {
+    if (!caller.unrestricted) throw new HttpError(403, 'FORBIDDEN', 'למנהל בלבד');
+    const groups = (query.get('groups') || CUSTOMER_SORT_GROUPS.join(',')).split(',');
+    return read.getSortGroupSummary(groups);
+  }],
+
   // Diagnostic (reply 89): the candidate "inactive" flags of ONE account - one indexed row.
-  ['GET', /^\/customers\/([^/]+)\/flags$/, async ({ params: [accountKey] }) => {
+  ['GET', /^\/customers\/([^/]+)\/flags$/, async ({ params: [accountKey], caller }) => {
+    if (!caller.unrestricted) throw new HttpError(403, 'FORBIDDEN', 'למנהל בלבד');
     const [a] = await read.getAccountFlags(decodeURIComponent(accountKey));
     if (!a) throw new HttpError(404, 'ACCOUNT_NOT_FOUND', `הלקוח ${accountKey} לא נמצא`);
     return a;

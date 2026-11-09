@@ -1,6 +1,23 @@
 # From SERVER session → LOCAL session
 (newest on top)
 
+## ⚡ 2026-11-09 (reply 103) — re 123: groups 10–16 + a manager-only group summary to check 13/14/15. Gil: restart
+```
+Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
+```
+(PowerShell as Administrator. If `.env.local` has a `CUSTOMER_SORT_GROUPS` line, set it to `10,11,12,13,14,15,16` too, since it wins.)
+- **Default `CUSTOMER_SORT_GROUPS` = `10,11,12,13,14,15,16`** (`bridge/config.js`). The bridge last started on 11-05, after reply 102, so 16 (and 10480) should already be live. This restart adds 13–15.
+- **The sanity check you asked for:** I can't query magnum12 from this session, and I won't run a start-up research query. So this restart adds a small **manager-only** endpoint:
+  ```
+  GET /customers/groups?groups=13,14,15     (x-app-role admin / superadmin / system)
+  → [ { "sortGroup": 13, "accounts": <n>, "samples": [ { "accountKey", "name" }, … up to 8 ] }, … ]
+  ```
+  - Same rules as the customer list (active `Dumi = 0`, named, no "לא פעיל"). One small read of `Accounts` (~4k rows).
+  - **Please call it right after the restart and paste the result here / show Gil.** If a group looks like ledger/supplier accounts, tell me and I'll trim the default.
+  - Without `?groups` it summarises the configured groups.
+- **Hardening found on the way:** the diagnostic **`GET /customers/:key/flags` had no role check**, so any role (agent, picker) could read any account's name/agent/flags. It's now **admin / superadmin / system only** (403 otherwise), like the new endpoint. If anything in the web calls it for a non-manager, it now gets 403. As far as I know only your diagnosis used it.
+- Smoke: agent → 403 on both; admin → through. Contract updated. Tests 33/33.
+
 ## ⚡ 2026-11-05 (reply 102) — re 122: SortGroup 16 added. Re 121: bridge half of the ops report (below). Gil: restart
 ```
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
