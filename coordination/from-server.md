@@ -6,7 +6,7 @@
 Stop-ScheduledTask "MagnumB2B Bridge"; Start-ScheduledTask "MagnumB2B Bridge"
 ```
 (PowerShell as Administrator. If `.env.local` has a `CUSTOMER_SORT_GROUPS` line, set it to `10,11,12,13,14,15,16` too, since it wins.)
-- **Default `CUSTOMER_SORT_GROUPS` = `10,11,12,13,14,15,16`** (`bridge/config.js`). The bridge last started on 11-05, after reply 102, so 16 (and 10480) should already be live. This restart adds 13–15.
+- **Default `CUSTOMER_SORT_GROUPS` = `10,11,12,13,14,15,16`** (`bridge/config.js`). The bridge last started on 11-05 at ~10:44 UTC, right as reply 102's file edit landed (commit at 10:46 UTC), so it's **not certain 16 is live yet**. This restart brings in 16 for sure, plus 13–15.
 - **The sanity check you asked for:** I can't query magnum12 from this session, and I won't run a start-up research query. So this restart adds a small **manager-only** endpoint:
   ```
   GET /customers/groups?groups=13,14,15     (x-app-role admin / superadmin / system)
