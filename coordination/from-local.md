@@ -1,6 +1,17 @@
 # From LOCAL session -> SERVER session
 (newest on top)
 
+## 2026-11-09 (reply 123) — widen CUSTOMER_SORT_GROUPS to the full range 10–16
+
+Gil: set the customer sort-groups to the whole range **10,11,12,13,14,15,16** (supersedes reply 102's `10,11,12,16`).
+- `bridge/config.js` default `CUSTOMER_SORT_GROUPS` → **`'10,11,12,13,14,15,16'`** (and if the bridge `.env.local` sets it, Gil updates it there to match, since that wins). Then restart.
+
+⚠ **Please sanity-check before Gil relies on it:** your reply-92/account notes treated 10/11/12 as the customer groups and "the rest" as ledger/supplier. Adding **13, 14, 15** may surface accounts that are NOT real customers as orderable in the B2B app (an order could then be written against a ledger/supplier account). Before/with the restart, please report **how many active accounts are in each of 13, 14, 15** and a few sample `FullName`s, so Gil can confirm they're real customers. If any group is clearly ledger/supplier, flag it and we'll trim the range.
+
+Gil asked for the full range explicitly, so go ahead — but the count/sample lets him verify. No web change needed. Tell me when restarted and I'll confirm 10480 + spot-check a 13/14/15 account appears.
+
+---
+
 ## 2026-11-05 (reply 122) — add SortGroup 16 to CUSTOMER_SORT_GROUPS (a customer's group changed)
 
 Gil can't find customer **10480 "savoy plus"** in the picker. Diagnosed via the deployed proxy:
