@@ -351,7 +351,14 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
           const packStep = (l.packSize ?? 0) > 1 && !!l.packLabel; // step by a whole pack when we know the pack
           const step = packStep ? (l.packSize as number) : 1;
           const over = surplusOf(l); // picked above ordered
-          const border = isPacking ? "var(--brand)" : over > 0 ? "var(--danger)" : sh === "none" ? "var(--ok)" : sh === "full" ? "var(--danger)" : "var(--warn)";
+          const border = isPacking ? "var(--brand)" : over > 0 ? "var(--danger)" : sh === "none" ? "var(--ok)" : sh === "full" ? "var(--ink-muted)" : "var(--warn)";
+          // Row background = picking status at a glance. Untouched (nothing picked) stays plain;
+          // full = green, partial = orange, over-picked = red. Packing lines keep the plain card.
+          const bg = isPacking ? undefined
+            : over > 0 ? "var(--danger-soft)"      // לוקט יותר
+            : sh === "none" ? "var(--ok-soft)"     // לוקט במלואו
+            : sh === "partial" ? "var(--warn-soft)" // לוקט חלקית
+            : undefined;                            // טרם ניגשו (sh === "full", q<=0) — רגיל
           // Warehouse picking screen — enlarge image / SKU / quantity for everyone.
           const isPicker = true;
           const imgSz = 96;
@@ -362,7 +369,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
           const sel = splitSel.has(lineKey(l));
           return (
             <div key={lineKey(l)} onClick={selectable ? () => setSplitSel((s) => { const n = new Set(s); if (n.has(lineKey(l))) n.delete(lineKey(l)); else n.add(lineKey(l)); return n; }) : undefined}
-              className="card card-pad" style={{ display: "grid", gap: 8, borderInlineStart: `4px solid ${selectable && sel ? "var(--brand-strong)" : border}`, cursor: selectable ? "pointer" : undefined, outline: selectable && sel ? "2px solid var(--brand)" : undefined }}>
+              className="card card-pad" style={{ display: "grid", gap: 8, background: bg, borderInlineStart: `4px solid ${selectable && sel ? "var(--brand-strong)" : border}`, cursor: selectable ? "pointer" : undefined, outline: selectable && sel ? "2px solid var(--brand)" : undefined }}>
               {selectable && <div style={{ fontWeight: 700, color: sel ? "var(--brand-strong)" : "var(--ink-muted)" }}>{sel ? "☑ השורה שלי" : "☐ בחר כשלי"}</div>}
               {otherName && <div className="chip chip-info" style={{ width: "fit-content" }}>אצל {otherName}</div>}
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -394,11 +401,11 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: isPicker ? 19 : 14 }}>{isPacking
+                <span style={{ fontSize: isPicker ? 19 : 14, fontWeight: 700 }}>{isPacking
                   ? "כמות למשלוח (קובע המלקט):"
                   : <>הוזמן: {l.packs != null && l.packLabel
-                      ? <><b>{l.packs} {l.packLabel}</b> <span style={{ color: "var(--ink-muted)" }}>({l.units ?? l.qty} יח׳)</span></>
-                      : <><b>{l.units ?? l.qty}</b>{l.unit ? ` ${l.unit}` : " יח׳"}</>}</>}</span>
+                      ? <>{l.packs} {l.packLabel} ({l.units ?? l.qty} יח׳)</>
+                      : <>{l.units ?? l.qty}{l.unit ? ` ${l.unit}` : " יח׳"}</>}</>}</span>
                 {/* Stepper jumps by one pack (packSize units); the number stays editable for a manual fix. + on the right (RTL). */}
                 <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <button onClick={() => setQty(l, q + step)} disabled={lineRO || splitting} className="btn btn-primary btn-sm" style={{ padding: isPicker ? "11px 17px" : "8px 13px", fontSize: isPicker ? 24 : 18 }} title={packStep ? `+${l.packLabel}` : "+1"}>+</button>
@@ -427,7 +434,7 @@ export default function PickOrderPage({ params }: { params: Promise<{ stockId: s
                   {over > 0 ? <span className="chip chip-danger" style={{ fontWeight: 700 }}>⚠ ליקוט עודף: +{over} (הוזמן {l.qty})</span>
                     : sh === "none" ? <span className="chip chip-ok">✓ לוקט במלואו</span>
                     : sh === "partial" ? <span className="chip chip-warn">חוסר: {l.qty - q}</span>
-                    : <span className="chip chip-danger">טרם לוקט</span>}
+                    : <span className="chip" style={{ background: "var(--surface-muted)", color: "var(--ink-muted)" }}>טרם לוקט</span>}
                   {overStock && <span className="chip chip-danger" style={{ fontWeight: 700 }}>⚠ הוזמן יותר מהמלאי{l.onHand != null ? ` (מלאי ${l.onHand})` : ""}</span>}
                 </div>
               )}
