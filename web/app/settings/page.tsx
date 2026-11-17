@@ -5,7 +5,8 @@ import { canEditRulers, canManageUsers } from "../../lib/roles";
 import EnableNotifications from "../components/EnableNotifications";
 import NotificationPrefs from "../components/NotificationPrefs";
 import EmailTestButton from "../components/EmailTestButton";
-import DriveImages from "../components/DriveImages";
+import PullImages from "../components/PullImages";
+import MissingImagesAlert from "../components/MissingImagesAlert";
 import CatalogSyncButton from "../components/CatalogSyncButton";
 import SharedPickingToggle from "./SharedPickingToggle";
 import { SHARED_PICKING_KEY } from "../../lib/flags";
@@ -18,11 +19,8 @@ export default async function SettingsPage() {
   const me = await getProfile();
   if (!me) redirect("/login");
 
-  let driveUrl = "";
   let sharedPicking = false;
   if (canEditRulers(me.role)) {
-    const { data } = await supabaseAdmin().from("app_settings").select("value").eq("key", "images_drive_url").single();
-    driveUrl = ((data?.value as { url?: string } | null)?.url) ?? "";
     const { data: sp } = await supabaseAdmin().from("app_settings").select("value").eq("key", SHARED_PICKING_KEY).maybeSingle();
     sharedPicking = sp?.value === true;
   }
@@ -66,7 +64,8 @@ export default async function SettingsPage() {
           </div>
 
           <h4 style={{ margin: "20px 0 0", color: "var(--brand-strong)" }}>תמונות מוצרים</h4>
-          <DriveImages url={driveUrl} canEdit={canManageUsers(me.role)} />
+          <MissingImagesAlert />
+          <PullImages />
 
           <h4 style={{ margin: "20px 0 0", color: "var(--brand-strong)" }}>סנכרון קטלוג</h4>
           <CatalogSyncButton />

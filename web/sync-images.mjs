@@ -64,9 +64,14 @@ const files = readdirSync(dir)
   .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 console.log(`${files.length} image files in ${dir}; ${itemkeys.length} catalog items; match=${match}${dry ? " [DRY RUN]" : ""}`);
 
-const resolve = (sku) => match === "prefix"
-  ? itemkeys.filter((k) => k === sku || k.startsWith(sku + "_"))
-  : (keySet.has(sku) ? [sku] : []);
+// Exact item always wins: a file named after a real SKU (e.g. K365336_BLACK) sets ONLY that
+// item, never its "_CAMEL"/"_OLIVE" siblings — those are different colours that merely share the
+// prefix. Prefix expansion applies only when the file's SKU is a pure MODEL prefix that is not
+// itself a catalog item (e.g. K365336.png => every K365336_<colour>).
+const resolve = (sku) =>
+  keySet.has(sku) ? [sku]
+  : match === "prefix" ? itemkeys.filter((k) => k.startsWith(sku + "_"))
+  : [];
 
 // Group all files (angles) under their base SKU, e.g. WF34000, WF34000_2, WF34000_3 -> WF34000.
 const groups = new Map();   // baseSku -> [files sorted]
