@@ -42,17 +42,19 @@ export default function PullImages() {
     const unmatched = new Set<string>();
     const errors: string[] = [];
 
+    const MAX = 8 * 1024 * 1024; // keep in step with the bucket's file-size limit
     for (let i = 0; i < rows.length; i++) {
       const { file, sku, primary } = rows[i];
       try {
+        if (file.size > MAX) { errors.push(`${sku}: קובץ גדול מדי (${(file.size / 1048576).toFixed(1)}MB, עד 8MB)`); setProg({ done: i + 1, total: rows.length }); continue; }
         const prep = await prepareImagePull(file.name);
         if (prep.error) errors.push(prep.error);
         else if (prep.unmatched) unmatched.add(sku);
-        else if (prep.token && prep.path && prep.publicUrl) {
+        else if (prep.token && prep.path) {
           const up = await sb.storage.from(BUCKET).uploadToSignedUrl(prep.path, prep.token, file, { contentType: file.type || undefined });
           if (up.error) errors.push(`${sku}: ${up.error.message}`);
           else {
-            const c = await commitImagePull(sku, prep.publicUrl, primary);
+            const c = await commitImagePull(prep.path, primary); // server derives SKU + URL from the path
             if (c.error) errors.push(c.error); else updated++;
           }
         }
