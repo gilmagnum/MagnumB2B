@@ -11,6 +11,13 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+  // This app renders every product photo with a plain <img> (never next/image), so the Image
+  // Optimization endpoint (/_next/image) serves no purpose here. Disabling it closes that endpoint
+  // entirely — the attack surface of the CVE-2025 _next/image SVG RCE — and SVG is refused regardless.
+  images: {
+    unoptimized: true,
+    dangerouslyAllowSVG: false,
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
